@@ -47,6 +47,7 @@ const Index = () => {
   const [alerts, setAlerts] = useState<
     { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }
   >([]);
+  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [alertHintShown, setAlertHintShown] = useState(false);
   const { toast } = useToast();
 
@@ -62,7 +63,7 @@ const Index = () => {
       const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
       // Map legacy state to logical stage for alerting
       const stage = mapCaseStateToStage(c.state);
-      const isWaiting = stage === "AWAITING";
+      const isWaiting = stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
       if (isWaiting && hours >= 48 && hours < 72) {
         items.push({ id: `${c.caseId}-wait-48`, customerId: c.customerId, kind: "follow", severity: "warn" });
       }
@@ -73,7 +74,7 @@ const Index = () => {
         items.push({ id: `${c.caseId}-wait-96`, customerId: c.customerId, kind: "follow", severity: "critical" });
       }
 
-      const isSend = c.state.startsWith("SEND_");
+      const isSend = stage === "WAITING_CUSTOMER";
       if (isSend && hours >= 12) {
         items.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, caseId: c.caseId, message: `Respond: ${c.caseId}`, kind: "respond", severity: "warn" });
       }
@@ -106,7 +107,6 @@ const Index = () => {
       const hoursSinceChange = (now - lastStatusChange) / (1000 * 60 * 60);
       
       const waitingStatuses = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
-      const sendStatuses = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
       const respondStatuses = ["SEND_RESPONSE"];
       
       if (waitingStatuses.includes(customer.status)) {
@@ -169,6 +169,7 @@ const Index = () => {
   const criticalCount = useMemo(() => alerts.filter((a) => a.severity === "critical").length, [alerts]);
   const warnCount = useMemo(() => alerts.filter((a) => a.severity === "warn").length, [alerts]);
   const totalAlerts = criticalCount + warnCount;
+  const unreadCount = useMemo(() => alerts.filter((a) => !seenAlertIds.has(a.id)).length, [alerts, seenAlertIds]);
 
   // One-time hint toast if any alerts are present
   useEffect(() => {
@@ -183,7 +184,7 @@ const Index = () => {
       customerId: "",
       category: "",
       subcategory: "",
-      state: "INTAKE",
+      state: "IN_PROGRESS",
       documentState: "ok",
       communicationMethod: "Email",
       generalNote: "",
@@ -223,16 +224,26 @@ const Index = () => {
           <Scale className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold tracking-tight">Case Management</h1>
           <div className="ml-auto flex items-center gap-2">
-            <DropdownMenu>
+            <DropdownMenu
+              onOpenChange={(open) => {
+                if (open) {
+                  setSeenAlertIds((prev) => {
+                    const next = new Set(prev);
+                    alerts.forEach((a) => next.add(a.id));
+                    return next;
+                  });
+                }
+              }}
+            >
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="relative">
                   <Bell className="h-4 w-4" />
-                  {totalAlerts > 0 && (
+                  {unreadCount > 0 && (
                     <Badge
                       variant={criticalCount > 0 ? "destructive" : "secondary"}
                       className="absolute -top-1 -right-2 px-1.5 text-[10px]"
                     >
-                      {totalAlerts}
+                      {unreadCount}
                     </Badge>
                   )}
                 </Button>

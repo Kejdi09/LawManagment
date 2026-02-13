@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
-  getTasksByCaseId, changeState, addNote, addTask, toggleTask, updateCase, deleteCase,
+  getTasksByCaseId, addHistory, addNote, addTask, toggleTask, updateCase, deleteCase,
 } from "@/lib/case-store";
 import {
-  ALLOWED_TRANSITIONS, STAGE_LABELS, CaseStage, CaseState, PRIORITY_CONFIG, Priority,
+  ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
   Case, Customer, HistoryRecord, Note, CaseTask, LAWYERS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowRight, FileText, User, Clock, MessageSquare,
+  FileText, User, Clock, MessageSquare,
   CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap,
 } from "lucide-react";
 import { format, isPast, differenceInHours } from "date-fns";
@@ -61,6 +61,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   });
   const { toast } = useToast();
   const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+  const formatOptionalDateTime = (value: string | null | undefined) => {
+    if (!value) return "N/A";
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "N/A";
+    return value.includes("T") ? format(d, "PPp") : format(d, "PP");
+  };
   const loadCaseData = useCallback(async (id: string) => {
     try {
       const data = await getCaseById(id);
@@ -110,15 +116,17 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   if (!caseId || !caseData) return null;
 
   const c = caseData;
-  const allowedNext = ALLOWED_TRANSITIONS[c.state];
   const pCfg = PRIORITY_CONFIG[c.priority];
   const overdue = c.deadline && isPast(new Date(c.deadline));
   const deadlineNotif = getDeadlineNotification(c.deadline, c.caseId);
 
-  const handleChangeState = async (newState: CaseState) => {
+  const handleChangeState = async (newStage: CaseStage) => {
+    const currentState = c.state;
+    const nextState = mapStageToState(newStage);
+    if (currentState === nextState) return;
     try {
-      await changeState(caseId, newState);
-      toast({ title: "State Changed", description: `→ ${STAGE_LABELS[mapCaseStateToStage(newState)]}` });
+      await addHistory(caseId, currentState, nextState);
+      toast({ title: "State Changed", description: `→ ${STAGE_LABELS[newStage]}` });
       onStateChanged();
       await loadCaseData(caseId);
     } catch (err: unknown) {
@@ -294,7 +302,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </>
             )}
             <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteCase} disabled={isLoading}>Delete</Button>
-            <Button variant="outline" size="sm" onClick={handleToggleReady} disabled={isLoading || mapCaseStateToStage(c.state) === "AWAITING"}>
+            <Button variant="outline" size="sm" onClick={handleToggleReady} disabled={isLoading || mapCaseStateToStage(c.state) === "WAITING_AUTHORITIES" || mapCaseStateToStage(c.state) === "WAITING_CUSTOMER"}>
               {caseData?.readyForWork ? "Unmark Ready" : "Mark Ready"}
             </Button>
           </div>
@@ -315,9 +323,9 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     <div className="flex justify-between"><span className="text-muted-foreground">Communication</span><span>{c.communicationMethod}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span>{c.assignedTo}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Priority</span><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Last Change</span><span className="text-xs">{format(new Date(c.lastStateChange), "PPp")}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Last Change</span><span className="text-xs">{formatOptionalDateTime(c.lastStateChange)}</span></div>
                     {c.deadline && (
-                      <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className={`text-xs ${overdue ? "text-destructive font-bold" : ""}`}>{format(new Date(c.deadline), "PP")}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className={`text-xs ${overdue ? "text-destructive font-bold" : ""}`}>{formatOptionalDateTime(c.deadline)}</span></div>
                     )}
                     <div className="flex justify-between"><span className="text-muted-foreground">Ready</span><span>{c.readyForWork ? <Badge className="text-xs">Ready for work</Badge> : <span className="text-xs text-muted-foreground">No</span>}</span></div>
                     <Separator />
@@ -334,6 +342,17 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Subcategory</span>
                         <Input value={editForm.subcategory} onChange={(e) => setEditForm({ ...editForm, subcategory: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">State</span>
+                        <Select value={editForm.state} onValueChange={(v) => setEditForm({ ...editForm, state: v as CaseStage })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ALL_STAGES.map((stage) => (
+                              <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Priority</span>
@@ -403,19 +422,24 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
             )}
           </div>
 
-          {/* State Transitions */}
-          {allowedNext.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><ArrowRight className="h-4 w-4" /> Change State</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {allowedNext.map((ns) => (
-                  <Button key={ns} size="sm" onClick={() => handleChangeState(ns)}>→ {STAGE_LABELS[mapCaseStateToStage(ns)]}</Button>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Clock className="h-4 w-4" /> Change State</CardTitle>
+            </CardHeader>
+            <CardContent className="max-w-sm">
+              <Select
+                value={mapCaseStateToStage(c.state)}
+                onValueChange={(value) => handleChangeState(value as CaseStage)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ALL_STAGES.map((stage) => (
+                    <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
 
           {/* Tasks */}
           <Card>
@@ -465,7 +489,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                         <TableRow key={h.historyId}>
                           <TableCell><Badge variant="outline" className="text-xs">{STAGE_LABELS[mapCaseStateToStage(h.stateFrom)]}</Badge></TableCell>
                           <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(h.stateIn)]}</Badge></TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{format(new Date(h.date), "MMM d, HH:mm")}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{formatOptionalDateTime(h.date)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -489,7 +513,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     {caseNotes.map((n) => (
                       <div key={n.noteId} className="rounded-md border p-2">
                         <p className="text-sm">{n.noteText}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{format(new Date(n.date), "MMM d, HH:mm")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatOptionalDateTime(n.date)}</p>
                       </div>
                     ))}
                   </div>

@@ -1,4 +1,9 @@
 export type CaseState =
+  | "NEW"
+  | "IN_PROGRESS"
+  | "WAITING_CUSTOMER"
+  | "WAITING_AUTHORITIES"
+  | "FINALIZED"
   | "INTAKE"
   | "SEND_PROPOSAL"
   | "WAITING_RESPONSE_P"
@@ -129,6 +134,11 @@ export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string }>
 };
 
 export const STATE_LABELS: Record<CaseState, string> = {
+  NEW: "New",
+  IN_PROGRESS: "In Progress",
+  WAITING_CUSTOMER: "Waiting Customer",
+  WAITING_AUTHORITIES: "Waiting Authorities",
+  FINALIZED: "Finalized",
   INTAKE: "Intake",
   SEND_PROPOSAL: "Send Proposal",
   WAITING_RESPONSE_P: "Waiting Response (P)",
@@ -137,18 +147,19 @@ export const STATE_LABELS: Record<CaseState, string> = {
   WAITING_RESPONSE_C: "Waiting Response (C)",
 };
 
-export type CaseStage = "INTAKE" | "ACTIONABLE" | "AWAITING" | "CLOSED";
+export type CaseStage = "NEW" | "IN_PROGRESS" | "WAITING_CUSTOMER" | "WAITING_AUTHORITIES" | "FINALIZED";
 
 export const STAGE_LABELS: Record<CaseStage, string> = {
-  INTAKE: "New",
-  ACTIONABLE: "In Progress",
-  AWAITING: "Waiting Authorities",
-  CLOSED: "Finalized",
+  NEW: "New",
+  IN_PROGRESS: "In Progress",
+  WAITING_CUSTOMER: "Waiting Customer",
+  WAITING_AUTHORITIES: "Waiting Authorities",
+  FINALIZED: "Finalized",
 };
 
-export const ALL_STAGES: CaseStage[] = ["INTAKE", "ACTIONABLE", "AWAITING", "CLOSED"];
+export const ALL_STAGES: CaseStage[] = ["IN_PROGRESS", "NEW", "WAITING_CUSTOMER", "WAITING_AUTHORITIES", "FINALIZED"];
 
-export const ALLOWED_TRANSITIONS: Record<CaseState, CaseState[]> = {
+export const ALLOWED_TRANSITIONS: Partial<Record<CaseState, CaseState[]>> = {
   INTAKE: ["SEND_PROPOSAL"],
   SEND_PROPOSAL: ["WAITING_RESPONSE_P"],
   WAITING_RESPONSE_P: ["DISCUSSING_Q", "SEND_CONTRACT"],
@@ -158,6 +169,11 @@ export const ALLOWED_TRANSITIONS: Record<CaseState, CaseState[]> = {
 };
 
 export const ALL_STATES: CaseState[] = [
+  "NEW",
+  "IN_PROGRESS",
+  "WAITING_CUSTOMER",
+  "WAITING_AUTHORITIES",
+  "FINALIZED",
   "INTAKE",
   "SEND_PROPOSAL",
   "WAITING_RESPONSE_P",

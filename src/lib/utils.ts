@@ -44,35 +44,48 @@ export function getDeadlineNotification(deadline: string | null | undefined, cas
 // Map legacy case state to simplified case stage used for grouping/UI
 export function mapCaseStateToStage(state: string): CaseStage {
   switch (state) {
+    case "NEW":
+      return "NEW";
+    case "IN_PROGRESS":
+      return "IN_PROGRESS";
+    case "WAITING_CUSTOMER":
+      return "WAITING_CUSTOMER";
+    case "WAITING_AUTHORITIES":
+      return "WAITING_AUTHORITIES";
+    case "FINALIZED":
+      return "FINALIZED";
     case "INTAKE":
-      return "INTAKE";
+      return "NEW";
     case "WAITING_RESPONSE_P":
     case "WAITING_RESPONSE_C":
+      return "WAITING_CUSTOMER";
     case "WAITING_APPROVAL":
     case "WAITING_ACCEPTANCE":
-      return "AWAITING";
+      return "WAITING_AUTHORITIES";
     case "SEND_PROPOSAL":
     case "SEND_CONTRACT":
     case "DISCUSSING_Q":
-      return "ACTIONABLE";
+      return "IN_PROGRESS";
     default:
-      return "ACTIONABLE";
+      return "IN_PROGRESS";
   }
 }
 
 // Map a UI stage selection back to a representative legacy CaseState
 export function mapStageToState(stage: CaseStage): CaseState {
   switch (stage) {
-    case "INTAKE":
-      return "INTAKE";
-    case "ACTIONABLE":
-      return "SEND_PROPOSAL";
-    case "AWAITING":
-      return "WAITING_RESPONSE_P";
-    case "CLOSED":
-      return "WAITING_RESPONSE_C";
+    case "NEW":
+      return "NEW";
+    case "IN_PROGRESS":
+      return "IN_PROGRESS";
+    case "WAITING_CUSTOMER":
+      return "WAITING_CUSTOMER";
+    case "WAITING_AUTHORITIES":
+      return "WAITING_AUTHORITIES";
+    case "FINALIZED":
+      return "FINALIZED";
     default:
-      return "INTAKE";
+      return "IN_PROGRESS";
   }
 }
 
@@ -87,7 +100,7 @@ export function computeReadyForWork(c: Case, tasks: CaseTask[]) {
   // A case is considered ready if it's in ACTIONABLE stage.
   // SLA overdue is returned for UI emphasis.
   return {
-    ready: stage === "ACTIONABLE",
+    ready: stage === "IN_PROGRESS",
     pendingTasks,
     slaOverdue,
   };

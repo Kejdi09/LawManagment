@@ -48,10 +48,12 @@ import { getCustomerNotifications } from "@/lib/case-store";
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat = "PP") {
   if (!dateValue) return "N/A";
+  const raw = String(dateValue);
   const date = new Date(dateValue);
   if (isNaN(date.getTime())) return "N/A";
   try {
-    return format(date, dateFormat);
+    const fmt = dateFormat === "PP" && raw.includes("T") ? "PPp" : dateFormat;
+    return format(date, fmt);
   } catch {
     return "N/A";
   }
@@ -85,6 +87,7 @@ const Customers = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
+  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
 
@@ -120,6 +123,11 @@ const Customers = () => {
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
   useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
+
+  const unreadAlertCount = useMemo(
+    () => customerAlerts.filter((a) => !seenAlertIds.has(a.notificationId)).length,
+    [customerAlerts, seenAlertIds],
+  );
 
   const filteredCustomers = useMemo(() => {
     if (!search) return customers;
@@ -267,13 +275,23 @@ const Customers = () => {
           </Button>
           <h1 className="text-lg font-semibold tracking-tight">Customers</h1>
           <div className="ml-auto">
-            <DropdownMenu>
+            <DropdownMenu
+              onOpenChange={(open) => {
+                if (open) {
+                  setSeenAlertIds((prev) => {
+                    const next = new Set(prev);
+                    customerAlerts.forEach((a) => next.add(a.notificationId));
+                    return next;
+                  });
+                }
+              }}
+            >
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="relative">
                   <Bell className="h-4 w-4" />
-                  {customerAlerts.length > 0 && (
+                  {unreadAlertCount > 0 && (
                     <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
-                      {customerAlerts.length}
+                      {unreadAlertCount}
                     </Badge>
                   )}
                 </Button>
@@ -489,7 +507,7 @@ const Customers = () => {
               <DialogHeader>
                     <DialogTitle>{selectedCustomer.name}</DialogTitle>
                     <DialogDescription>
-                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {format(new Date(selectedCustomer.registeredAt), "PP")}
+                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {safeFormatDate(selectedCustomer.registeredAt)}
                     </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">

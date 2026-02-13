@@ -63,9 +63,9 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">
-                    {stage === "ACTIONABLE" ? (
+                    {stage === "IN_PROGRESS" ? (
                       <Badge variant="secondary" className="text-xs">Ready</Badge>
-                    ) : stage === "AWAITING" ? (
+                    ) : stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES" ? (
                       <Badge variant="outline" className="text-xs">Awaiting</Badge>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
