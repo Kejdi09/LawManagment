@@ -58,7 +58,7 @@ const Customers = () => {
     services: [] as (keyof typeof SERVICE_LABELS)[],
     serviceDescription: "",
     contactChannel: "email" as keyof typeof CONTACT_CHANNEL_LABELS,
-    status: "INTAKE" as keyof typeof LEAD_STATUS_LABELS,
+    status: "INTAKE",
     notes: "",
   });
 
@@ -103,7 +103,6 @@ const Customers = () => {
       return (
         c.name.toLowerCase().includes(q) ||
         c.country.toLowerCase().includes(q) ||
-        c.nationality.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.contact.toLowerCase().includes(q) ||
         serviceMatch
