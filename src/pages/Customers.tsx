@@ -37,18 +37,6 @@ import { useNavigate } from "react-router-dom";
 import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
 
-// Reusable safe date formatter
-function safeFormatDate(dateValue: any, dateFormat = "PP") {
-  if (!dateValue) return "N/A";
-  const date = new Date(dateValue);
-  if (isNaN(date.getTime())) return "N/A";
-  try {
-    return format(date, dateFormat);
-  } catch {
-    return "N/A";
-  }
-}
-
 const Customers = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -258,7 +246,11 @@ const Customers = () => {
                     <TableRow key={c.customerId} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
                       <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {c.registeredAt && !isNaN(new Date(c.registeredAt).getTime())
+                          ? format(new Date(c.registeredAt), "PP")
+                          : "N/A"}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.nationality}</TableCell>
                       <TableCell className="text-sm">{c.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
@@ -422,7 +414,7 @@ const Customers = () => {
               <DialogHeader>
                     <DialogTitle>{selectedCustomer.name}</DialogTitle>
                     <DialogDescription>
-                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {safeFormatDate(selectedCustomer.registeredAt)}
+                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {format(new Date(selectedCustomer.registeredAt), "PP")}
                     </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
