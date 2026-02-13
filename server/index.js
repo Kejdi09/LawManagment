@@ -252,10 +252,13 @@ async function seedDemoUser() {
 
 function createAuthCookie(res, token) {
   const secure = process.env.NODE_ENV === "production";
+  // For cross-origin (Vercel frontend -> Render backend) we need SameSite='none' and Secure=true in production.
+  const sameSite = secure ? "none" : "lax";
   res.cookie("token", token, {
     httpOnly: true,
     secure,
-    sameSite: "lax",
+    sameSite,
+    path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 }

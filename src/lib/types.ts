@@ -96,7 +96,11 @@ export type LeadStatus =
   | "WAITING_APPROVAL"
   | "SEND_CONTRACT"
   | "WAITING_ACCEPTANCE"
-  | "SEND_RESPONSE";
+  | "SEND_RESPONSE"
+  | "CONFIRMED"
+  | "CONSULTATION_SCHEDULED"
+  | "CONSULTATION_DONE"
+  | "ON_HOLD";
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   INTAKE: "Intake / New",
@@ -105,6 +109,10 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   SEND_CONTRACT: "Send Contract",
   WAITING_ACCEPTANCE: "Waiting Acceptance",
   SEND_RESPONSE: "Send Response",
+  CONFIRMED: "Confirmed",
+  CONSULTATION_SCHEDULED: "Consultation Scheduled",
+  CONSULTATION_DONE: "Consultation Done",
+  ON_HOLD: "On Hold",
 };
 
 export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {

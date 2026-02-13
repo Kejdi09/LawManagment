@@ -184,6 +184,10 @@ const Customers = () => {
     SEND_CONTRACT: "bg-indigo-100 text-indigo-800",
     WAITING_ACCEPTANCE: "bg-orange-100 text-orange-800",
     SEND_RESPONSE: "bg-emerald-100 text-emerald-800",
+    CONFIRMED: "bg-green-100 text-green-800",
+    CONSULTATION_SCHEDULED: "bg-blue-50 text-blue-800",
+    CONSULTATION_DONE: "bg-emerald-50 text-emerald-800",
+    ON_HOLD: "bg-gray-100 text-gray-800",
   };
 
   const serviceEntries = Object.entries(SERVICE_LABELS);
