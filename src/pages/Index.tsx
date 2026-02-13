@@ -218,6 +218,13 @@ const Index = () => {
     }
   };
 
+  // Load cases on mount and when refreshed (tick)
+  useEffect(() => {
+    loadCases().catch((err) => {
+      console.error("Failed to load cases:", err);
+    });
+  }, [tick, loadCases]);
+
   
   return (
     <div className="min-h-screen bg-background">

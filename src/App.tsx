@@ -29,7 +29,7 @@ const App = () => (
       <AuthProvider>
         <HashRouter>
           <Routes>
-            <Route path="/login" element={<Login onLogin={() => window.location.hash = '#/'}/>} />
+            <Route path="/login" element={<Login />} />
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
             <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
