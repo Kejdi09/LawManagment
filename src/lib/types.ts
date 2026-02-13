@@ -20,6 +20,9 @@ export interface Case {
   generalNote: string;
   priority: Priority;
   deadline: string | null;
+  // ServiceNow-like fields
+  readyForWork?: boolean;
+  slaDue?: string | null;
   assignedTo: string;
 }
 

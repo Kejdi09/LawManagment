@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { isPast, differenceInHours, format } from "date-fns";
 
-import { CaseStage } from "./types";
+import { CaseStage, Case, CaseTask } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -58,4 +58,21 @@ export function mapCaseStateToStage(state: string): CaseStage {
     default:
       return "ACTIONABLE";
   }
+}
+
+// Compute whether a case is ready for work using case stage and its tasks.
+// Returns ready flag, number of pending tasks and whether SLA is overdue.
+export function computeReadyForWork(c: Case, tasks: CaseTask[]) {
+  const stage = mapCaseStateToStage(c.state);
+  const pendingTasks = tasks.filter((t) => !t.done).length;
+  const now = new Date();
+  const slaOverdue = !!c.slaDue && isPast(new Date(c.slaDue));
+
+  // A case is considered ready if it's in ACTIONABLE stage.
+  // SLA overdue is returned for UI emphasis.
+  return {
+    ready: stage === "ACTIONABLE",
+    pendingTasks,
+    slaOverdue,
+  };
 }

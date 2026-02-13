@@ -1,4 +1,5 @@
 import { Case, PRIORITY_CONFIG, CaseStage, STAGE_LABELS } from "@/lib/types";
+import { mapCaseStateToStage } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -34,6 +35,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
               <TableHead>Category</TableHead>
               <TableHead className="w-[90px]">Priority</TableHead>
               <TableHead className="w-[90px]">Docs</TableHead>
+              <TableHead className="w-[90px]">Ready</TableHead>
               <TableHead className="w-[120px]">Deadline</TableHead>
               <TableHead className="w-[100px]">Assigned</TableHead>
               <TableHead className="w-[120px]">Last Change</TableHead>
@@ -43,6 +45,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
             {cases.map((c) => {
               const customerName = customerNames[c.customerId];
               const pCfg = PRIORITY_CONFIG[c.priority];
+              const stage = mapCaseStateToStage(c.state);
               return (
                 <TableRow key={c.caseId} className={`cursor-pointer`} onClick={() => onSelectCase(c.caseId)}>
                   <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
@@ -57,6 +60,15 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                     <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">
                       {c.documentState}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {stage === "ACTIONABLE" ? (
+                      <Badge variant="secondary" className="text-xs">Ready</Badge>
+                    ) : stage === "AWAITING" ? (
+                      <Badge variant="outline" className="text-xs">Awaiting</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs">
                     {c.deadline ? (

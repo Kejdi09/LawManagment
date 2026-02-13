@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { format, isPast, differenceInHours } from "date-fns";
 import { getDeadlineNotification } from "@/lib/utils";
+import { mapCaseStateToStage } from "@/lib/utils";
 
 interface CaseDetailProps {
   caseId: string | null;
@@ -240,6 +241,21 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     }
   };
 
+  const handleToggleReady = async () => {
+    if (!caseId || !caseData) return;
+    try {
+      setIsLoading(true);
+      await updateCase(caseId, { readyForWork: !caseData.readyForWork } as any);
+      await loadCaseData(caseId);
+      toast({ title: caseData.readyForWork ? "Marked not ready" : "Marked ready" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to update", variant: "destructive" });
+      await loadCaseData(caseId);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const doneCount = caseTasks.filter((t) => t.done).length;
 
   return (
@@ -273,6 +289,9 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </>
             )}
             <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteCase} disabled={isLoading}>Delete</Button>
+            <Button variant="outline" size="sm" onClick={handleToggleReady} disabled={isLoading || mapCaseStateToStage(c.state) === "AWAITING"}>
+              {caseData?.readyForWork ? "Unmark Ready" : "Mark Ready"}
+            </Button>
           </div>
         </DialogHeader>
 
@@ -295,6 +314,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     {c.deadline && (
                       <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className={`text-xs ${overdue ? "text-destructive font-bold" : ""}`}>{format(new Date(c.deadline), "PP")}</span></div>
                     )}
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ready</span><span>{c.readyForWork ? <Badge className="text-xs">Ready for work</Badge> : <span className="text-xs text-muted-foreground">No</span>}</span></div>
                     <Separator />
                     <p className="text-muted-foreground text-xs whitespace-pre-wrap">{c.generalNote}</p>
                   </>

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
-import { ALL_STATES, ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS } from "@/lib/types";
+import { ALL_STATES, ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -41,6 +41,7 @@ const Index = () => {
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   const [caseList, setCaseList] = useState<any[]>([]);
+  const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [alerts, setAlerts] = useState<
@@ -267,16 +268,30 @@ const Index = () => {
           docFilter={docFilter}
           onDocFilterChange={setDocFilter}
         />
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as any)}>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All stages</SelectItem>
+                {ALL_STAGES.map((s) => (<SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-        {filteredByState.map(({ state, cases }) => (
-          <CaseTable
-            key={state}
-            state={state}
-            cases={cases}
-            customerNames={customerNames}
-            onSelectCase={setSelectedCaseId}
-          />
-        ))}
+        {filteredByState.map(({ state, cases }) => {
+          if (stageFilter !== "all" && state !== stageFilter) return null;
+          return (
+            <CaseTable
+              key={state}
+              state={state}
+              cases={cases}
+              customerNames={customerNames}
+              onSelectCase={setSelectedCaseId}
+            />
+          );
+        })}
 
         {filteredByState.every(({ cases }) => cases.length === 0) && (
           <div className="text-center py-12 text-muted-foreground">
