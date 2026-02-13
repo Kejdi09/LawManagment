@@ -2,6 +2,8 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { isPast, differenceInHours, format } from "date-fns";
 
+import { CaseStage } from "./types";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -37,4 +39,23 @@ export function getDeadlineNotification(deadline: string | null | undefined, cas
   }
   
   return null;
+}
+
+// Map legacy case state to simplified case stage used for grouping/UI
+export function mapCaseStateToStage(state: string): CaseStage {
+  switch (state) {
+    case "INTAKE":
+      return "INTAKE";
+    case "WAITING_RESPONSE_P":
+    case "WAITING_RESPONSE_C":
+    case "WAITING_APPROVAL":
+    case "WAITING_ACCEPTANCE":
+      return "AWAITING";
+    case "SEND_PROPOSAL":
+    case "SEND_CONTRACT":
+    case "DISCUSSING_Q":
+      return "ACTIONABLE";
+    default:
+      return "ACTIONABLE";
+  }
 }

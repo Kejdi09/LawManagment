@@ -134,6 +134,17 @@ export const STATE_LABELS: Record<CaseState, string> = {
   WAITING_RESPONSE_C: "Waiting Response (C)",
 };
 
+export type CaseStage = "INTAKE" | "ACTIONABLE" | "AWAITING" | "CLOSED";
+
+export const STAGE_LABELS: Record<CaseStage, string> = {
+  INTAKE: "Intake",
+  ACTIONABLE: "Actionable",
+  AWAITING: "Awaiting",
+  CLOSED: "Closed",
+};
+
+export const ALL_STAGES: CaseStage[] = ["INTAKE", "ACTIONABLE", "AWAITING", "CLOSED"];
+
 export const ALLOWED_TRANSITIONS: Record<CaseState, CaseState[]> = {
   INTAKE: ["SEND_PROPOSAL"],
   SEND_PROPOSAL: ["WAITING_RESPONSE_P"],

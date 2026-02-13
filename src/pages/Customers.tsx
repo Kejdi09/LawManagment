@@ -188,10 +188,21 @@ const Customers = () => {
       };
       const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as Record<string, unknown>;
       if (editingId) {
-        await updateCustomer(editingId.trim(), rest as Omit<Customer, "customerId">);
+        const original = customers.find((x) => x.customerId === editingId);
+        const patched: any = { ...rest };
+        // If status changed, append to statusHistory with current date
+        if (original && original.status !== (rest.status as string)) {
+          const prevHistory = Array.isArray(original.statusHistory) ? original.statusHistory.slice() : [];
+          prevHistory.push({ status: rest.status, date: new Date().toISOString() });
+          patched.statusHistory = prevHistory;
+        }
+        await updateCustomer(editingId.trim(), patched as Omit<Customer, "customerId">);
         toast({ title: "Updated", description: "Customer updated successfully" });
       } else {
-        await createCustomer(rest as Omit<Customer, "customerId">);
+        // New customer: initialize statusHistory
+        const toCreate: any = { ...rest };
+        toCreate.statusHistory = [{ status: rest.status, date: new Date().toISOString() }];
+        await createCustomer(toCreate as Omit<Customer, "customerId">);
         toast({ title: "Created", description: "Customer created successfully" });
       }
       setShowForm(false);

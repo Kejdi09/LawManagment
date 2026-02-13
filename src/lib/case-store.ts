@@ -11,7 +11,15 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(text || res.statusText);
   }
-  return res.json();
+  // Handle endpoints that return no content or non-JSON bodies gracefully
+  const txt = await res.text();
+  if (!txt) return null as unknown as T;
+  try {
+    return JSON.parse(txt) as T;
+  } catch {
+    // If response is not valid JSON, return raw text casted to expected type
+    return txt as unknown as T;
+  }
 }
 
 // ── Cases ──

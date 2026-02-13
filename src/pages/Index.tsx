@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
-import { ALL_STATES, Priority, LAWYERS, Customer } from "@/lib/types";
+import { ALL_STATES, ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS } from "@/lib/types";
+import { mapCaseStateToStage } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
@@ -54,13 +55,13 @@ const Index = () => {
 
     // Compute alerts from the full dataset (not filtered by search)
     const now = Date.now();
-    const waitingStates = ["WAITING_RESPONSE_P", "WAITING_RESPONSE_C", "WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
     const alertsComputed = all.flatMap((c) => {
       const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
       const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
       const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
-
-      const isWaiting = waitingStates.includes(c.state);
+      // Map legacy state to logical stage for alerting
+      const stage = mapCaseStateToStage(c.state);
+      const isWaiting = stage === "AWAITING";
       if (isWaiting && hours >= 48 && hours < 72) {
         items.push({ id: `${c.caseId}-wait-48`, customerId: c.customerId, kind: "follow", severity: "warn" });
       }
@@ -153,9 +154,9 @@ const Index = () => {
   }, [loadCases, tick]);
 
   const filteredByState = useMemo(() => {
-    return ALL_STATES.map((state) => ({
-      state,
-      cases: caseList.filter((c) => c.state === state),
+    return ALL_STAGES.map((stage) => ({
+      state: stage,
+      cases: caseList.filter((c) => mapCaseStateToStage(c.state) === stage),
     }));
   }, [caseList]);
   const categoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.category))).sort(), [caseList]);
