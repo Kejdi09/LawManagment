@@ -239,11 +239,11 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 // Auth helpers
 async function seedDemoUser() {
   try {
-    const existing = await usersCol.findOne({ username: "adidafku" });
+    const existing = await usersCol.findOne({ username: "adi" });
     if (!existing) {
-      const hashed = await bcrypt.hash("adixhamiadurres", 10);
-      await usersCol.insertOne({ username: "adidafku", password: hashed, role: "admin", createdAt: new Date().toISOString() });
-      console.log("Seeded demo user 'adidafku'.");
+      const hashed = await bcrypt.hash("890", 10);
+      await usersCol.insertOne({ username: "adi", password: hashed, role: "admin", createdAt: new Date().toISOString() });
+      console.log("Seeded demo user 'adi'.");
     }
   } catch (err) {
     console.error("Failed to seed demo user:", err);
