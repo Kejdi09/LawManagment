@@ -15,7 +15,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check server session on mount
     (async () => {
       try {
-        const res = await fetch('/api/me', { credentials: 'include' });
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        const res = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
         const data = await res.json();
         if (data?.authenticated) {
           setIsAuthenticated(true);
@@ -38,7 +39,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     // Call server to clear cookie
-    fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    (async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+      } catch {}
+    })();
     setIsAuthenticated(false);
     localStorage.removeItem('auth');
   };

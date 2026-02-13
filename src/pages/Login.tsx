@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useNavigate } from 'react-router-dom';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
@@ -17,7 +18,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

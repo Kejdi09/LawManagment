@@ -37,26 +37,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // --- Simple user store for demo (replace with DB in production) ---
-const USERS = [
-  { username: "adidafku", password: "adixhamiadurres" },
-  // Add more users here
-];
-
-// --- Auth endpoint (demo) ---
-app.post("/api/login", async (req, res) => {
-  try {
-    const { username, password } = req.body || {};
-    const user = USERS.find((u) => u.username === username && u.password === password);
-    if (user) {
-      // In production, return a JWT or session token
-      return res.json({ success: true, username });
-    }
-    return res.status(401).json({ success: false, message: "Invalid credentials" });
-  } catch (err) {
-    console.error("/api/login error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+// (removed demo USERS/login) Use DB-backed login defined later
 
 let client;
 let db;
