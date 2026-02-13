@@ -41,6 +41,7 @@ import {
 import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth-context";
 import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
 import { getCustomerNotifications } from "@/lib/case-store";
@@ -300,15 +301,19 @@ const Customers = () => {
     });
   };
 
+  const { logout } = useAuth();
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="container flex h-14 items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/")}> 
             <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
           </Button>
           <h1 className="text-lg font-semibold tracking-tight">Customers</h1>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={logout}>
+              Sign Out
+            </Button>
             <DropdownMenu
               onOpenChange={(open) => {
                 if (open) {

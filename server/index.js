@@ -1,3 +1,20 @@
+// --- Simple user store for demo (replace with DB in production) ---
+const USERS = [
+  { username: "adidafku", password: "adixhamiadurres" },
+  // Add more users here
+];
+
+// --- Auth endpoint ---
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = USERS.find(u => u.username === username && u.password === password);
+  if (user) {
+    // In production, return a JWT or session token
+    res.json({ success: true, username });
+  } else {
+    res.status(401).json({ success: false, message: "Invalid credentials" });
+  }
+});
 import express from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";

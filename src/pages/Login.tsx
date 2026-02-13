@@ -1,21 +1,35 @@
+
 import React, { useState } from 'react';
 
-const USERNAME = 'adidafku';
-const PASSWORD = 'adixhamiadurres';
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === USERNAME && password === PASSWORD) {
-      localStorage.setItem('auth', 'true');
-      setError('');
-      onLogin();
-    } else {
-      setError('Invalid credentials');
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('auth', 'true');
+        setError('');
+        onLogin();
+      } else {
+        setError('Invalid credentials');
+      }
+    } catch (err) {
+      setError('Server error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -39,10 +53,11 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
         />
         {error && <div className="text-red-500 mb-4">{error}</div>}
         <button
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           type="submit"
+          disabled={loading}
         >
-          Log In
+          {loading ? 'Logging in...' : 'Log In'}
         </button>
       </form>
     </div>

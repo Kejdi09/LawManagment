@@ -15,9 +15,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -150,16 +152,15 @@ const Index = () => {
     })();
   }, []);
 
-  useEffect(() => {
-    loadCases();
-  }, [loadCases, tick]);
 
-  const filteredByState = useMemo(() => {
-    return ALL_STAGES.map((stage) => ({
+  // Filtered cases by state for rendering tables
+  const filteredByState = useMemo(
+    () => ALL_STAGES.map((stage) => ({
       state: stage,
       cases: caseList.filter((c) => mapCaseStateToStage(c.state) === stage),
-    }));
-  }, [caseList]);
+    })),
+    [caseList]
+  );
   const categoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.category))).sort(), [caseList]);
   const subcategoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.subcategory))).sort(), [caseList]);
   const customerOptions = useMemo(
@@ -217,6 +218,7 @@ const Index = () => {
     }
   };
 
+  
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
