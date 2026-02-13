@@ -74,7 +74,7 @@ const Customers = () => {
     services: [] as (keyof typeof SERVICE_LABELS)[],
     serviceDescription: "",
     contactChannel: "email" as keyof typeof CONTACT_CHANNEL_LABELS,
-    status: "INTAKE" as keyof typeof LEAD_STATUS_LABELS,
+    status: "INTAKE",
     notes: "",
   });
 
@@ -266,6 +266,7 @@ const Customers = () => {
                       <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{c.nationality}</TableCell>
                       <TableCell className="text-sm">{c.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
                       <TableCell>
@@ -424,7 +425,7 @@ const Customers = () => {
               <DialogHeader>
                     <DialogTitle>{selectedCustomer.name}</DialogTitle>
                     <DialogDescription>
-                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {safeFormatDate(selectedCustomer.registeredAt)}
+                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {format(new Date(selectedCustomer.registeredAt), "PP")}
                     </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
