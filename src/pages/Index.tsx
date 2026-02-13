@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
 import { ALL_STATES, ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
-import { mapCaseStateToStage } from "@/lib/utils";
+import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
@@ -45,7 +45,7 @@ const Index = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [alerts, setAlerts] = useState<
-    { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }
+    { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }
   >([]);
   const [alertHintShown, setAlertHintShown] = useState(false);
   const { toast } = useToast();
@@ -75,21 +75,21 @@ const Index = () => {
 
       const isSend = c.state.startsWith("SEND_");
       if (isSend && hours >= 12) {
-        items.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, kind: "respond", severity: "warn" });
+        items.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, caseId: c.caseId, message: `Respond: ${c.caseId}`, kind: "respond", severity: "warn" });
       }
 
       // Deadline notifications
       if (c.deadline) {
         const deadlineTime = new Date(c.deadline).getTime();
-        const hoursUntilDeadline = (deadlineTime - now) / (1000 * 60 * 60);
+        const hoursUntilDeadline = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
         
         // Case is overdue
         if (deadlineTime < now) {
-          items.push({ id: `${c.caseId}-overdue`, customerId: c.customerId, kind: "deadline", severity: "critical" });
+          items.push({ id: `${c.caseId}-overdue`, customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
         }
         // Deadline within 48 hours
         else if (hoursUntilDeadline <= 48) {
-          items.push({ id: `${c.caseId}-deadline-48`, customerId: c.customerId, kind: "deadline", severity: "warn" });
+          items.push({ id: `${c.caseId}-deadline-48`, customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntilDeadline)}h`, kind: "deadline", severity: "warn" });
         }
       }
 
@@ -200,8 +200,11 @@ const Index = () => {
       return;
     }
     try {
+      // Map UI stage (state) to a legacy CaseState for backend
+      const mappedState = mapStageToState(caseForm.state as any);
       await createCase({
         ...caseForm,
+        state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
       } as any);
       setShowCaseForm(false);
@@ -238,12 +241,14 @@ const Index = () => {
                 {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
                 {alerts.map((a) => {
                   const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
-                  let verb = "Follow up";
-                  if (a.kind === "respond") verb = "Respond to";
-                  else if (a.kind === "deadline") verb = "Deadline";
+                  // Use explicit message when available, fall back to kind-based label
+                  const message = a.message ?? (a.kind === "deadline" ? "Deadline" : a.kind === "respond" ? "Respond" : "Follow up");
                   return (
                     <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
-                      {verb} {name}
+                      <div className="flex flex-col">
+                        <span>{message}</span>
+                        <span className="text-xs text-muted-foreground">{name}</span>
+                      </div>
                     </DropdownMenuItem>
                   );
                 })}
@@ -352,7 +357,7 @@ const Index = () => {
               <Select value={caseForm.state} onValueChange={(v) => setCaseForm({ ...caseForm, state: v as any })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ALL_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {ALL_STAGES.map((s) => <SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

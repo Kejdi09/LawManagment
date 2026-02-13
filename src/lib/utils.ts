@@ -60,6 +60,22 @@ export function mapCaseStateToStage(state: string): CaseStage {
   }
 }
 
+// Map a UI stage selection back to a representative legacy CaseState
+export function mapStageToState(stage: CaseStage): string {
+  switch (stage) {
+    case "INTAKE":
+      return "INTAKE";
+    case "ACTIONABLE":
+      return "SEND_PROPOSAL";
+    case "AWAITING":
+      return "WAITING_RESPONSE_P";
+    case "CLOSED":
+      return "WAITING_RESPONSE_C";
+    default:
+      return "INTAKE";
+  }
+}
+
 // Compute whether a case is ready for work using case stage and its tasks.
 // Returns ready flag, number of pending tasks and whether SLA is overdue.
 export function computeReadyForWork(c: Case, tasks: CaseTask[]) {

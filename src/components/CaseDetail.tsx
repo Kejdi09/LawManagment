@@ -27,7 +27,7 @@ import {
   CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap,
 } from "lucide-react";
 import { format, isPast, differenceInHours } from "date-fns";
-import { getDeadlineNotification } from "@/lib/utils";
+import { getDeadlineNotification, mapStageToState } from "@/lib/utils";
 import { mapCaseStateToStage } from "@/lib/utils";
 
 interface CaseDetailProps {
@@ -51,7 +51,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [editForm, setEditForm] = useState({
     category: "",
     subcategory: "",
-    state: "INTAKE" as CaseState,
+    state: "INTAKE" as any,
     documentState: "ok" as "ok" | "missing",
     communicationMethod: "",
     generalNote: "",
@@ -79,7 +79,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setEditForm({
         category: data.category,
         subcategory: data.subcategory,
-        state: data.state,
+        // represent case state as UI stage
+        state: mapCaseStateToStage(data.state),
         documentState: data.documentState,
         communicationMethod: data.communicationMethod,
         generalNote: data.generalNote ?? "",
@@ -199,7 +200,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         ...caseData,
         category: editForm.category,
         subcategory: editForm.subcategory,
-        state: editForm.state,
+        state: mapStageToState(editForm.state),
         documentState: editForm.documentState,
         communicationMethod: editForm.communicationMethod,
         generalNote: editForm.generalNote,
@@ -213,6 +214,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       // Send update to backend
       await updateCase(targetId, {
         ...editForm,
+        state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       } as any);
       

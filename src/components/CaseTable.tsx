@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isPast } from "date-fns";
 import { Clock } from "lucide-react";
 
 interface CaseTableProps {
@@ -46,8 +46,9 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
               const customerName = customerNames[c.customerId];
               const pCfg = PRIORITY_CONFIG[c.priority];
               const stage = mapCaseStateToStage(c.state);
+              const overdue = c.deadline && isPast(new Date(c.deadline));
               return (
-                <TableRow key={c.caseId} className={`cursor-pointer`} onClick={() => onSelectCase(c.caseId)}>
+                <TableRow key={c.caseId} className={`cursor-pointer ${overdue ? "bg-destructive/5" : ""}`} onClick={() => onSelectCase(c.caseId)}>
                   <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                   <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>
