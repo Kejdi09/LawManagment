@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
   getTasksByCaseId, changeState, addNote, addTask, toggleTask, updateCase, deleteCase,
@@ -24,9 +24,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowRight, FileText, User, Clock, MessageSquare,
-  CheckSquare, AlertTriangle, Phone, Mail, MapPin,
+  CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap,
 } from "lucide-react";
-import { format, isPast } from "date-fns";
+import { format, isPast, differenceInHours } from "date-fns";
+import { getDeadlineNotification } from "@/lib/utils";
 
 interface CaseDetailProps {
   caseId: string | null;
@@ -44,6 +45,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [noteText, setNoteText] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const previousCaseIdRef = useRef<string | null>(null);
   const [editForm, setEditForm] = useState({
     category: "",
     subcategory: "",
@@ -68,7 +71,10 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setCaseHistory(await getHistoryByCaseId(id));
       setCaseNotes(await getNotesByCaseId(id));
       setCaseTasks(await getTasksByCaseId(id));
-      setEditMode(false);
+      // Only exit edit mode if we're actually editing AND the ID is different (fresh load)
+      if (editMode && previousCaseIdRef.current !== id) {
+        setEditMode(false);
+      }
       setEditForm({
         category: data.category,
         subcategory: data.subcategory,
@@ -80,10 +86,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         deadline: data.deadline ? data.deadline.slice(0, 10) : "",
         assignedTo: data.assignedTo,
       });
+      previousCaseIdRef.current = id;
     } catch (err: any) {
       toast({ title: "Error", description: err?.message ?? "Failed to load case", variant: "destructive" });
     }
-  }, [toast]);
+  }, [toast, editMode]);
 
   useEffect(() => {
     if (!caseId) {
@@ -103,6 +110,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const allowedNext = ALLOWED_TRANSITIONS[c.state];
   const pCfg = PRIORITY_CONFIG[c.priority];
   const overdue = c.deadline && isPast(new Date(c.deadline));
+  const deadlineNotif = getDeadlineNotification(c.deadline, c.caseId);
 
   const handleChangeState = async (newState: CaseState) => {
     try {
@@ -116,50 +124,107 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   };
 
   const handleAddNote = async () => {
-    if (!noteText.trim()) return;
+    if (!noteText.trim() || isLoading) return;
     try {
-      await addNote(caseId, noteText.trim());
+      setIsLoading(true);
+      const optimisticNote: Note = {
+        noteId: `temp-${Date.now()}`,
+        caseId,
+        noteText: noteText.trim(),
+        date: new Date().toISOString(),
+      };
+      setCaseNotes([...caseNotes, optimisticNote]);
       setNoteText("");
+      await addNote(caseId, noteText.trim());
       await loadCaseData(caseId);
     } catch (err: any) {
       toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+      await loadCaseData(caseId);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleAddTask = async () => {
-    if (!taskTitle.trim()) return;
+    if (!taskTitle.trim() || isLoading) return;
     try {
-      await addTask(caseId, taskTitle.trim(), null);
+      setIsLoading(true);
+      const optimisticTask: CaseTask = {
+        taskId: `temp-${Date.now()}`,
+        caseId,
+        title: taskTitle.trim(),
+        done: false,
+        dueDate: null,
+      };
+      setCaseTasks([...caseTasks, optimisticTask]);
       setTaskTitle("");
+      await addTask(caseId, taskTitle.trim(), null);
       await loadCaseData(caseId);
     } catch (err: any) {
       toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+      await loadCaseData(caseId);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleToggleTask = async (taskId: string) => {
+    if (isLoading) return;
     try {
+      setIsLoading(true);
+      // Optimistic update
+      setCaseTasks(caseTasks.map(t => t.taskId === taskId ? { ...t, done: !t.done } : t));
       await toggleTask(taskId);
-      await loadCaseData(caseId);
+      // Light refresh - only get tasks instead of full reload
+      const updatedTasks = await getTasksByCaseId(caseId);
+      setCaseTasks(updatedTasks);
     } catch (err: any) {
       toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+      // Reload to restore correct state on error
+      const tasks = await getTasksByCaseId(caseId);
+      setCaseTasks(tasks);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSaveEdit = async () => {
+    if (isLoading) return;
     try {
-      // Use the exact id from the loaded case to avoid mismatches (e.g. stray whitespace)
+      setIsLoading(true);
       const targetId = c.caseId;
+      // Optimistically update local state
+      const updatedCaseData: Case = {
+        ...caseData,
+        category: editForm.category,
+        subcategory: editForm.subcategory,
+        state: editForm.state,
+        documentState: editForm.documentState,
+        communicationMethod: editForm.communicationMethod,
+        generalNote: editForm.generalNote,
+        priority: editForm.priority,
+        deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
+        assignedTo: editForm.assignedTo,
+      };
+      setCaseData(updatedCaseData);
+      setEditMode(false);
+
+      // Send update to backend
       await updateCase(targetId, {
         ...editForm,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       } as any);
-      setEditMode(false);
+      
       onStateChanged();
+      // Minimal reload to ensure consistency
       await loadCaseData(targetId);
-      toast({ title: "Case updated" });
+      toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: any) {
       toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+      // Reload on error to restore correct state
+      await loadCaseData(c.caseId);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -181,28 +246,33 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-xl">
+          <DialogTitle className="flex items-center gap-3 text-xl flex-wrap">
             <FileText className="h-5 w-5" />
             {c.caseId}
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>
               {pCfg.label}
             </span>
-            {overdue && (
-              <span className="inline-flex items-center gap-1 text-xs text-destructive font-semibold">
-                <AlertTriangle className="h-3 w-3" /> OVERDUE
+            {deadlineNotif && (
+              <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold ${
+                deadlineNotif.severity === 'destructive' 
+                  ? 'bg-destructive/10 text-destructive' 
+                  : 'bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300'
+              }`}>
+                <Zap className="h-3.5 w-3.5" />
+                {deadlineNotif.message}
               </span>
             )}
           </DialogTitle>
           <DialogDescription>{c.category} — {c.subcategory} • Assigned to {c.assignedTo}</DialogDescription>
           <div className="flex gap-2 mt-2">
-            {!editMode && <Button variant="outline" size="sm" onClick={() => setEditMode(true)}>Edit</Button>}
+            {!editMode && <Button variant="outline" size="sm" onClick={() => setEditMode(true)} disabled={isLoading}>Edit</Button>}
             {editMode && (
               <>
-                <Button variant="ghost" size="sm" onClick={() => setEditMode(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditMode(false)} disabled={isLoading}>Cancel</Button>
+                <Button size="sm" onClick={handleSaveEdit} disabled={isLoading}>{isLoading ? "Saving..." : "Save"}</Button>
               </>
             )}
-            <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteCase}>Delete</Button>
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteCase} disabled={isLoading}>Delete</Button>
           </div>
         </DialogHeader>
 
@@ -332,14 +402,14 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex gap-2">
-                <Input placeholder="New task..." value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} />
-                <Button size="sm" onClick={handleAddTask}>Add</Button>
+                <Input placeholder="New task..." value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} disabled={isLoading} />
+                <Button size="sm" onClick={handleAddTask} disabled={isLoading}>{isLoading ? "Adding..." : "Add"}</Button>
               </div>
               {caseTasks.length > 0 && (
                 <div className="space-y-1">
                   {caseTasks.map((t) => (
                     <div key={t.taskId} className={`flex items-center gap-3 rounded-md border p-2 text-sm ${t.done ? "opacity-50" : ""}`}>
-                      <Checkbox checked={t.done} onCheckedChange={() => handleToggleTask(t.taskId)} />
+                      <Checkbox checked={t.done} onCheckedChange={() => handleToggleTask(t.taskId)} disabled={isLoading} />
                       <span className={t.done ? "line-through" : ""}>{t.title}</span>
                       {t.dueDate && (
                         <span className={`ml-auto text-xs ${isPast(new Date(t.dueDate)) && !t.done ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
@@ -386,8 +456,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex gap-2">
-                  <Textarea placeholder="Add a note..." value={noteText} onChange={(e) => setNoteText(e.target.value)} className="min-h-[50px]" />
-                  <Button onClick={handleAddNote} className="self-end" size="sm">Add</Button>
+                  <Textarea placeholder="Add a note..." value={noteText} onChange={(e) => setNoteText(e.target.value)} className="min-h-[50px]" disabled={isLoading} />
+                  <Button onClick={handleAddNote} className="self-end" size="sm" disabled={isLoading}>{isLoading ? "Adding..." : "Add"}</Button>
                 </div>
                 {caseNotes.length > 0 && (
                   <div className="space-y-2 max-h-[200px] overflow-y-auto">

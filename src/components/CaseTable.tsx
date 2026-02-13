@@ -5,7 +5,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { formatDistanceToNow, isPast } from "date-fns";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Clock, Zap } from "lucide-react";
+import { getDeadlineNotification } from "@/lib/utils";
 
 interface CaseTableProps {
   state: CaseState;
@@ -44,6 +45,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
               const customerName = customerNames[c.customerId];
               const overdue = c.deadline && isPast(new Date(c.deadline));
               const pCfg = PRIORITY_CONFIG[c.priority];
+              const deadlineNotif = getDeadlineNotification(c.deadline, c.caseId);
               return (
                 <TableRow
                   key={c.caseId}
@@ -64,15 +66,22 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">
-                    {c.deadline ? (
-                      <span className={`flex items-center gap-1 ${overdue ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                        {overdue && <AlertTriangle className="h-3 w-3" />}
+                    {deadlineNotif ? (
+                      <span className={deadlineNotif.severity === 'destructive'
+                        ? 'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold bg-destructive/10 text-destructive'
+                        : 'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300'
+                      }>
+                        {deadlineNotif.severity === 'destructive' ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                        {deadlineNotif.message}
+                      </span>
+                    ) : c.deadline ? (
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
                         {formatDistanceToNow(new Date(c.deadline), { addSuffix: true })}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
+                    )}\n                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(c.lastStateChange), { addSuffix: true })}
