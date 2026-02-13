@@ -70,7 +70,6 @@ const Customers = () => {
   const [form, setForm] = useState({
     name: "",
     customerType: "Individual",
-    country: "",
     contact: "",
     phone: "",
     email: "",
@@ -136,7 +135,6 @@ const Customers = () => {
       const serviceMatch = c.services.some((s: string) => SERVICE_LABELS[s].toLowerCase().includes(q));
       return (
         c.name.toLowerCase().includes(q) ||
-        c.country.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.contact.toLowerCase().includes(q) ||
         serviceMatch
@@ -162,7 +160,6 @@ const Customers = () => {
     setForm({
       name: "",
       customerType: "Individual",
-      country: "",
       contact: "",
       phone: "",
       email: "",
@@ -207,11 +204,12 @@ const Customers = () => {
       const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as Record<string, unknown>;
       if (editingId) {
         const original = customers.find((x) => x.customerId === editingId);
-        const patched: any = { ...rest };
+        const patched: Partial<Customer> = { ...(rest as Partial<Customer>) };
         // If status changed, append to statusHistory with current date
-        if (original && original.status !== (rest.status as string)) {
+        if (original && original.status !== (form.status as LeadStatus)) {
           const prevHistory = Array.isArray(original.statusHistory) ? original.statusHistory.slice() : [];
-          prevHistory.push({ status: rest.status, date: new Date().toISOString() });
+          prevHistory.push({ status: form.status as LeadStatus, date: new Date().toISOString() });
+          patched.status = form.status as LeadStatus;
           patched.statusHistory = prevHistory;
         }
         // Optimistic UI update so changes appear instantly
@@ -226,7 +224,7 @@ const Customers = () => {
         }
         setShowForm(false);
         resetForm();
-        await updateCustomer(editingId.trim(), patched as Omit<Customer, "customerId">);
+        await updateCustomer(editingId.trim(), patched);
         await loadCustomerNotifications();
         toast({ title: "Updated", description: "Customer updated successfully" });
         await loadCustomers();
@@ -234,8 +232,9 @@ const Customers = () => {
         return;
       } else {
         // New customer: initialize statusHistory
-        const toCreate: any = { ...rest };
-        toCreate.statusHistory = [{ status: rest.status, date: new Date().toISOString() }];
+        const toCreate: Partial<Customer> = { ...(rest as Partial<Customer>) };
+        toCreate.status = form.status as LeadStatus;
+        toCreate.statusHistory = [{ status: form.status as LeadStatus, date: new Date().toISOString() }];
         await createCustomer(toCreate as Omit<Customer, "customerId">);
         toast({ title: "Created", description: "Customer created successfully" });
       }
@@ -421,10 +420,6 @@ const Customers = () => {
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Country</Label>
-              <Input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
-            </div>
-            <div className="space-y-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
@@ -506,9 +501,6 @@ const Customers = () => {
             <>
               <DialogHeader>
                     <DialogTitle>{selectedCustomer.name}</DialogTitle>
-                    <DialogDescription>
-                      {selectedCustomer.customerType} • {selectedCustomer.country} • Registered {safeFormatDate(selectedCustomer.registeredAt)}
-                    </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                     <Card>
