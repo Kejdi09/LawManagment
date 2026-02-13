@@ -246,7 +246,11 @@ const Customers = () => {
                     <TableRow key={c.customerId} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
                       <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{format(new Date(c.registeredAt), "PP")}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {c.registeredAt && !isNaN(new Date(c.registeredAt).getTime())
+                          ? format(new Date(c.registeredAt), "PP")
+                          : "N/A"}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.nationality}</TableCell>
                       <TableCell className="text-sm">{c.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
