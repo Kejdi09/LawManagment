@@ -41,6 +41,15 @@ export function getDeadlineNotification(deadline: string | null | undefined, cas
   return null;
 }
 
+// Consistent date formatter used across the app. Returns `dd/MM/yyyy` by default
+// and `dd/MM/yyyy HH:mm` when `includeTime` is true.
+export function formatDate(value: string | Date | null | undefined, includeTime = false) {
+  if (!value) return "N/A";
+  const d = new Date(value as any);
+  if (isNaN(d.getTime())) return "N/A";
+  return includeTime ? format(d, "dd/MM/yyyy HH:mm") : format(d, "dd/MM/yyyy");
+}
+
 // Map legacy case state to simplified case stage used for grouping/UI
 export function mapCaseStateToStage(state: string): CaseStage {
   switch (state) {

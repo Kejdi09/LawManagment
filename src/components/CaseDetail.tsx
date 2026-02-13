@@ -26,8 +26,8 @@ import {
   FileText, User, Clock, MessageSquare,
   CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap, Trash2,
 } from "lucide-react";
-import { format, isPast, differenceInHours } from "date-fns";
-import { getDeadlineNotification, mapStageToState } from "@/lib/utils";
+import { isPast, differenceInHours } from "date-fns";
+import { getDeadlineNotification, mapStageToState, formatDate } from "@/lib/utils";
 import { mapCaseStateToStage } from "@/lib/utils";
 
 interface CaseDetailProps {
@@ -63,9 +63,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
   const formatOptionalDateTime = (value: string | null | undefined) => {
     if (!value) return "N/A";
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return "N/A";
-    return value.includes("T") ? format(d, "PPp") : format(d, "PP");
+    const includeTime = String(value).includes("T");
+    return formatDate(value, includeTime);
   };
   const loadCaseData = useCallback(async (id: string) => {
     try {
@@ -480,7 +479,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       <div className="ml-auto flex items-center gap-2">
                         {t.dueDate && (
                           <span className={`text-xs ${isPast(new Date(t.dueDate)) && !t.done ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                            Due {format(new Date(t.dueDate), "MMM d")}
+                            Due {formatDate(t.dueDate)}
                           </span>
                         )}
                         <Button

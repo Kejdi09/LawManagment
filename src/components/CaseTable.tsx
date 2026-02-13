@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { formatDistanceToNow, isPast } from "date-fns";
+import { isPast } from "date-fns";
+import { formatDate } from "@/lib/utils";
 import { Clock } from "lucide-react";
 
 interface CaseTableProps {
@@ -77,7 +78,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                     {c.deadline ? (
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        {formatDistanceToNow(new Date(c.deadline), { addSuffix: true })}
+                        {formatDate(c.deadline)}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -85,7 +86,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(c.lastStateChange), { addSuffix: true })}
+                    {formatDate(c.lastStateChange, true)}
                   </TableCell>
                 </TableRow>
               );

@@ -1,6 +1,7 @@
 import { Case, CaseState, CaseTask, Customer, CustomerNotification, HistoryRecord, Note } from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {

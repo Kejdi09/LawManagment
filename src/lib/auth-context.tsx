@@ -15,7 +15,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check server session on mount
     (async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        const API_URL = import.meta.env.VITE_API_URL ?? '';
         const res = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
         const data = await res.json();
         if (data?.authenticated) {
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Call server to clear cookie
     (async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        const API_URL = import.meta.env.VITE_API_URL ?? '';
         await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
       } catch {}
     })();

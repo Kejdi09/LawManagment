@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/utils";
 import {
   getAllCustomers,
   getAllCases,
@@ -47,17 +47,11 @@ import { useToast } from "@/hooks/use-toast";
 import { getCustomerNotifications } from "@/lib/case-store";
 
 // Reusable safe date formatter
-function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat = "PP") {
+function safeFormatDate(dateValue: string | Date | null | undefined) {
   if (!dateValue) return "N/A";
   const raw = String(dateValue);
-  const date = new Date(dateValue);
-  if (isNaN(date.getTime())) return "N/A";
-  try {
-    const fmt = dateFormat === "PP" && raw.includes("T") ? "PPp" : dateFormat;
-    return format(date, fmt);
-  } catch {
-    return "N/A";
-  }
+  const includeTime = raw.includes("T");
+  return formatDate(dateValue, includeTime);
 }
 
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;

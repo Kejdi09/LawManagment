@@ -13,6 +13,14 @@ export default defineConfig(({ mode }) => ({
     },
     middlewareMode: false,
     historyApiFallback: true,
+    // Proxy /api to backend during local development so cookies and auth work
+    proxy: {
+      "/api": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

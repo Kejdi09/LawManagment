@@ -279,6 +279,23 @@ app.get("/api/me", (req, res) => {
   }
 });
 
+// Debug endpoint to inspect received cookies. Enabled only when not in production
+// or when ENABLE_DEBUG_COOKIES=true is set in env. Returns `req.cookies` and decoded token payload if present.
+app.get("/api/_debug/cookies", (req, res) => {
+  const enabled = process.env.NODE_ENV !== "production" || process.env.ENABLE_DEBUG_COOKIES === "true";
+  if (!enabled) return res.status(404).json({ error: "Not found" });
+  const cookies = req.cookies || {};
+  let tokenPayload = null;
+  try {
+    if (cookies.token) {
+      tokenPayload = jwt.verify(cookies.token, JWT_SECRET);
+    }
+  } catch (err) {
+    tokenPayload = { error: "invalid_token" };
+  }
+  return res.json({ cookies, tokenPayload });
+});
+
 // Login using users collection and bcrypt, issue httpOnly JWT cookie
 app.post("/api/login", async (req, res) => {
   try {
