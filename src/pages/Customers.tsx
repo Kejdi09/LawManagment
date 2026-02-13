@@ -266,7 +266,6 @@ const Customers = () => {
                       <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{c.nationality}</TableCell>
                       <TableCell className="text-sm">{c.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
                       <TableCell>
