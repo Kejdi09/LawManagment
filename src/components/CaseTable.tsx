@@ -47,8 +47,10 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
               const pCfg = PRIORITY_CONFIG[c.priority];
               const stage = mapCaseStateToStage(c.state);
               const overdue = c.deadline && isPast(new Date(c.deadline));
+              const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
+              const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70 dark:bg-yellow-900/20" : "";
               return (
-                <TableRow key={c.caseId} className={`cursor-pointer ${overdue ? "bg-destructive/5" : ""}`} onClick={() => onSelectCase(c.caseId)}>
+                <TableRow key={c.caseId} className={`cursor-pointer ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
                   <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                   <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>

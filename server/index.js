@@ -443,6 +443,14 @@ app.post("/api/tasks/:taskId/toggle", async (req, res) => {
   res.json({ ...t, done: !t.done });
 });
 
+app.delete("/api/tasks/:taskId", async (req, res) => {
+  const { taskId } = req.params;
+  const t = await tasksCol.findOne({ taskId });
+  if (!t) return res.status(404).json({ error: "Not found" });
+  await tasksCol.deleteOne({ taskId });
+  res.json({ ok: true, taskId });
+});
+
 // KPIs
 app.get("/api/kpis", async (req, res) => {
   const now = Date.now();

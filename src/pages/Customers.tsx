@@ -60,6 +60,7 @@ function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat 
 }
 
 const Customers = () => {
+  const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -142,6 +143,17 @@ const Customers = () => {
     });
   }, [customers, search]);
 
+  const groupedCustomers = useMemo(() => {
+    const order = ["Individual", "Family", "Company"];
+    const buckets = order.map((type) => ({
+      type,
+      items: filteredCustomers.filter((customer) => customer.customerType === type),
+    }));
+    const others = filteredCustomers.filter((customer) => !order.includes(customer.customerType));
+    if (others.length > 0) buckets.push({ type: "Other", items: others });
+    return buckets;
+  }, [filteredCustomers]);
+
   const statusAccent: Record<string, string> = {
     INTAKE: "bg-slate-100 text-slate-800",
     SEND_PROPOSAL: "bg-blue-100 text-blue-800",
@@ -196,6 +208,7 @@ const Customers = () => {
     try {
       const payload = {
         ...form,
+        contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
         services: form.services || [],
         serviceDescription: form.serviceDescription || "",
@@ -340,56 +353,63 @@ const Customers = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCustomers.map((c) => {
-                  const caseCount = caseCounts[c.customerId] || 0;
-                  const servicesLabel = c.services.map((s) => SERVICE_LABELS[s]);
-                  return (
-                    <TableRow key={c.customerId} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
-                      <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
-                      <TableCell className="text-sm">{c.phone}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-7 px-2">
-                              {servicesLabel[0]}{servicesLabel.length > 1 ? ` +${servicesLabel.length - 1}` : ""}
-                              <ChevronDown className="h-3 w-3 ml-1" />
+                {groupedCustomers.flatMap((group) => ([
+                  <TableRow key={`group-${group.type}-header`} className="bg-muted/30">
+                    <TableCell colSpan={10} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.type} ({group.items.length})
+                    </TableCell>
+                  </TableRow>,
+                  ...group.items.map((c) => {
+                    const caseCount = caseCounts[c.customerId] || 0;
+                    const servicesLabel = c.services.map((s) => SERVICE_LABELS[s]);
+                    return (
+                      <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
+                        <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
+                        <TableCell className="text-sm">{c.phone}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-7 px-2">
+                                {servicesLabel[0]}{servicesLabel.length > 1 ? ` +${servicesLabel.length - 1}` : ""}
+                                <ChevronDown className="h-3 w-3 ml-1" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              {servicesLabel.map((s) => (
+                                <DropdownMenuItem key={s}>{s}</DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[c.contactChannel]}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
+                            {LEAD_STATUS_LABELS[c.status]}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right flex items-center justify-end gap-2">
+                          {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
+                          <Badge variant="secondary">{caseCount}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(c.customerId)}>
+                              <Pencil className="h-4 w-4" />
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {servicesLabel.map((s) => (
-                              <DropdownMenuItem key={s}>{s}</DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[c.contactChannel]}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
-                          {LEAD_STATUS_LABELS[c.status]}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right flex items-center justify-end gap-2">
-                        {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
-                        <Badge variant="secondary">{caseCount}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(c.customerId)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(c.customerId)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(c.customerId)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ]))}
               </TableBody>
             </Table>
           </CardContent>
@@ -408,8 +428,15 @@ const Customers = () => {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Contact Person</Label>
-              <Input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
+              <Label>Contact Type</Label>
+              <Select value={form.customerType} onValueChange={(v) => setForm({ ...form, customerType: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CUSTOMER_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Phone</Label>

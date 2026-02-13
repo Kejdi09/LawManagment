@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
-  getTasksByCaseId, addHistory, addNote, addTask, toggleTask, updateCase, deleteCase,
+  getTasksByCaseId, addHistory, addNote, addTask, toggleTask, deleteTask, updateCase, deleteCase,
 } from "@/lib/case-store";
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
@@ -24,7 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   FileText, User, Clock, MessageSquare,
-  CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap,
+  CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap, Trash2,
 } from "lucide-react";
 import { format, isPast, differenceInHours } from "date-fns";
 import { getDeadlineNotification, mapStageToState } from "@/lib/utils";
@@ -193,6 +193,23 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       // Reload to restore correct state on error
+      const tasks = await getTasksByCaseId(caseId);
+      setCaseTasks(tasks);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (isLoading) return;
+    try {
+      setIsLoading(true);
+      setCaseTasks((prev) => prev.filter((task) => task.taskId !== taskId));
+      await deleteTask(taskId);
+      const updatedTasks = await getTasksByCaseId(caseId);
+      setCaseTasks(updatedTasks);
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       const tasks = await getTasksByCaseId(caseId);
       setCaseTasks(tasks);
     } finally {
@@ -460,11 +477,23 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     <div key={t.taskId} className={`flex items-center gap-3 rounded-md border p-2 text-sm ${t.done ? "opacity-50" : ""}`}>
                       <Checkbox checked={t.done} onCheckedChange={() => handleToggleTask(t.taskId)} disabled={isLoading} />
                       <span className={t.done ? "line-through" : ""}>{t.title}</span>
-                      {t.dueDate && (
-                        <span className={`ml-auto text-xs ${isPast(new Date(t.dueDate)) && !t.done ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                          Due {format(new Date(t.dueDate), "MMM d")}
-                        </span>
-                      )}
+                      <div className="ml-auto flex items-center gap-2">
+                        {t.dueDate && (
+                          <span className={`text-xs ${isPast(new Date(t.dueDate)) && !t.done ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                            Due {format(new Date(t.dueDate), "MMM d")}
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => handleDeleteTask(t.taskId)}
+                          disabled={isLoading}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

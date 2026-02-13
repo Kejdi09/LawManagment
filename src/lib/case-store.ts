@@ -127,6 +127,10 @@ export async function toggleTask(taskId: string): Promise<CaseTask> {
   return api<CaseTask>(`/api/tasks/${taskId}/toggle`, { method: "POST" });
 }
 
+export async function deleteTask(taskId: string): Promise<void> {
+  await api(`/api/tasks/${taskId}`, { method: "DELETE" });
+}
+
 // ── KPIs ──
 export async function getKPIs() {
   return api(`/api/kpis`);
