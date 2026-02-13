@@ -1,24 +1,10 @@
-// --- Simple user store for demo (replace with DB in production) ---
-const USERS = [
-  { username: "adidafku", password: "adixhamiadurres" },
-  // Add more users here
-];
-
-// --- Auth endpoint ---
-app.post("/api/login", async (req, res) => {
-  const { username, password } = req.body;
-  const user = USERS.find(u => u.username === username && u.password === password);
-  if (user) {
-    // In production, return a JWT or session token
-    res.json({ success: true, username });
-  } else {
-    res.status(401).json({ success: false, message: "Invalid credentials" });
-  }
-});
 import express from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { seedCustomers, seedCases, seedHistory, seedNotes, seedTasks } from "./seed-data.js";
 
 dotenv.config();
@@ -33,8 +19,44 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-app.use(cors());
+// Configure CORS to only allow origins in ALLOWED_ORIGINS (comma-separated)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser (curl/postman) requests with no origin
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("CORS not allowed"));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+
+// --- Simple user store for demo (replace with DB in production) ---
+const USERS = [
+  { username: "adidafku", password: "adixhamiadurres" },
+  // Add more users here
+];
+
+// --- Auth endpoint (demo) ---
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    const user = USERS.find((u) => u.username === username && u.password === password);
+    if (user) {
+      // In production, return a JWT or session token
+      return res.json({ success: true, username });
+    }
+    return res.status(401).json({ success: false, message: "Invalid credentials" });
+  } catch (err) {
+    console.error("/api/login error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 let client;
 let db;
@@ -45,6 +67,9 @@ let customerHistoryCol;
 let customerNotificationsCol;
 let notesCol;
 let tasksCol;
+let usersCol;
+
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 async function connectDb() {
   client = new MongoClient(MONGODB_URI);
@@ -57,6 +82,7 @@ async function connectDb() {
   customerNotificationsCol = db.collection("customerNotifications");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
+  usersCol = db.collection("users");
 }
 
 async function seedIfEmpty() {
@@ -228,6 +254,64 @@ function buildCaseFilters(query) {
 }
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
+
+// Auth helpers
+async function seedDemoUser() {
+  try {
+    const existing = await usersCol.findOne({ username: "adidafku" });
+    if (!existing) {
+      const hashed = await bcrypt.hash("adixhamiadurres", 10);
+      await usersCol.insertOne({ username: "adidafku", password: hashed, role: "admin", createdAt: new Date().toISOString() });
+      console.log("Seeded demo user 'adidafku'.");
+    }
+  } catch (err) {
+    console.error("Failed to seed demo user:", err);
+  }
+}
+
+function createAuthCookie(res, token) {
+  const secure = process.env.NODE_ENV === "production";
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+}
+
+app.post("/api/logout", (req, res) => {
+  res.clearCookie("token");
+  res.json({ ok: true });
+});
+
+app.get("/api/me", (req, res) => {
+  try {
+    const token = req.cookies?.token;
+    if (!token) return res.json({ authenticated: false });
+    const payload = jwt.verify(token, JWT_SECRET);
+    return res.json({ authenticated: true, user: payload });
+  } catch (err) {
+    return res.json({ authenticated: false });
+  }
+});
+
+// Login using users collection and bcrypt, issue httpOnly JWT cookie
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) return res.status(400).json({ success: false, message: "Missing credentials" });
+    const user = await usersCol.findOne({ username });
+    if (!user) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
+    createAuthCookie(res, token);
+    return res.json({ success: true, username: user.username });
+  } catch (err) {
+    console.error("/api/login error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 // Customers
 app.get("/api/customers", async (req, res) => {
@@ -495,6 +579,7 @@ app.get("/api/kpis", async (req, res) => {
 (async () => {
   await connectDb();
   await seedIfEmpty();
+  await seedDemoUser();
   // periodic cleanup for stale cases
   setInterval(() => {
     cleanupStaleCases().catch((err) => console.error("cleanup failed", err));

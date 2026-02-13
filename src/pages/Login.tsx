@@ -1,5 +1,7 @@
 
 import React, { useState } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { useNavigate } from 'react-router-dom';
 
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
@@ -7,6 +9,8 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,13 +20,16 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem('auth', 'true');
+        login();
         setError('');
-        onLogin();
+        // call optional onLogin prop or navigate to root
+        if (onLogin) onLogin();
+        else navigate('/');
       } else {
         setError('Invalid credentials');
       }

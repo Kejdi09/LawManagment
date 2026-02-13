@@ -12,7 +12,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    setIsAuthenticated(localStorage.getItem('auth') === 'true');
+    // Check server session on mount
+    (async () => {
+      try {
+        const res = await fetch('/api/me', { credentials: 'include' });
+        const data = await res.json();
+        if (data?.authenticated) {
+          setIsAuthenticated(true);
+          localStorage.setItem('auth', 'true');
+        } else {
+          setIsAuthenticated(false);
+          localStorage.removeItem('auth');
+        }
+      } catch (err) {
+        setIsAuthenticated(false);
+        localStorage.removeItem('auth');
+      }
+    })();
   }, []);
 
   const login = () => {
@@ -21,6 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // Call server to clear cookie
+    fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
     setIsAuthenticated(false);
     localStorage.removeItem('auth');
   };
