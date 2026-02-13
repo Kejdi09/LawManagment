@@ -25,6 +25,7 @@ let customersCol;
 let casesCol;
 let historyCol;
 let customerHistoryCol;
+let customerNotificationsCol;
 let notesCol;
 let tasksCol;
 
@@ -36,6 +37,7 @@ async function connectDb() {
   casesCol = db.collection("cases");
   historyCol = db.collection("history");
   customerHistoryCol = db.collection("customerHistory");
+  customerNotificationsCol = db.collection("customerNotifications");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
 }
@@ -70,6 +72,116 @@ const pad3 = (n) => String(n).padStart(3, "0");
 const escapeRegex = (str = "") => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const STUCK_STATES = ["WAITING_RESPONSE_P", "WAITING_RESPONSE_C", "WAITING_APPROVAL", "WAITING_ACCEPTANCE", "SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE", "SEND_DOCUMENTS"];
 const MAX_STALE_HOURS = 120;
+const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
+const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
+const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
+
+function getLastStatusChangeAt(customer) {
+  if (Array.isArray(customer.statusHistory) && customer.statusHistory.length > 0) {
+    const last = customer.statusHistory[customer.statusHistory.length - 1];
+    if (last?.date) return new Date(last.date).toISOString();
+  }
+  return new Date(customer.registeredAt || Date.now()).toISOString();
+}
+
+function hoursBetween(fromIso, toMs) {
+  const fromMs = new Date(fromIso).getTime();
+  if (!Number.isFinite(fromMs)) return 0;
+  return (toMs - fromMs) / (1000 * 60 * 60);
+}
+
+async function insertCustomerNotification({ customerId, message, kind, severity }) {
+  const notificationId = `CN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const payload = {
+    notificationId,
+    customerId,
+    message,
+    kind,
+    severity,
+    createdAt: new Date().toISOString(),
+  };
+  await customerNotificationsCol.insertOne(payload);
+}
+
+async function syncCustomerNotifications() {
+  const nowMs = Date.now();
+  const customers = await customersCol.find({}).toArray();
+
+  for (const customer of customers) {
+    const status = customer.status;
+    const lastStatusChangeAt = getLastStatusChangeAt(customer);
+    const prevTracker = customer.notificationTracker || {};
+    const statusChanged = prevTracker.status !== status || prevTracker.lastStatusChangeAt !== lastStatusChangeAt;
+
+    const tracker = statusChanged
+      ? {
+        status,
+        lastStatusChangeAt,
+        followupCount: 0,
+        lastFollowupAt: null,
+        lastRespondAt: null,
+        followupSuppressed: false,
+      }
+      : {
+        status,
+        lastStatusChangeAt,
+        followupCount: Number(prevTracker.followupCount || 0),
+        lastFollowupAt: prevTracker.lastFollowupAt || null,
+        lastRespondAt: prevTracker.lastRespondAt || null,
+        followupSuppressed: Boolean(prevTracker.followupSuppressed),
+      };
+
+    if (statusChanged) {
+      await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
+    }
+
+    const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
+
+    if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
+      const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
+      const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
+
+      if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
+        if (tracker.followupCount >= 3) {
+          tracker.followupSuppressed = true;
+          await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+        } else {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Follow up ${customer.name}`,
+            kind: "follow",
+            severity: followupInterval === 72 ? "critical" : "warn",
+          });
+          tracker.followupCount += 1;
+          tracker.lastFollowupAt = new Date(nowMs).toISOString();
+          if (tracker.followupCount >= 3) {
+            tracker.followupSuppressed = true;
+            await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+          }
+        }
+      }
+    }
+
+    if (RESPOND_24H_STATUSES.includes(status)) {
+      const respondInterval = 24;
+      const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
+      if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
+        await insertCustomerNotification({
+          customerId: customer.customerId,
+          message: `Respond to ${customer.name}`,
+          kind: "respond",
+          severity: "warn",
+        });
+        tracker.lastRespondAt = new Date(nowMs).toISOString();
+      }
+    }
+
+    await customersCol.updateOne(
+      { customerId: customer.customerId },
+      { $set: { notificationTracker: tracker } }
+    );
+  }
+}
 async function genCustomerId() {
   const last = await customersCol
     .find({})
@@ -103,6 +215,12 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 // Customers
 app.get("/api/customers", async (req, res) => {
   const docs = await customersCol.find({}).sort({ customerId: 1 }).toArray();
+  res.json(docs);
+});
+
+app.get("/api/customers/notifications", async (req, res) => {
+  await syncCustomerNotifications();
+  const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(50).toArray();
   res.json(docs);
 });
 
@@ -146,9 +264,10 @@ app.put("/api/customers/:id", async (req, res) => {
     });
   }
 
-  const result = await customersCol.findOneAndUpdate({ customerId: id }, { $set: update }, { returnDocument: "after" });
-  if (!result.value) return res.status(404).json({ error: "Not found" });
-  res.json(result.value);
+  await customersCol.updateOne({ customerId: id }, { $set: update });
+  const updated = await customersCol.findOne({ customerId: id });
+  if (!updated) return res.status(404).json({ error: "Not found" });
+  res.json(updated);
 });
 
 app.delete("/api/customers/:id", async (req, res) => {

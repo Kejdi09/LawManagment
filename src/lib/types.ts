@@ -140,10 +140,10 @@ export const STATE_LABELS: Record<CaseState, string> = {
 export type CaseStage = "INTAKE" | "ACTIONABLE" | "AWAITING" | "CLOSED";
 
 export const STAGE_LABELS: Record<CaseStage, string> = {
-  INTAKE: "Intake",
-  ACTIONABLE: "Actionable",
-  AWAITING: "Awaiting",
-  CLOSED: "Closed",
+  INTAKE: "New",
+  ACTIONABLE: "In Progress",
+  AWAITING: "Waiting Authorities",
+  CLOSED: "Finalized",
 };
 
 export const ALL_STAGES: CaseStage[] = ["INTAKE", "ACTIONABLE", "AWAITING", "CLOSED"];
@@ -167,3 +167,12 @@ export const ALL_STATES: CaseState[] = [
 ];
 
 export const LAWYERS = ["Dr. Weber", "Mag. Fischer", "Dr. Klein", "Mag. Berger"];
+
+export interface CustomerNotification {
+  notificationId: string;
+  customerId: string;
+  message: string;
+  kind: "follow" | "respond";
+  severity: "warn" | "critical";
+  createdAt: string;
+}

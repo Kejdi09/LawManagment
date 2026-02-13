@@ -4,7 +4,7 @@ import {
   getTasksByCaseId, changeState, addNote, addTask, toggleTask, updateCase, deleteCase,
 } from "@/lib/case-store";
 import {
-  ALLOWED_TRANSITIONS, STATE_LABELS, CaseState, PRIORITY_CONFIG, ALL_STATES, Priority,
+  ALLOWED_TRANSITIONS, STAGE_LABELS, CaseStage, CaseState, PRIORITY_CONFIG, Priority,
   Case, Customer, HistoryRecord, Note, CaseTask, LAWYERS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +51,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [editForm, setEditForm] = useState({
     category: "",
     subcategory: "",
-    state: "INTAKE" as any,
+    state: "INTAKE" as CaseStage,
     documentState: "ok" as "ok" | "missing",
     communicationMethod: "",
     generalNote: "",
@@ -60,6 +60,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     assignedTo: "",
   });
   const { toast } = useToast();
+  const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
   const loadCaseData = useCallback(async (id: string) => {
     try {
       const data = await getCaseById(id);
@@ -89,8 +90,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         assignedTo: data.assignedTo,
       });
       previousCaseIdRef.current = id;
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed to load case", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed to load case"), variant: "destructive" });
     }
   }, [toast, editMode]);
 
@@ -117,11 +118,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const handleChangeState = async (newState: CaseState) => {
     try {
       await changeState(caseId, newState);
-      toast({ title: "State Changed", description: `→ ${STATE_LABELS[newState]}` });
+      toast({ title: "State Changed", description: `→ ${STAGE_LABELS[mapCaseStateToStage(newState)]}` });
       onStateChanged();
       await loadCaseData(caseId);
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
     }
   };
 
@@ -139,8 +140,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setNoteText("");
       await addNote(caseId, noteText.trim());
       await loadCaseData(caseId);
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       await loadCaseData(caseId);
     } finally {
       setIsLoading(false);
@@ -156,14 +157,15 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         caseId,
         title: taskTitle.trim(),
         done: false,
+        createdAt: new Date().toISOString(),
         dueDate: null,
       };
       setCaseTasks([...caseTasks, optimisticTask]);
       setTaskTitle("");
       await addTask(caseId, taskTitle.trim(), null);
       await loadCaseData(caseId);
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       await loadCaseData(caseId);
     } finally {
       setIsLoading(false);
@@ -180,8 +182,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       // Light refresh - only get tasks instead of full reload
       const updatedTasks = await getTasksByCaseId(caseId);
       setCaseTasks(updatedTasks);
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       // Reload to restore correct state on error
       const tasks = await getTasksByCaseId(caseId);
       setCaseTasks(tasks);
@@ -212,18 +214,19 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setEditMode(false);
 
       // Send update to backend
-      await updateCase(targetId, {
+      const updatePayload: Partial<Case> = {
         ...editForm,
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
-      } as any);
+      };
+      await updateCase(targetId, updatePayload);
       
       onStateChanged();
       // Minimal reload to ensure consistency
       await loadCaseData(targetId);
       toast({ title: "Case updated", description: "Changes saved successfully" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
       // Reload on error to restore correct state
       await loadCaseData(c.caseId);
     } finally {
@@ -238,8 +241,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       await deleteCase(caseId);
       onStateChanged();
       onClose();
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
     }
   };
 
@@ -247,11 +250,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     if (!caseId || !caseData) return;
     try {
       setIsLoading(true);
-      await updateCase(caseId, { readyForWork: !caseData.readyForWork } as any);
+      await updateCase(caseId, { readyForWork: !caseData.readyForWork });
       await loadCaseData(caseId);
       toast({ title: caseData.readyForWork ? "Marked not ready" : "Marked ready" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed to update", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getErrorMessage(err, "Failed to update"), variant: "destructive" });
       await loadCaseData(caseId);
     } finally {
       setIsLoading(false);
@@ -305,7 +308,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                 <CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" /> Case Info</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">State</span><Badge>{STATE_LABELS[c.state]}</Badge></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">State</span><Badge>{STAGE_LABELS[mapCaseStateToStage(c.state)]}</Badge></div>
                 {!editMode && (
                   <>
                     <div className="flex justify-between"><span className="text-muted-foreground">Documents</span><Badge variant={c.documentState === "ok" ? "default" : "destructive"}>{c.documentState}</Badge></div>
@@ -408,7 +411,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 {allowedNext.map((ns) => (
-                  <Button key={ns} size="sm" onClick={() => handleChangeState(ns)}>→ {STATE_LABELS[ns]}</Button>
+                  <Button key={ns} size="sm" onClick={() => handleChangeState(ns)}>→ {STAGE_LABELS[mapCaseStateToStage(ns)]}</Button>
                 ))}
               </CardContent>
             </Card>
@@ -460,8 +463,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     <TableBody>
                       {caseHistory.map((h) => (
                         <TableRow key={h.historyId}>
-                          <TableCell><Badge variant="outline" className="text-xs">{STATE_LABELS[h.stateFrom]}</Badge></TableCell>
-                          <TableCell><Badge className="text-xs">{STATE_LABELS[h.stateIn]}</Badge></TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{STAGE_LABELS[mapCaseStateToStage(h.stateFrom)]}</Badge></TableCell>
+                          <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(h.stateIn)]}</Badge></TableCell>
                           <TableCell className="text-xs text-muted-foreground">{format(new Date(h.date), "MMM d, HH:mm")}</TableCell>
                         </TableRow>
                       ))}

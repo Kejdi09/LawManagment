@@ -9,17 +9,19 @@ import {
   deleteCustomer,
 } from "@/lib/case-store";
 import {
-  STATE_LABELS,
+  STAGE_LABELS,
   PRIORITY_CONFIG,
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
   Customer,
   Case,
+  CustomerNotification,
   ContactChannel,
   LeadStatus,
   ServiceType,
 } from "@/lib/types";
+import { mapCaseStateToStage } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,11 +38,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
+import { getCustomerNotifications } from "@/lib/case-store";
 
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat = "PP") {
@@ -81,6 +84,7 @@ const Customers = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
+  const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
 
@@ -93,6 +97,11 @@ const Customers = () => {
       return acc;
     }, {});
     setCaseCounts(counts);
+  }, []);
+
+  const loadCustomerNotifications = useCallback(async () => {
+    const notifications = await getCustomerNotifications();
+    setCustomerAlerts(notifications);
   }, []);
 
   const loadCustomerDetail = useCallback(async (id: string | null) => {
@@ -109,6 +118,7 @@ const Customers = () => {
   }, []);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
+  useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
 
   const filteredCustomers = useMemo(() => {
@@ -196,8 +206,24 @@ const Customers = () => {
           prevHistory.push({ status: rest.status, date: new Date().toISOString() });
           patched.statusHistory = prevHistory;
         }
+        // Optimistic UI update so changes appear instantly
+        const optimistic = {
+          ...(original as Customer),
+          ...(patched as Partial<Customer>),
+          customerId: editingId,
+        } as Customer;
+        setCustomers((prev) => prev.map((c) => (c.customerId === editingId ? optimistic : c)));
+        if (selectedCustomer?.customerId === editingId) {
+          setSelectedCustomer(optimistic);
+        }
+        setShowForm(false);
+        resetForm();
         await updateCustomer(editingId.trim(), patched as Omit<Customer, "customerId">);
+        await loadCustomerNotifications();
         toast({ title: "Updated", description: "Customer updated successfully" });
+        await loadCustomers();
+        if (selectedId) await loadCustomerDetail(selectedId);
+        return;
       } else {
         // New customer: initialize statusHistory
         const toCreate: any = { ...rest };
@@ -209,9 +235,12 @@ const Customers = () => {
       setSelectedId(null);
       resetForm();
       await loadCustomers();
+      await loadCustomerNotifications();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unable to save customer";
       toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
+      await loadCustomers();
+      if (selectedId) await loadCustomerDetail(selectedId);
     }
   };
 
@@ -237,6 +266,31 @@ const Customers = () => {
             <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
           </Button>
           <h1 className="text-lg font-semibold tracking-tight">Customers</h1>
+          <div className="ml-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative">
+                  <Bell className="h-4 w-4" />
+                  {customerAlerts.length > 0 && (
+                    <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
+                      {customerAlerts.length}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
+                {customerAlerts.map((a) => (
+                  <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
+                    <div className="flex flex-col">
+                      <span>{a.message}</span>
+                      <span className="text-xs text-muted-foreground">{a.customerId}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
@@ -509,7 +563,7 @@ const Customers = () => {
                                 <TableRow key={sc.caseId} className="cursor-pointer" onClick={() => setSelectedCaseId(sc.caseId)}>
                                   <TableCell className="font-mono text-xs">{sc.caseId}</TableCell>
                                   <TableCell className="text-sm">{sc.category} / {sc.subcategory}</TableCell>
-                                  <TableCell><Badge className="text-xs">{STATE_LABELS[sc.state]}</Badge></TableCell>
+                                  <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(sc.state)]}</Badge></TableCell>
                                   <TableCell>
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span>
                                   </TableCell>

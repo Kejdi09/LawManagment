@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { isPast, differenceInHours, format } from "date-fns";
 
-import { CaseStage, Case, CaseTask } from "./types";
+import { CaseStage, Case, CaseTask, CaseState } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -61,7 +61,7 @@ export function mapCaseStateToStage(state: string): CaseStage {
 }
 
 // Map a UI stage selection back to a representative legacy CaseState
-export function mapStageToState(stage: CaseStage): string {
+export function mapStageToState(stage: CaseStage): CaseState {
   switch (stage) {
     case "INTAKE":
       return "INTAKE";

@@ -1,4 +1,4 @@
-import { Case, CaseState, CaseTask, Customer, HistoryRecord, Note } from "./types";
+import { Case, CaseState, CaseTask, Customer, CustomerNotification, HistoryRecord, Note } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -83,6 +83,10 @@ export async function updateCustomer(customerId: string, patch: Partial<Customer
 
 export async function deleteCustomer(customerId: string): Promise<void> {
   await api(`/api/customers/${customerId}`, { method: "DELETE" });
+}
+
+export async function getCustomerNotifications(): Promise<CustomerNotification[]> {
+  return api<CustomerNotification[]>("/api/customers/notifications");
 }
 
 // ── History ──

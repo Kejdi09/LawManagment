@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
-import { ALL_STATES, ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
+import { ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -29,7 +29,7 @@ const Index = () => {
     customerId: "",
     category: "",
     subcategory: "",
-    state: "INTAKE" as (typeof ALL_STATES)[number],
+    state: "INTAKE" as CaseStage,
     documentState: "ok" as "ok" | "missing",
     communicationMethod: "Email",
     generalNote: "",
