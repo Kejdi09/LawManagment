@@ -59,8 +59,14 @@ function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat 
   }
 }
 
+const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
+const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
+
+function getCustomerCategory(customerType: string) {
+  return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
+}
+
 const Customers = () => {
-  const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -88,6 +94,8 @@ const Customers = () => {
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
 
@@ -143,16 +151,30 @@ const Customers = () => {
     });
   }, [customers, search]);
 
+  const categoryFilteredCustomers = useMemo(() => {
+    return filteredCustomers.filter((customer) => selectedCategories.includes(getCustomerCategory(customer.customerType)));
+  }, [filteredCustomers, selectedCategories]);
+
   const groupedCustomers = useMemo(() => {
-    const order = ["Individual", "Family", "Company"];
+    const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: filteredCustomers.filter((customer) => customer.customerType === type),
+      items: categoryFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
-    const others = filteredCustomers.filter((customer) => !order.includes(customer.customerType));
-    if (others.length > 0) buckets.push({ type: "Other", items: others });
-    return buckets;
-  }, [filteredCustomers]);
+    return buckets.filter((bucket) => bucket.items.length > 0);
+  }, [categoryFilteredCustomers]);
+
+  const toggleCategoryFilter = (category: string) => {
+    setSelectedCategories((prev) => (
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+    ));
+  };
+
+  const toggleCategoryOpen = (category: string) => {
+    setCollapsedCategories((prev) => (
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+    ));
+  };
 
   const statusAccent: Record<string, string> = {
     INTAKE: "bg-slate-100 text-slate-800",
@@ -330,6 +352,47 @@ const Customers = () => {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                Categories ({selectedCategories.length})
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {CATEGORY_OPTIONS.map((category) => {
+                const checked = selectedCategories.includes(category);
+                return (
+                  <DropdownMenuItem
+                    key={category}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      toggleCategoryFilter(category);
+                    }}
+                    className="gap-2"
+                  >
+                    <Checkbox checked={checked} />
+                    <span>{category}</span>
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setSelectedCategories([...CATEGORY_OPTIONS]);
+                }}
+              >
+                Select all
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setSelectedCategories([]);
+                }}
+              >
+                Clear all
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
           </Button>
@@ -353,13 +416,27 @@ const Customers = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {groupedCustomers.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
+                      No customers match the selected categories/search.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {groupedCustomers.flatMap((group) => ([
                   <TableRow key={`group-${group.type}-header`} className="bg-muted/30">
                     <TableCell colSpan={10} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {group.type} ({group.items.length})
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1"
+                        onClick={() => toggleCategoryOpen(group.type)}
+                      >
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${collapsedCategories.includes(group.type) ? "-rotate-90" : "rotate-0"}`} />
+                        {group.type} ({group.items.length})
+                      </button>
                     </TableCell>
                   </TableRow>,
-                  ...group.items.map((c) => {
+                  ...(collapsedCategories.includes(group.type) ? [] : group.items.map((c) => {
                     const caseCount = caseCounts[c.customerId] || 0;
                     const servicesLabel = c.services.map((s) => SERVICE_LABELS[s]);
                     return (
@@ -408,7 +485,7 @@ const Customers = () => {
                         </TableCell>
                       </TableRow>
                     );
-                  })
+                  }))
                 ]))}
               </TableBody>
             </Table>
