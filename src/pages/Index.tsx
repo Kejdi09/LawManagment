@@ -45,7 +45,7 @@ const Index = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [alerts, setAlerts] = useState<
-    { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }
+    { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[]
   >([]);
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [alertHintShown, setAlertHintShown] = useState(false);
@@ -60,7 +60,7 @@ const Index = () => {
     const alertsComputed = all.flatMap((c) => {
       const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
       const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
-      const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
+      const items: { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
       // Map legacy state to logical stage for alerting
       const stage = mapCaseStateToStage(c.state);
       const isWaiting = stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
@@ -99,7 +99,7 @@ const Index = () => {
 
     // Add customer status notifications
     const customerAlerts = customers.flatMap((customer) => {
-      const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
+      const items: { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
       
       if (!customer.statusHistory || customer.statusHistory.length === 0) return items;
       
