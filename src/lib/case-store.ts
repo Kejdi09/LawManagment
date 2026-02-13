@@ -89,6 +89,10 @@ export async function addHistory(caseId: string, stateFrom: CaseState, stateIn: 
   });
 }
 
+export async function getCustomerHistory(customerId: string): Promise<any[]> {
+  return api<any[]>(`/api/customers/${customerId}/history`);
+}
+
 // ── Notes ──
 export async function getNotesByCaseId(caseId: string): Promise<Note[]> {
   return api<Note[]>(`/api/cases/${caseId}/notes`);

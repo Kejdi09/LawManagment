@@ -27,7 +27,6 @@ export interface Customer {
   customerId: string;
   name: string;
   country: string;
-  nationality: string;
   customerType: string;
   contact: string;
   phone: string;
@@ -38,6 +37,7 @@ export interface Customer {
   serviceDescription: string;
   contactChannel: ContactChannel;
   status: LeadStatus;
+  statusHistory?: Array<{ status: LeadStatus; date: string }>;
   notes?: string;
 }
 

@@ -14,6 +14,11 @@ import {
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
+  Customer,
+  Case,
+  ContactChannel,
+  LeadStatus,
+  ServiceType,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +43,7 @@ import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
 
 // Reusable safe date formatter
-function safeFormatDate(dateValue: any, dateFormat = "PP") {
+function safeFormatDate(dateValue: string | Date | null | undefined, dateFormat = "PP") {
   if (!dateValue) return "N/A";
   const date = new Date(dateValue);
   if (isNaN(date.getTime())) return "N/A";
@@ -61,7 +66,6 @@ const Customers = () => {
     name: "",
     customerType: "Individual",
     country: "",
-    nationality: "",
     contact: "",
     phone: "",
     email: "",
@@ -74,9 +78,9 @@ const Customers = () => {
     notes: "",
   });
 
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [selectedCases, setSelectedCases] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
 
@@ -115,7 +119,6 @@ const Customers = () => {
       return (
         c.name.toLowerCase().includes(q) ||
         c.country.toLowerCase().includes(q) ||
-        c.nationality.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.contact.toLowerCase().includes(q) ||
         serviceMatch
@@ -142,7 +145,6 @@ const Customers = () => {
       name: "",
       customerType: "Individual",
       country: "",
-      nationality: "",
       contact: "",
       phone: "",
       email: "",
@@ -184,29 +186,35 @@ const Customers = () => {
         serviceDescription: form.serviceDescription || "",
         notes: form.notes ?? "",
       };
-      const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as any;
+      const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as Record<string, unknown>;
       if (editingId) {
-        await updateCustomer(editingId.trim(), rest);
+        await updateCustomer(editingId.trim(), rest as Omit<Customer, "customerId">);
+        toast({ title: "Updated", description: "Customer updated successfully" });
       } else {
-        await createCustomer(rest as any);
+        await createCustomer(rest as Omit<Customer, "customerId">);
+        toast({ title: "Created", description: "Customer created successfully" });
       }
       setShowForm(false);
       setSelectedId(null);
-      setTick((t) => t + 1);
-      loadCustomers();
-      toast({ title: "Saved" });
-    } catch (err: any) {
-      toast({ title: "Save failed", description: err?.message ?? "Unable to save customer", variant: "destructive" });
+      resetForm();
+      await loadCustomers();
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Unable to save customer";
+      toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
     }
   };
 
   const handleDelete = (customerId: string) => {
     const confirmed = window.confirm("Delete this customer and related cases?");
     if (!confirmed) return;
-    deleteCustomer(customerId).then(() => {
+    deleteCustomer(customerId).then(async () => {
       if (selectedId === customerId) setSelectedId(null);
+      toast({ title: "Deleted successfully" });
+      await loadCustomers();
       setTick((t) => t + 1);
-      loadCustomers();
+    }).catch((err: unknown) => {
+      const errorMessage = err instanceof Error ? err.message : "Unable to delete customer";
+      toast({ title: "Delete failed", description: errorMessage, variant: "destructive" });
     });
   };
 
@@ -240,7 +248,6 @@ const Customers = () => {
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Registration</TableHead>
-                  <TableHead>Nationality</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Services</TableHead>
@@ -259,7 +266,6 @@ const Customers = () => {
                       <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{c.nationality}</TableCell>
                       <TableCell className="text-sm">{c.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
                       <TableCell>
@@ -336,10 +342,6 @@ const Customers = () => {
               <Input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Nationality</Label>
-              <Input value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} />
-            </div>
-            <div className="space-y-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
@@ -353,7 +355,7 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Contact Channel</Label>
-              <Select value={form.contactChannel} onValueChange={(v) => setForm({ ...form, contactChannel: v as any })}>
+              <Select value={form.contactChannel} onValueChange={(v) => setForm({ ...form, contactChannel: v as ContactChannel })}>
                 <SelectTrigger><SelectValue placeholder="Channel" /></SelectTrigger>
                 <SelectContent>
                   {channelEntries.map(([key, label]) => (
@@ -364,7 +366,7 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as any })}>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as LeadStatus })}>
                 <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   {statusEntries.map(([key, label]) => (
@@ -377,7 +379,7 @@ const Customers = () => {
               <Label>Services</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {serviceEntries.map(([key, label]) => {
-                  const checked = form.services.includes(key as any);
+                  const checked = form.services.includes(key as ServiceType);
                   return (
                     <label key={key} className="flex items-center gap-2 text-sm">
                       <Checkbox
@@ -387,7 +389,7 @@ const Customers = () => {
                           setForm({
                             ...form,
                             services: on
-                              ? [...form.services, key as any]
+                              ? [...form.services, key as ServiceType]
                               : form.services.filter((s) => s !== key),
                           });
                         }}
@@ -432,7 +434,6 @@ const Customers = () => {
                         <div className="flex items-center gap-2"><Phone className="h-3 w-3 text-muted-foreground" />{selectedCustomer.phone}</div>
                         <div className="flex items-center gap-2"><Mail className="h-3 w-3 text-muted-foreground" />{selectedCustomer.email}</div>
                         <div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-muted-foreground" />{selectedCustomer.address}</div>
-                        <div className="flex items-center gap-2"><Badge variant="outline" className="text-xs">{selectedCustomer.nationality}</Badge></div>
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[selectedCustomer.status]}`}>
                             {LEAD_STATUS_LABELS[selectedCustomer.status]}
@@ -459,6 +460,24 @@ const Customers = () => {
                         )}
                       </CardContent>
                     </Card>
+
+                    {selectedCustomer.statusHistory && selectedCustomer.statusHistory.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2"><CardTitle className="text-sm">Status History</CardTitle></CardHeader>
+                        <CardContent className="text-sm">
+                          <div className="space-y-2">
+                            {[...selectedCustomer.statusHistory].reverse().map((record: { status: LeadStatus; date: string }, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[record.status]}`}>
+                                  {LEAD_STATUS_LABELS[record.status]}
+                                </span>
+                                <span className="text-muted-foreground">{safeFormatDate(record.date)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <Card>
                       <CardHeader className="pb-2"><CardTitle className="text-sm">Cases ({selectedCases.length})</CardTitle></CardHeader>

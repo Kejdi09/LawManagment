@@ -43,7 +43,7 @@ const Index = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [alerts, setAlerts] = useState<
-    { id: string; customerId: string; kind: "follow" | "respond"; severity: "warn" | "critical" }
+    { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }
   >([]);
   const [alertHintShown, setAlertHintShown] = useState(false);
   const { toast } = useToast();
@@ -58,7 +58,7 @@ const Index = () => {
     const alertsComputed = all.flatMap((c) => {
       const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
       const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
-      const items: { id: string; customerId: string; kind: "follow" | "respond"; severity: "warn" | "critical" }[] = [];
+      const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
 
       const isWaiting = waitingStates.includes(c.state);
       if (isWaiting && hours >= 48 && hours < 72) {
@@ -76,9 +76,57 @@ const Index = () => {
         items.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, kind: "respond", severity: "warn" });
       }
 
+      // Deadline notifications
+      if (c.deadline) {
+        const deadlineTime = new Date(c.deadline).getTime();
+        const hoursUntilDeadline = (deadlineTime - now) / (1000 * 60 * 60);
+        
+        // Case is overdue
+        if (deadlineTime < now) {
+          items.push({ id: `${c.caseId}-overdue`, customerId: c.customerId, kind: "deadline", severity: "critical" });
+        }
+        // Deadline within 48 hours
+        else if (hoursUntilDeadline <= 48) {
+          items.push({ id: `${c.caseId}-deadline-48`, customerId: c.customerId, kind: "deadline", severity: "warn" });
+        }
+      }
+
       return items;
     });
-    setAlerts(alertsComputed);
+
+    // Add customer status notifications
+    const customerAlerts = customers.flatMap((customer) => {
+      const items: { id: string; customerId: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
+      
+      if (!customer.statusHistory || customer.statusHistory.length === 0) return items;
+      
+      const lastStatusChange = new Date(customer.statusHistory[customer.statusHistory.length - 1].date).getTime();
+      const hoursSinceChange = (now - lastStatusChange) / (1000 * 60 * 60);
+      
+      const waitingStatuses = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
+      const sendStatuses = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
+      const respondStatuses = ["SEND_RESPONSE"];
+      
+      if (waitingStatuses.includes(customer.status)) {
+        if (hoursSinceChange >= 48 && hoursSinceChange < 72) {
+          items.push({ id: `${customer.customerId}-cust-wait-48`, customerId: customer.customerId, kind: "follow", severity: "warn" });
+        }
+        if (hoursSinceChange >= 72 && hoursSinceChange < 96) {
+          items.push({ id: `${customer.customerId}-cust-wait-72`, customerId: customer.customerId, kind: "follow", severity: "critical" });
+        }
+        if (hoursSinceChange >= 96 && hoursSinceChange < 120) {
+          items.push({ id: `${customer.customerId}-cust-wait-96`, customerId: customer.customerId, kind: "follow", severity: "critical" });
+        }
+      }
+      
+      if (respondStatuses.includes(customer.status) && hoursSinceChange >= 24) {
+        items.push({ id: `${customer.customerId}-cust-respond`, customerId: customer.customerId, kind: "respond", severity: "warn" });
+      }
+      
+      return items;
+    });
+
+    setAlerts([...alertsComputed, ...customerAlerts]);
 
     const filtered = base.filter((c) => {
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
@@ -86,7 +134,7 @@ const Index = () => {
       return true;
     });
     setCaseList(filtered);
-  }, [query, priorityFilter, docFilter]);
+  }, [query, priorityFilter, docFilter, customers]);
 
   useEffect(() => {
     (async () => {
@@ -145,14 +193,22 @@ const Index = () => {
   };
 
   const handleCreateCase = async () => {
-    if (!caseForm.customerId || !caseForm.category) return;
-    await createCase({
-      ...caseForm,
-      deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
-    } as any);
-    setShowCaseForm(false);
-    setTick((t) => t + 1);
-    await loadCases();
+    if (!caseForm.customerId || !caseForm.category) {
+      toast({ title: "Validation", description: "Customer and Category are required", variant: "destructive" });
+      return;
+    }
+    try {
+      await createCase({
+        ...caseForm,
+        deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
+      } as any);
+      setShowCaseForm(false);
+      toast({ title: "Case created successfully" });
+      setTick((t) => t + 1);
+      await loadCases();
+    } catch (err: any) {
+      toast({ title: "Create failed", description: err?.message ?? "Unable to create case", variant: "destructive" });
+    }
   };
 
   return (
@@ -180,7 +236,9 @@ const Index = () => {
                 {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
                 {alerts.map((a) => {
                   const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
-                  const verb = a.kind === "respond" ? "Respond to" : "Follow up";
+                  let verb = "Follow up";
+                  if (a.kind === "respond") verb = "Respond to";
+                  else if (a.kind === "deadline") verb = "Deadline";
                   return (
                     <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
                       {verb} {name}

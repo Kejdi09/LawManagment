@@ -24,6 +24,7 @@ let db;
 let customersCol;
 let casesCol;
 let historyCol;
+let customerHistoryCol;
 let notesCol;
 let tasksCol;
 
@@ -34,6 +35,7 @@ async function connectDb() {
   customersCol = db.collection("customers");
   casesCol = db.collection("cases");
   historyCol = db.collection("history");
+  customerHistoryCol = db.collection("customerHistory");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
 }
@@ -120,6 +122,30 @@ app.post("/api/customers", async (req, res) => {
 app.put("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+
+  // Check if status is changing
+  const current = await customersCol.findOne({ customerId: id });
+  if (current && current.status !== update.status) {
+    // Create status history entry
+    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    await customerHistoryCol.insertOne({
+      historyId,
+      customerId: id,
+      statusFrom: current.status,
+      statusTo: update.status,
+      date: new Date().toISOString()
+    });
+
+    // Initialize or update statusHistory array
+    if (!update.statusHistory) {
+      update.statusHistory = (current.statusHistory || []);
+    }
+    update.statusHistory.push({
+      status: update.status,
+      date: new Date().toISOString()
+    });
+  }
+
   const result = await customersCol.findOneAndUpdate({ customerId: id }, { $set: update }, { returnDocument: "after" });
   if (!result.value) return res.status(404).json({ error: "Not found" });
   res.json(result.value);
@@ -134,6 +160,7 @@ app.delete("/api/customers/:id", async (req, res) => {
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    customerHistoryCol.deleteMany({ customerId: id }),
     customersCol.deleteOne({ customerId: id }),
   ]);
   res.json({ ok: true });
@@ -142,6 +169,20 @@ app.delete("/api/customers/:id", async (req, res) => {
 app.get("/api/customers/:id/cases", async (req, res) => {
   const docs = await casesCol.find({ customerId: req.params.id }).toArray();
   res.json(docs);
+});
+
+app.get("/api/customers/:id/history", async (req, res) => {
+  const docs = await customerHistoryCol.find({ customerId: req.params.id }).sort({ date: 1 }).toArray();
+  res.json(docs);
+});
+
+app.post("/api/customers/:id/history", async (req, res) => {
+  const { id } = req.params;
+  const { statusFrom, statusTo } = req.body;
+  const historyId = `CH${pad3(Date.now() % 1000)}`;
+  const record = { historyId, customerId: id, statusFrom, statusTo, date: new Date().toISOString() };
+  await customerHistoryCol.insertOne(record);
+  res.status(201).json(record);
 });
 
 // Cases
