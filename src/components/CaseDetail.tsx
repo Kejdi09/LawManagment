@@ -120,6 +120,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const deadlineNotif = getDeadlineNotification(c.deadline, c.caseId);
 
   const handleChangeState = async (newStage: CaseStage) => {
+    const currentStage = mapCaseStateToStage(c.state);
+    if (newStage === "NEW" && currentStage !== "NEW") {
+      toast({ title: "Invalid transition", description: "Case cannot go back to New after it has progressed.", variant: "destructive" });
+      return;
+    }
     const currentState = c.state;
     const nextState = mapStageToState(newStage);
     if (currentState === nextState) return;
@@ -221,6 +226,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     try {
       setIsLoading(true);
       const targetId = c.caseId;
+      const currentStage = mapCaseStateToStage(c.state);
+      if (editForm.state === "NEW" && currentStage !== "NEW") {
+        toast({ title: "Invalid transition", description: "Case cannot go back to New after it has progressed.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
       // Optimistically update local state
       const updatedCaseData: Case = {
         ...caseData,
@@ -270,21 +281,6 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     }
   };
 
-  const handleToggleReady = async () => {
-    if (!caseId || !caseData) return;
-    try {
-      setIsLoading(true);
-      await updateCase(caseId, { readyForWork: !caseData.readyForWork });
-      await loadCaseData(caseId);
-      toast({ title: caseData.readyForWork ? "Marked not ready" : "Marked ready" });
-    } catch (err: unknown) {
-      toast({ title: "Error", description: getErrorMessage(err, "Failed to update"), variant: "destructive" });
-      await loadCaseData(caseId);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const doneCount = caseTasks.filter((t) => t.done).length;
 
   return (
@@ -318,9 +314,6 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </>
             )}
             <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteCase} disabled={isLoading}>Delete</Button>
-            <Button variant="outline" size="sm" onClick={handleToggleReady} disabled={isLoading || mapCaseStateToStage(c.state) === "WAITING_AUTHORITIES" || mapCaseStateToStage(c.state) === "WAITING_CUSTOMER"}>
-              {caseData?.readyForWork ? "Unmark Ready" : "Mark Ready"}
-            </Button>
           </div>
         </DialogHeader>
 

@@ -629,7 +629,10 @@ const Customers = () => {
           {selectedCustomer && (
             <>
               <DialogHeader>
-                    <DialogTitle>{selectedCustomer.name}</DialogTitle>
+                  <DialogTitle>{selectedCustomer.name}</DialogTitle>
+                  <DialogDescription>
+                    Registered on {safeFormatDate(selectedCustomer.registeredAt)}
+                  </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                     <Card>
