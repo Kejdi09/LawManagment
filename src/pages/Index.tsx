@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
+import SharedHeader from "@/components/SharedHeader";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -228,11 +229,10 @@ const Index = () => {
   
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="container flex h-14 items-center gap-3">
-          <Scale className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold tracking-tight">Case Management</h1>
-          <div className="ml-auto flex items-center gap-2">
+      <SharedHeader
+        title="Case Management"
+        right={
+          <>
             <DropdownMenu
               onOpenChange={(open) => {
                 if (open) {
@@ -261,7 +261,6 @@ const Index = () => {
                 {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
                 {alerts.map((a) => {
                   const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
-                  // Use explicit message when available, fall back to kind-based label
                   const message = a.message ?? (a.kind === "deadline" ? "Deadline" : a.kind === "respond" ? "Respond" : "Follow up");
                   return (
                     <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
@@ -274,19 +273,10 @@ const Index = () => {
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm" onClick={() => navigate("/customers")}>
-              <Users className="h-4 w-4 mr-1" /> Customers
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/clients")}>
-              Clients
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/archived")}>
-              Archived
-            </Button>
             <Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <main className="container py-6 space-y-6">
         <DashboardKPIs key={tick} />
