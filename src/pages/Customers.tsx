@@ -72,6 +72,7 @@ const Customers = () => {
   const [form, setForm] = useState({
     name: "",
     customerType: "Individual",
+    country: "",
     contact: "",
     phone: "",
     email: "",
@@ -193,6 +194,7 @@ const Customers = () => {
     setForm({
       name: "",
       customerType: "Individual",
+      country: "",
       contact: "",
       phone: "",
       email: "",
@@ -396,6 +398,22 @@ const Customers = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCollapsedCategories([])}
+            disabled={groupedCustomers.length === 0}
+          >
+            Expand All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCollapsedCategories(groupedCustomers.map((g) => g.type))}
+            disabled={groupedCustomers.length === 0}
+          >
+            Collapse All
+          </Button>
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
           </Button>
@@ -521,6 +539,10 @@ const Customers = () => {
             <div className="space-y-2">
               <Label>Phone</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Country</Label>
+              <Input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
