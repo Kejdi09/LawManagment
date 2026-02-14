@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
   getTasksByCaseId, addHistory, addNote, addTask, toggleTask, deleteTask, updateCase, deleteCase,
+  getDocuments, uploadDocument, deleteDocument,
 } from "@/lib/case-store";
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
@@ -43,6 +44,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [caseHistory, setCaseHistory] = useState<HistoryRecord[]>([]);
   const [caseNotes, setCaseNotes] = useState<Note[]>([]);
   const [caseTasks, setCaseTasks] = useState<CaseTask[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [noteText, setNoteText] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [editMode, setEditMode] = useState(false);
@@ -94,11 +97,41 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         deadline: data.deadline ? data.deadline.slice(0, 10) : "",
         assignedTo: data.assignedTo,
       });
+      try {
+        const docs = await getDocuments('case', id);
+        setDocuments(docs);
+      } catch (e) {
+        setDocuments([]);
+      }
       previousCaseIdRef.current = id;
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed to load case"), variant: "destructive" });
     }
   }, [toast, editMode]);
+
+  const handleUploadDocument = async (file?: File) => {
+    if (!file || !caseId) return;
+    try {
+      setIsLoading(true);
+      await uploadDocument('case', caseId, file);
+      const docs = await getDocuments('case', caseId);
+      setDocuments(docs);
+      toast({ title: 'Uploaded', description: 'Document uploaded' });
+    } catch (err: unknown) {
+      toast({ title: 'Upload failed', description: String(err), variant: 'destructive' });
+    } finally { setIsLoading(false); }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    try {
+      setIsLoading(true);
+      await deleteDocument(docId);
+      setDocuments((d) => d.filter((x) => x.docId !== docId));
+      toast({ title: 'Deleted', description: 'Document removed' });
+    } catch (err: unknown) {
+      toast({ title: 'Delete failed', description: String(err), variant: 'destructive' });
+    } finally { setIsLoading(false); }
+  };
 
   useEffect(() => {
     if (!caseId) {
@@ -412,6 +445,34 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </CardContent>
             </Card>
 
+            {/* Documents */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" /> Documents</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => e.target.files && handleUploadDocument(e.target.files[0])} />
+                  <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>Upload</Button>
+                </div>
+                {documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No documents</p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map((doc) => (
+                      <div key={doc.docId} className="flex items-center gap-2 rounded-md border p-2">
+                        <a href={`/api/documents/${doc.docId}`} target="_blank" rel="noreferrer" className="font-medium">{doc.originalName}</a>
+                        <span className="text-xs text-muted-foreground ml-auto">{new Date(doc.uploadedAt).toLocaleString()}</span>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteDocument(doc.docId)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {customer && (
               <Card>
                 <CardHeader className="pb-2">
@@ -425,7 +486,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     <div className="flex items-center gap-2"><Mail className="h-3 w-3" />{customer.email}</div>
                     <div className="flex items-center gap-2"><MapPin className="h-3 w-3" />{customer.address}</div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">{customer.country}</div>
+                  {/* country removed; keep address for location */}
                 </CardContent>
               </Card>
             )}

@@ -133,6 +133,27 @@ export async function deleteTask(taskId: string): Promise<void> {
   await api(`/api/tasks/${taskId}`, { method: "DELETE" });
 }
 
+// ── Documents ──
+export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string) {
+  const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Failed to fetch documents');
+  return (await res.json()) as any[];
+}
+
+export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: string, file: File) {
+  const form = new FormData();
+  form.append('ownerType', ownerType);
+  form.append('ownerId', ownerId);
+  form.append('file', file);
+  const res = await fetch(`${API_URL}/api/documents/upload`, { method: 'POST', body: form, credentials: 'include' });
+  if (!res.ok) throw new Error('Upload failed');
+  return await res.json();
+}
+
+export async function deleteDocument(docId: string) {
+  await api(`/api/documents/${docId}`, { method: 'DELETE' });
+}
+
 // ── KPIs ──
 export async function getKPIs() {
   return api(`/api/kpis`);

@@ -7,6 +7,9 @@ import {
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  getDocuments,
+  uploadDocument,
+  deleteDocument,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -72,7 +75,6 @@ const Customers = () => {
   const [form, setForm] = useState({
     name: "",
     customerType: "Individual",
-    country: "",
     contact: "",
     phone: "",
     email: "",
@@ -90,6 +92,9 @@ const Customers = () => {
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
+  const [customerDocuments, setCustomerDocuments] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useState<HTMLInputElement | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
@@ -122,6 +127,12 @@ const Customers = () => {
     setSelectedCustomer(customer);
     const cases = await getCasesByCustomer(id);
     setSelectedCases(cases);
+    try {
+      const docs = await getDocuments('customer', id);
+      setCustomerDocuments(docs);
+    } catch (e) {
+      setCustomerDocuments([]);
+    }
   }, []);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
@@ -196,7 +207,6 @@ const Customers = () => {
     setForm({
       name: "",
       customerType: "Individual",
-      country: "",
       contact: "",
       phone: "",
       email: "",
@@ -320,6 +330,30 @@ const Customers = () => {
   };
 
   const { logout } = useAuth();
+
+  const handleUploadCustomerDocument = async (file?: File) => {
+    if (!file || !selectedCustomer) return;
+    try {
+      setIsUploading(true);
+      await uploadDocument('customer', selectedCustomer.customerId, file);
+      const docs = await getDocuments('customer', selectedCustomer.customerId);
+      setCustomerDocuments(docs);
+      toast({ title: 'Uploaded', description: 'Document uploaded' });
+    } catch (err: unknown) {
+      toast({ title: 'Upload failed', description: String(err), variant: 'destructive' });
+    } finally { setIsUploading(false); }
+  };
+
+  const handleDeleteCustomerDocument = async (docId: string) => {
+    try {
+      setIsUploading(true);
+      await deleteDocument(docId);
+      setCustomerDocuments((d) => d.filter((x) => x.docId !== docId));
+      toast({ title: 'Deleted', description: 'Document removed' });
+    } catch (err: unknown) {
+      toast({ title: 'Delete failed', description: String(err), variant: 'destructive' });
+    } finally { setIsUploading(false); }
+  };
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
@@ -416,22 +450,7 @@ const Customers = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCollapsedCategories([])}
-            disabled={groupedCustomers.length === 0}
-          >
-            Expand All
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCollapsedCategories(groupedCustomers.map((g) => g.type))}
-            disabled={groupedCustomers.length === 0}
-          >
-            Collapse All
-          </Button>
+          {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
           </Button>
@@ -536,6 +555,44 @@ const Customers = () => {
             </Table>
           </CardContent>
         </Card>
+
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <input type="file" disabled={!selectedCustomer || isUploading} onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleUploadCustomerDocument(f);
+                            // reset input
+                            if (e.target) (e.target as HTMLInputElement).value = "";
+                          }} />
+                          <Button size="sm" onClick={() => {
+                            const el = document.createElement('input');
+                            el.type = 'file';
+                            el.onchange = (ev: Event) => {
+                              const input = ev.target as HTMLInputElement;
+                              const f = input.files?.[0];
+                              if (f) handleUploadCustomerDocument(f);
+                            };
+                            el.click();
+                          }} disabled={!selectedCustomer || isUploading}>{isUploading ? 'Uploading...' : 'Upload'}</Button>
+                        </div>
+                        <div className="space-y-1">
+                          {customerDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
+                          {customerDocuments.map((d) => (
+                            <div key={d.docId} className="flex items-center justify-between gap-2 text-sm">
+                              <div className="truncate">{d.originalName || d.filename}</div>
+                              <div className="flex items-center gap-2">
+                                <a href={`/api/documents/${d.docId}`} target="_blank" rel="noreferrer" className="text-sm text-primary">Open</a>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomerDocument(d.docId)} className="text-destructive">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
       </main>
 
       {/* Create / Edit customer */}
@@ -564,10 +621,7 @@ const Customers = () => {
               <Label>Phone</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
-            <div className="space-y-2">
-              <Label>Country</Label>
-              <Input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
-            </div>
+            {/* Country removed; use Address field to store country if desired */}
             <div className="space-y-2">
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />

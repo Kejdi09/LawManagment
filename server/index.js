@@ -4,6 +4,7 @@ import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import fs from "fs";
+import multer from "multer";
 import path from "path";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -15,6 +16,7 @@ dotenv.config();
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || "lawman";
+let documentsCol;
 const app = express();
 
 if (!MONGODB_URI) {
@@ -29,6 +31,7 @@ const CLIENT_URL = process.env.CLIENT_URL || (process.env.NODE_ENV === "developm
 if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) allowedOrigins.push(CLIENT_URL);
 app.use(
   cors({
+  documentsCol = db.collection("documents");
     origin: (origin, callback) => {
       // Allow non-browser (curl/postman) requests with no origin
       if (!origin) return callback(null, true);
@@ -683,6 +686,13 @@ app.get("/api/kpis", async (req, res) => {
     JWT_SECRET = JWT_SECRET || "dev-fallback-secret";
   }
   await connectDb();
+  // Ensure uploads directory exists
+  try {
+    const uploadsPath = path.resolve(process.cwd(), "server", "uploads");
+    await fs.promises.mkdir(uploadsPath, { recursive: true });
+  } catch (err) {
+    console.warn("Could not create uploads directory:", err?.message || err);
+  }
   await seedIfEmpty();
   await seedDemoUser();
   // periodic cleanup for stale cases
@@ -693,6 +703,74 @@ app.get("/api/kpis", async (req, res) => {
     console.log(`API listening on port ${PORT}`);
   });
 })();
+
+// File uploads (documents) -- store on disk and metadata in Mongo
+const uploadsDir = path.resolve(process.cwd(), "server", "uploads");
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ts = Date.now();
+    const safe = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    cb(null, `${ts}-${safe}`);
+  },
+});
+const upload = multer({ storage });
+
+app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req, res) => {
+  try {
+    const ownerType = req.body.ownerType; // 'case' or 'customer'
+    const ownerId = req.body.ownerId;
+    if (!req.file || !ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
+    const doc = {
+      docId: `D${Date.now()}`,
+      ownerType,
+      ownerId,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mime: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path,
+      uploadedBy: req.user?.username || null,
+      uploadedAt: new Date().toISOString(),
+    };
+    await documentsCol.insertOne(doc);
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'upload', resource: 'document', resourceId: doc.docId, details: { ownerType, ownerId, originalName: doc.originalName } });
+    return res.json(doc);
+  } catch (err) {
+    console.error('/api/documents/upload error', err);
+    return res.status(500).json({ error: 'upload_failed' });
+  }
+});
+
+app.get('/api/documents', verifyAuth, async (req, res) => {
+  const { ownerType, ownerId } = req.query;
+  if (!ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
+  const docs = await documentsCol.find({ ownerType: String(ownerType), ownerId: String(ownerId) }).sort({ uploadedAt: -1 }).toArray();
+  res.json(docs);
+});
+
+app.get('/api/documents/:docId', verifyAuth, async (req, res) => {
+  const { docId } = req.params;
+  const doc = await documentsCol.findOne({ docId });
+  if (!doc) return res.status(404).json({ error: 'not_found' });
+  return res.sendFile(path.resolve(doc.path));
+});
+
+app.delete('/api/documents/:docId', verifyAuth, async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const doc = await documentsCol.findOne({ docId });
+    if (!doc) return res.status(404).json({ error: 'not_found' });
+    // remove file
+    try { await fs.promises.unlink(doc.path); } catch (e) { /* ignore */ }
+    await documentsCol.deleteOne({ docId });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'document', resourceId: docId, details: { ownerType: doc.ownerType, ownerId: doc.ownerId } });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('/api/documents/:docId delete error', err);
+    return res.status(500).json({ error: 'delete_failed' });
+  }
+});
 
 // Admin audit log endpoint
 app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) => {

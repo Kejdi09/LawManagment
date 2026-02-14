@@ -34,7 +34,6 @@ export interface Case {
 export interface Customer {
   customerId: string;
   name: string;
-  country: string;
   customerType: string;
   contact: string;
   phone: string;
