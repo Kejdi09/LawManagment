@@ -13,12 +13,24 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 const queryClient = new QueryClient();
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAuthLoading } = useAuth();
   const location = useLocation();
+  if (isAuthLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return children;
+}
+
+function LoginRoute() {
+  const { isAuthenticated, isAuthLoading } = useAuth();
+  if (isAuthLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
+  }
+  if (isAuthenticated) return <Navigate to="/" replace />;
+  return <Login />;
 }
 
 const App = () => (
@@ -29,7 +41,7 @@ const App = () => (
       <AuthProvider>
         <HashRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginRoute />} />
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
             <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />

@@ -10,7 +10,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, refreshSession } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,6 +27,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
       const data = await res.json();
       if (data.success) {
         login();
+        await refreshSession();
         setError('');
         // call optional onLogin prop or navigate to root
         if (onLogin) onLogin();
