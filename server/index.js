@@ -18,6 +18,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || "lawman";
 let documentsCol;
 const app = express();
+app.set("trust proxy", 1);
 
 if (!MONGODB_URI) {
   console.error("Missing MONGODB_URI env var. Set it before running the server.");
@@ -283,11 +284,26 @@ async function seedDemoUser() {
   }
 }
 
-function getCookieOptions() {
-  const isProd = process.env.NODE_ENV === "production";
-  const secure = isProd;
-  const sameSite = isProd ? "none" : "lax";
-  const domain = process.env.COOKIE_DOMAIN || undefined;
+function getCookieOptions(req) {
+  const requestOrigin = req.headers.origin;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const requestProtocol = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  const protocol = requestProtocol || req.protocol;
+  const host = req.get("host");
+  const serverOrigin = host ? `${protocol}://${host}` : "";
+  const isCrossOrigin = Boolean(requestOrigin && serverOrigin && requestOrigin !== serverOrigin);
+  const secure = protocol === "https";
+
+  // Cross-origin cookies must use SameSite=None;Secure in modern browsers.
+  // If not HTTPS, fall back to Lax to keep local dev working on same-site origins.
+  const sameSite = isCrossOrigin && secure ? "none" : "lax";
+
+  let domain;
+  const configuredDomain = process.env.COOKIE_DOMAIN?.trim();
+  if (configuredDomain && !configuredDomain.includes(":")) {
+    domain = configuredDomain;
+  }
+
   return {
     httpOnly: true,
     secure,
@@ -298,13 +314,13 @@ function getCookieOptions() {
   };
 }
 
-function createAuthCookie(res, token) {
-  res.cookie("token", token, getCookieOptions());
+function createAuthCookie(req, res, token) {
+  res.cookie("token", token, getCookieOptions(req));
 }
 
 app.post("/api/logout", (req, res) => {
   // Clear cookie using the same options to ensure browser removes it in cross-site scenarios
-  res.clearCookie("token", getCookieOptions());
+  res.clearCookie("token", getCookieOptions(req));
   res.json({ ok: true });
 });
 
@@ -397,7 +413,7 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
-    createAuthCookie(res, token);
+    createAuthCookie(req, res, token);
     return res.json({ success: true, username: user.username });
   } catch (err) {
     console.error("/api/login error:", err);
