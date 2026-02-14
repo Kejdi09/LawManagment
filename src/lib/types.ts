@@ -98,6 +98,8 @@ export type LeadStatus =
   | "WAITING_ACCEPTANCE"
   | "SEND_RESPONSE"
   | "CONFIRMED"
+  | "CLIENT"
+  | "ARCHIVED"
   | "CONSULTATION_SCHEDULED"
   | "CONSULTATION_DONE"
   | "ON_HOLD";
@@ -110,6 +112,8 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   WAITING_ACCEPTANCE: "Waiting Acceptance",
   SEND_RESPONSE: "Send Response",
   CONFIRMED: "Confirmed",
+  CLIENT: "Client",
+  ARCHIVED: "Archived",
   CONSULTATION_SCHEDULED: "Consultation Scheduled",
   CONSULTATION_DONE: "Consultation Done",
   ON_HOLD: "On Hold",

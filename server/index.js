@@ -55,6 +55,7 @@ let customerNotificationsCol;
 let notesCol;
 let tasksCol;
 let usersCol;
+let auditLogsCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -92,6 +93,7 @@ async function connectDb() {
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
   usersCol = db.collection("users");
+  auditLogsCol = db.collection("auditLogs");
 }
 
 async function seedIfEmpty() {
@@ -331,6 +333,36 @@ app.get("/api/_debug/cookies", (req, res) => {
   return res.json({ cookies, tokenPayload });
 });
 
+// --- Auth middleware ---
+function verifyAuth(req, res, next) {
+  try {
+    const token = req.cookies?.token;
+    if (!token) return res.status(401).json({ error: 'unauthenticated' });
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'unauthenticated' });
+  }
+}
+
+function requireRole(role) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'unauthenticated' });
+    if (req.user.role === role || req.user.role === 'admin') return next();
+    return res.status(403).json({ error: 'forbidden' });
+  };
+}
+
+async function logAudit({ username, role, action, resource, resourceId, details = {} }) {
+  try {
+    if (!auditLogsCol) return;
+    await auditLogsCol.insertOne({ username, role, action, resource, resourceId, details, at: new Date().toISOString() });
+  } catch (err) {
+    console.warn('Failed to write audit log', err?.message || err);
+  }
+}
+
 // Debug endpoint to (re)create the demo user. Enabled only when not in production
 // or when ENABLE_DEBUG_COOKIES=true is set. Use this if the seeded user was not created.
 app.post("/api/_debug/seed-user", async (req, res) => {
@@ -388,14 +420,15 @@ app.get("/api/customers/:id", async (req, res) => {
   res.json(doc);
 });
 
-app.post("/api/customers", async (req, res) => {
+app.post("/api/customers", verifyAuth, async (req, res) => {
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId };
   await customersCol.insertOne(payload);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'customer', resourceId: customerId, details: { payload } });
   res.status(201).json(payload);
 });
 
-app.put("/api/customers/:id", async (req, res) => {
+app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
 
@@ -424,11 +457,12 @@ app.put("/api/customers/:id", async (req, res) => {
 
   await customersCol.updateOne({ customerId: id }, { $set: update });
   const updated = await customersCol.findOne({ customerId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
   if (!updated) return res.status(404).json({ error: "Not found" });
   res.json(updated);
 });
 
-app.delete("/api/customers/:id", async (req, res) => {
+app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
@@ -440,6 +474,7 @@ app.delete("/api/customers/:id", async (req, res) => {
     customerHistoryCol.deleteMany({ customerId: id }),
     customersCol.deleteOne({ customerId: id }),
   ]);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'customer', resourceId: id });
   res.json({ ok: true });
 });
 
@@ -510,10 +545,11 @@ app.post("/api/cases", async (req, res) => {
   const payload = { ...req.body, caseId, lastStateChange: now };
   await casesCol.insertOne(payload);
   await historyCol.insertOne({ historyId: `H${pad3(Date.now() % 1000)}`, caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case', resourceId: caseId, details: { payload } });
   res.status(201).json(payload);
 });
 
-app.put("/api/cases/:id", async (req, res) => {
+app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   const targetId = (req.params.id || "").trim();
   const idPattern = new RegExp(`^${escapeRegex(targetId)}\\s*$`, "i");
   const update = { ...req.body };
@@ -525,10 +561,11 @@ app.put("/api/cases/:id", async (req, res) => {
     { returnDocument: "after", upsert: true }
   );
   const doc = result.value || (await casesCol.findOne({ caseId: targetId }));
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'case', resourceId: targetId, details: { update } });
   res.json(doc);
 });
 
-app.delete("/api/cases/:id", async (req, res) => {
+app.delete("/api/cases/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   await Promise.all([
     casesCol.deleteOne({ caseId: id }),
@@ -536,6 +573,7 @@ app.delete("/api/cases/:id", async (req, res) => {
     notesCol.deleteMany({ caseId: id }),
     tasksCol.deleteMany({ caseId: id }),
   ]);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'case', resourceId: id });
   res.json({ ok: true });
 });
 
@@ -566,6 +604,7 @@ app.post("/api/cases/:id/notes", async (req, res) => {
   const noteId = `N${pad3(Date.now() % 1000)}`;
   const note = { noteId, caseId: id, date: new Date().toISOString(), noteText: req.body.noteText };
   await notesCol.insertOne(note);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'note', resourceId: noteId, details: { caseId: id } });
   res.status(201).json(note);
 });
 
@@ -590,6 +629,7 @@ app.post("/api/cases/:id/tasks", async (req, res) => {
     dueDate: req.body.dueDate ?? null,
   };
   await tasksCol.insertOne(task);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'task', resourceId: taskId, details: { caseId: id } });
   res.status(201).json(task);
 });
 
@@ -653,3 +693,13 @@ app.get("/api/kpis", async (req, res) => {
     console.log(`API listening on port ${PORT}`);
   });
 })();
+
+// Admin audit log endpoint
+app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const logs = await auditLogsCol.find({}).sort({ at: -1 }).limit(200).toArray();
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: 'failed' });
+  }
+});

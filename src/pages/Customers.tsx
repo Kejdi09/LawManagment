@@ -180,6 +180,8 @@ const Customers = () => {
     WAITING_ACCEPTANCE: "bg-orange-100 text-orange-800",
     SEND_RESPONSE: "bg-emerald-100 text-emerald-800",
     CONFIRMED: "bg-green-100 text-green-800",
+    CLIENT: "bg-emerald-100 text-emerald-800",
+    ARCHIVED: "bg-gray-100 text-gray-600",
     CONSULTATION_SCHEDULED: "bg-blue-50 text-blue-800",
     CONSULTATION_DONE: "bg-emerald-50 text-emerald-800",
     ON_HOLD: "bg-gray-100 text-gray-800",
@@ -299,6 +301,22 @@ const Customers = () => {
       const errorMessage = err instanceof Error ? err.message : "Unable to delete customer";
       toast({ title: "Delete failed", description: errorMessage, variant: "destructive" });
     });
+  };
+
+  const handleSetStatus = async (customerId: string, status: LeadStatus) => {
+    try {
+      // optimistic update
+      setCustomers((prev) => prev.map((c) => (c.customerId === customerId ? { ...c, status } : c)));
+      if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
+      await updateCustomer(customerId, { status });
+      toast({ title: 'Status updated' });
+      await loadCustomers();
+      if (selectedId) await loadCustomerDetail(selectedId);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unable to update status';
+      toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
+      await loadCustomers();
+    }
   };
 
   const { logout } = useAuth();
@@ -498,6 +516,12 @@ const Customers = () => {
                           <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(c.customerId)}>
                               <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetStatus(c.customerId, 'CLIENT')}>
+                              <Badge className="text-xs">Client</Badge>
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleSetStatus(c.customerId, 'ARCHIVED')}>
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(c.customerId)}>
                               <Trash2 className="h-4 w-4" />

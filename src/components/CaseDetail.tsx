@@ -336,7 +336,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     {c.deadline && (
                       <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className={`text-xs ${overdue ? "text-destructive font-bold" : ""}`}>{formatOptionalDateTime(c.deadline)}</span></div>
                     )}
-                    <div className="flex justify-between"><span className="text-muted-foreground">Ready</span><span>{c.readyForWork ? <Badge className="text-xs">Ready for work</Badge> : <span className="text-xs text-muted-foreground">No</span>}</span></div>
+                    
                     <Separator />
                     <p className="text-muted-foreground text-xs whitespace-pre-wrap">{c.generalNote}</p>
                   </>

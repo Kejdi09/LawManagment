@@ -4,7 +4,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   login: () => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 
@@ -44,15 +44,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('auth', 'true');
   };
 
-  const logout = () => {
-    // Call server to clear cookie
-    (async () => {
-      try {
-        const API_URL = import.meta.env.VITE_API_URL ?? '';
-        await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-      } catch {}
-    })();
-    setIsAuthenticated(false);
+  const logout = async () => {
+    setIsAuthLoading(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL ?? '';
+      await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+    } catch (err) {
+      // ignore network errors but still clear client state
+    }
+    // Refresh session from server to ensure cookie was cleared
+    await refreshSession();
+    // Guarantee local state cleared if server didn't report authenticated
+    if (!localStorage) return setIsAuthLoading(false);
+    if (!localStorage.getItem('auth')) {
+      setIsAuthenticated(false);
+    }
     localStorage.removeItem('auth');
     setIsAuthLoading(false);
   };

@@ -36,7 +36,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
               <TableHead>Category</TableHead>
               <TableHead className="w-[90px]">Priority</TableHead>
               <TableHead className="w-[90px]">Docs</TableHead>
-              <TableHead className="w-[90px]">Ready</TableHead>
+              
               <TableHead className="w-[120px]">Deadline</TableHead>
               <TableHead className="w-[100px]">Assigned</TableHead>
               <TableHead className="w-[120px]">Last Change</TableHead>
@@ -65,15 +65,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                       {c.documentState}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs">
-                    {stage === "IN_PROGRESS" ? (
-                      <Badge variant="secondary" className="text-xs">Ready</Badge>
-                    ) : stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES" ? (
-                      <Badge variant="outline" className="text-xs">Awaiting</Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
+                  
                   <TableCell className="text-xs">
                     {c.deadline ? (
                       <span className="text-muted-foreground flex items-center gap-1">
