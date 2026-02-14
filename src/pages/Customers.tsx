@@ -41,8 +41,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -64,7 +65,7 @@ function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
 }
 
-const Customers = () => {
+const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 'active' | 'clients' | 'archived' } = {}) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -95,6 +96,7 @@ const Customers = () => {
   const [customerDocuments, setCustomerDocuments] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useState<HTMLInputElement | null>(null);
+  const [statusView, setStatusView] = useState<'all' | 'active' | 'clients' | 'archived'>(initialStatusView);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
@@ -162,14 +164,22 @@ const Customers = () => {
     return filteredCustomers.filter((customer) => selectedCategories.includes(getCustomerCategory(customer.customerType)));
   }, [filteredCustomers, selectedCategories]);
 
+  const statusFilteredCustomers = useMemo(() => {
+    if (statusView === 'all') return categoryFilteredCustomers;
+    if (statusView === 'clients') return categoryFilteredCustomers.filter((c) => c.status === 'CLIENT');
+    if (statusView === 'archived') return categoryFilteredCustomers.filter((c) => c.status === 'ARCHIVED');
+    // active = not client and not archived
+    return categoryFilteredCustomers.filter((c) => c.status !== 'CLIENT' && c.status !== 'ARCHIVED');
+  }, [categoryFilteredCustomers, statusView]);
+
   const groupedCustomers = useMemo(() => {
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: categoryFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: statusFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [categoryFilteredCustomers]);
+  }, [statusFilteredCustomers]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -450,6 +460,12 @@ const Customers = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button variant={statusView === 'all' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('all')}>All</Button>
+            <Button variant={statusView === 'active' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('active')}>Active</Button>
+            <Button variant={statusView === 'clients' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('clients')}>Clients</Button>
+            <Button variant={statusView === 'archived' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('archived')}>Archived</Button>
+          </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
@@ -539,9 +555,43 @@ const Customers = () => {
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetStatus(c.customerId, 'CLIENT')}>
                               <Badge className="text-xs">Client</Badge>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleSetStatus(c.customerId, 'ARCHIVED')}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {c.status !== 'ARCHIVED' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-destructive"
+                                    onClick={() => {
+                                      if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
+                                        handleSetStatus(c.customerId, 'ARCHIVED');
+                                      }
+                                    }}
+                                  >
+                                    <Archive className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Archive customer</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => {
+                                      if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
+                                        handleSetStatus(c.customerId, 'INTAKE');
+                                      }
+                                    }}
+                                  >
+                                    <Archive className="h-4 w-4 rotate-180" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Unarchive customer</TooltipContent>
+                              </Tooltip>
+                            )}
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(c.customerId)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>

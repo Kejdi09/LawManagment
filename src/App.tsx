@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
 import Customers from "./pages/Customers";
+import Clients from "./pages/Clients";
+import Archived from "./pages/Archived";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
@@ -44,6 +46,8 @@ const App = () => (
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
             <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
+            <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
+            <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </HashRouter>

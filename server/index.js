@@ -31,7 +31,6 @@ const CLIENT_URL = process.env.CLIENT_URL || (process.env.NODE_ENV === "developm
 if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) allowedOrigins.push(CLIENT_URL);
 app.use(
   cors({
-  documentsCol = db.collection("documents");
     origin: (origin, callback) => {
       // Allow non-browser (curl/postman) requests with no origin
       if (!origin) return callback(null, true);
@@ -97,6 +96,7 @@ async function connectDb() {
   tasksCol = db.collection("tasks");
   usersCol = db.collection("users");
   auditLogsCol = db.collection("auditLogs");
+  documentsCol = db.collection("documents");
 }
 
 async function seedIfEmpty() {

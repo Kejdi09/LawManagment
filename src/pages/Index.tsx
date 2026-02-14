@@ -277,6 +277,12 @@ const Index = () => {
             <Button variant="outline" size="sm" onClick={() => navigate("/customers")}>
               <Users className="h-4 w-4 mr-1" /> Customers
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/clients")}>
+              Clients
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/archived")}>
+              Archived
+            </Button>
             <Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>
           </div>
         </div>
