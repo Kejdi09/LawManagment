@@ -3,6 +3,9 @@ import cors from "cors";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { seedCustomers, seedCases, seedHistory, seedNotes, seedTasks } from "./seed-data.js";
@@ -21,6 +24,9 @@ if (!MONGODB_URI) {
 
 // Configure CORS to only allow origins in ALLOWED_ORIGINS (comma-separated)
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+// Add explicit client URL if provided (useful in dev/prod env var)
+const CLIENT_URL = process.env.CLIENT_URL || (process.env.NODE_ENV === "development" ? "http://localhost:5173" : "");
+if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) allowedOrigins.push(CLIENT_URL);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -50,7 +56,29 @@ let notesCol;
 let tasksCol;
 let usersCol;
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+let JWT_SECRET = process.env.JWT_SECRET || null;
+
+async function loadOrCreateJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  try {
+    const secretPath = path.resolve(process.cwd(), "server", ".jwtsecret");
+    // Try read existing file
+    const existing = await fs.promises.readFile(secretPath, "utf8");
+    if (existing && existing.trim()) return existing.trim();
+  } catch (err) {
+    // ignore - file may not exist
+  }
+  // Create a new secret and persist it so server restarts don't invalidate tokens
+  const newSecret = crypto.randomBytes(48).toString("hex");
+  try {
+    const secretPath = path.resolve(process.cwd(), "server", ".jwtsecret");
+    await fs.promises.writeFile(secretPath, newSecret, { mode: 0o600 });
+    console.log(`Wrote persistent JWT secret to ${secretPath}`);
+  } catch (err) {
+    console.warn("Unable to persist JWT secret to disk; tokens will still work until process restarts.", err?.message || err);
+  }
+  return newSecret;
+}
 
 async function connectDb() {
   client = new MongoClient(MONGODB_URI);
@@ -250,21 +278,28 @@ async function seedDemoUser() {
   }
 }
 
-function createAuthCookie(res, token) {
-  const secure = process.env.NODE_ENV === "production";
-  // For cross-origin (Vercel frontend -> Render backend) we need SameSite='none' and Secure=true in production.
-  const sameSite = secure ? "none" : "lax";
-  res.cookie("token", token, {
+function getCookieOptions() {
+  const isProd = process.env.NODE_ENV === "production";
+  const secure = isProd;
+  const sameSite = isProd ? "none" : "lax";
+  const domain = process.env.COOKIE_DOMAIN || undefined;
+  return {
     httpOnly: true,
     secure,
     sameSite,
+    domain,
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  };
+}
+
+function createAuthCookie(res, token) {
+  res.cookie("token", token, getCookieOptions());
 }
 
 app.post("/api/logout", (req, res) => {
-  res.clearCookie("token");
+  // Clear cookie using the same options to ensure browser removes it in cross-site scenarios
+  res.clearCookie("token", getCookieOptions());
   res.json({ ok: true });
 });
 
@@ -294,6 +329,27 @@ app.get("/api/_debug/cookies", (req, res) => {
     tokenPayload = { error: "invalid_token" };
   }
   return res.json({ cookies, tokenPayload });
+});
+
+// Debug endpoint to (re)create the demo user. Enabled only when not in production
+// or when ENABLE_DEBUG_COOKIES=true is set. Use this if the seeded user was not created.
+app.post("/api/_debug/seed-user", async (req, res) => {
+  const enabled = process.env.NODE_ENV !== "production" || process.env.ENABLE_DEBUG_COOKIES === "true";
+  if (!enabled) return res.status(404).json({ error: "Not found" });
+  try {
+    const username = req.body?.username || "adi";
+    const password = req.body?.password || "890";
+    const hashed = await bcrypt.hash(String(password), 10);
+    await usersCol.updateOne(
+      { username },
+      { $set: { username, password: hashed, role: "admin", createdAt: new Date().toISOString() } },
+      { upsert: true }
+    );
+    return res.json({ ok: true, username });
+  } catch (err) {
+    console.error("/api/_debug/seed-user error:", err);
+    return res.status(500).json({ ok: false, error: "seed_failed" });
+  }
 });
 
 // Login using users collection and bcrypt, issue httpOnly JWT cookie
@@ -578,6 +634,14 @@ app.get("/api/kpis", async (req, res) => {
 
 // Start
 (async () => {
+  // Ensure we have a stable JWT secret across restarts. Prefer env var, otherwise persist to server/.jwtsecret
+  try {
+    JWT_SECRET = await loadOrCreateJwtSecret();
+  } catch (err) {
+    console.error("Failed to load or create JWT secret:", err?.message || err);
+    // Fallback to an in-memory dev secret (not ideal for production)
+    JWT_SECRET = JWT_SECRET || "dev-fallback-secret";
+  }
   await connectDb();
   await seedIfEmpty();
   await seedDemoUser();
