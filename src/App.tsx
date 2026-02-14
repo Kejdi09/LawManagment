@@ -28,10 +28,13 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
 function LoginRoute() {
   const { isAuthenticated, isAuthLoading } = useAuth();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
+  const returnTo = from ? `${from.pathname || "/"}${from.search || ""}${from.hash || ""}` : "/";
   if (isAuthLoading) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
   }
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to={returnTo} replace />;
   return <Login />;
 }
 

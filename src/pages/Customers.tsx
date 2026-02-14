@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { formatDate } from "@/lib/utils";
 import {
   getAllCustomers,
@@ -10,6 +10,8 @@ import {
   getDocuments,
   uploadDocument,
   deleteDocument,
+  fetchDocumentBlob,
+  StoredDocument,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -62,6 +64,7 @@ function safeFormatDate(dateValue: string | Date | null | undefined) {
 
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
+const UNASSIGNED_LAWYER = "__UNASSIGNED__";
 
 function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
@@ -97,9 +100,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
-  const [customerDocuments, setCustomerDocuments] = useState<any[]>([]);
+  const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useState<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [statusView, setStatusView] = useState<'all' | 'active' | 'clients' | 'archived'>(initialStatusView);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
@@ -270,6 +273,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     try {
       const payload = {
         ...form,
+        assignedTo: form.assignedTo === UNASSIGNED_LAWYER ? "" : form.assignedTo,
         contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
         services: form.services || [],
@@ -380,6 +384,33 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     } catch (err: unknown) {
       toast({ title: 'Delete failed', description: String(err), variant: 'destructive' });
     } finally { setIsUploading(false); }
+  };
+
+  const handlePreviewCustomerDocument = async (docId: string) => {
+    try {
+      const { blob } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: unknown) {
+      toast({ title: "Preview failed", description: err instanceof Error ? err.message : "Unable to preview document", variant: "destructive" });
+    }
+  };
+
+  const handleDownloadCustomerDocument = async (docId: string, originalName?: string) => {
+    try {
+      const { blob, fileName } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName || originalName || "document";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      toast({ title: "Download failed", description: err instanceof Error ? err.message : "Unable to download document", variant: "destructive" });
+    }
   };
   return (
     <div className="min-h-screen bg-background">
@@ -639,43 +670,6 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
           </CardContent>
         </Card>
 
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
-                      <CardContent className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <input type="file" disabled={!selectedCustomer || isUploading} onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) handleUploadCustomerDocument(f);
-                            // reset input
-                            if (e.target) (e.target as HTMLInputElement).value = "";
-                          }} />
-                          <Button size="sm" onClick={() => {
-                            const el = document.createElement('input');
-                            el.type = 'file';
-                            el.onchange = (ev: Event) => {
-                              const input = ev.target as HTMLInputElement;
-                              const f = input.files?.[0];
-                              if (f) handleUploadCustomerDocument(f);
-                            };
-                            el.click();
-                          }} disabled={!selectedCustomer || isUploading}>{isUploading ? 'Uploading...' : 'Upload'}</Button>
-                        </div>
-                        <div className="space-y-1">
-                          {customerDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
-                          {customerDocuments.map((d) => (
-                            <div key={d.docId} className="flex items-center justify-between gap-2 text-sm">
-                              <div className="truncate">{d.originalName || d.filename}</div>
-                              <div className="flex items-center gap-2">
-                                <a href={`/api/documents/${d.docId}`} target="_blank" rel="noreferrer" className="text-sm text-primary">Open</a>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomerDocument(d.docId)} className="text-destructive">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
       </main>
 
       {/* Create / Edit customer */}
@@ -734,10 +728,10 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
             </div>
             <div className="space-y-2">
               <Label>Assigned Lawyer</Label>
-              <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
+              <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
                 <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
                   {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -836,6 +830,43 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                             <p>{selectedCustomer.notes}</p>
                           </div>
                         )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            disabled={!selectedCustomer || isUploading}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadCustomerDocument(f);
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={!selectedCustomer || isUploading}>
+                            {isUploading ? "Uploading..." : "Upload"}
+                          </Button>
+                        </div>
+                        <div className="space-y-1">
+                          {customerDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
+                          {customerDocuments.map((d) => (
+                            <div key={d.docId} className="flex items-center justify-between gap-2 text-sm rounded-md border p-2">
+                              <div className="truncate" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={() => handlePreviewCustomerDocument(d.docId)}>Preview</Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadCustomerDocument(d.docId, d.originalName || d.filename)}>Download</Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomerDocument(d.docId)} className="text-destructive">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </CardContent>
                     </Card>
 

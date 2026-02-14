@@ -134,10 +134,19 @@ export async function deleteTask(taskId: string): Promise<void> {
 }
 
 // ── Documents ──
-export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string) {
+export type StoredDocument = {
+  docId: string;
+  ownerType: 'case' | 'customer';
+  ownerId: string;
+  filename?: string;
+  originalName?: string;
+  uploadedAt: string;
+};
+
+export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string): Promise<StoredDocument[]> {
   const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch documents');
-  return (await res.json()) as any[];
+  return (await res.json()) as StoredDocument[];
 }
 
 export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: string, file: File) {
@@ -152,6 +161,16 @@ export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: st
 
 export async function deleteDocument(docId: string) {
   await api(`/api/documents/${docId}`, { method: 'DELETE' });
+}
+
+export async function fetchDocumentBlob(docId: string): Promise<{ blob: Blob; fileName: string | null }> {
+  const res = await fetch(`${API_URL}/api/documents/${docId}`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Failed to load document');
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+  const fileName = match ? decodeURIComponent(match[1]) : null;
+  return { blob, fileName };
 }
 
 // ── KPIs ──

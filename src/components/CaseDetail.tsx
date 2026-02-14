@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
   getTasksByCaseId, addHistory, addNote, addTask, toggleTask, deleteTask, updateCase, deleteCase,
-  getDocuments, uploadDocument, deleteDocument,
+  getDocuments, uploadDocument, deleteDocument, fetchDocumentBlob, StoredDocument,
 } from "@/lib/case-store";
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
@@ -44,7 +44,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [caseHistory, setCaseHistory] = useState<HistoryRecord[]>([]);
   const [caseNotes, setCaseNotes] = useState<Note[]>([]);
   const [caseTasks, setCaseTasks] = useState<CaseTask[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [noteText, setNoteText] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -131,6 +131,39 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     } catch (err: unknown) {
       toast({ title: 'Delete failed', description: String(err), variant: 'destructive' });
     } finally { setIsLoading(false); }
+  };
+
+  const handlePreviewDocument = async (docId: string) => {
+    try {
+      setIsLoading(true);
+      const { blob } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: unknown) {
+      toast({ title: "Preview failed", description: getErrorMessage(err, "Unable to preview document"), variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (docId: string, originalName?: string) => {
+    try {
+      setIsLoading(true);
+      const { blob, fileName } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName || originalName || "document";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      toast({ title: "Download failed", description: getErrorMessage(err, "Unable to download document"), variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -461,8 +494,10 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                   <div className="space-y-2">
                     {documents.map((doc) => (
                       <div key={doc.docId} className="flex items-center gap-2 rounded-md border p-2">
-                        <a href={`/api/documents/${doc.docId}`} target="_blank" rel="noreferrer" className="font-medium">{doc.originalName}</a>
+                        <span className="font-medium truncate max-w-[220px]" title={doc.originalName}>{doc.originalName}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{new Date(doc.uploadedAt).toLocaleString()}</span>
+                        <Button variant="outline" size="sm" onClick={() => handlePreviewDocument(doc.docId)} disabled={isLoading}>Preview</Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadDocument(doc.docId, doc.originalName)} disabled={isLoading}>Download</Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDeleteDocument(doc.docId)} className="text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </Button>

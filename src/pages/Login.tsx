@@ -1,17 +1,20 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 
-export default function Login({ onLogin }: { onLogin: () => void }) {
+export default function Login({ onLogin }: { onLogin?: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, refreshSession } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
+  const returnTo = from ? `${from.pathname || '/'}${from.search || ''}${from.hash || ''}` : '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,9 +32,9 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
         login();
         await refreshSession();
         setError('');
-        // call optional onLogin prop or navigate to root
+        // call optional onLogin prop or navigate to original route
         if (onLogin) onLogin();
-        else navigate('/');
+        else navigate(returnTo, { replace: true });
       } else {
         setError('Invalid credentials');
       }
