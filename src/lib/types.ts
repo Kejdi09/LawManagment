@@ -44,6 +44,7 @@ export interface Customer {
   serviceDescription: string;
   contactChannel: ContactChannel;
   status: LeadStatus;
+  assignedTo?: string;
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
   notes?: string;
 }
