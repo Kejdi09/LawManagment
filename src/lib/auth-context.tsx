@@ -5,7 +5,7 @@ interface AuthContextType {
   isAuthLoading: boolean;
   login: () => void;
   logout: () => Promise<void>;
-  refreshSession: () => Promise<void>;
+  refreshSession: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -14,7 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('auth') === 'true');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const refreshSession = async () => {
+  const refreshSession = async (): Promise<boolean> => {
     try {
       const API_URL = import.meta.env.VITE_API_URL ?? '';
       const res = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
@@ -22,13 +22,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.authenticated) {
         setIsAuthenticated(true);
         localStorage.setItem('auth', 'true');
+        return true;
       } else {
         setIsAuthenticated(false);
         localStorage.removeItem('auth');
+        return false;
       }
     } catch {
       setIsAuthenticated(false);
       localStorage.removeItem('auth');
+      return false;
     } finally {
       setIsAuthLoading(false);
     }

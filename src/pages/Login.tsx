@@ -10,7 +10,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, refreshSession } = useAuth();
+  const { refreshSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
@@ -29,12 +29,14 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
       });
       const data = await res.json();
       if (data.success) {
-        login();
-        await refreshSession();
-        setError('');
-        // call optional onLogin prop or navigate to original route
-        if (onLogin) onLogin();
-        else navigate(returnTo, { replace: true });
+        const authenticated = await refreshSession();
+        if (authenticated) {
+          setError('');
+          if (onLogin) onLogin();
+          else navigate(returnTo, { replace: true });
+        } else {
+          setError('Session could not be established. Please try again.');
+        }
       } else {
         setError('Invalid credentials');
       }
