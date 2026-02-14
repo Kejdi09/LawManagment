@@ -10,7 +10,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { refreshSession } = useAuth();
+  const { login, refreshSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
@@ -29,6 +29,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
       });
       const data = await res.json();
       if (data.success) {
+        if (data.token) login(data.token);
         const authenticated = await refreshSession();
         if (authenticated) {
           setError('');

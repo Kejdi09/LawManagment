@@ -3,9 +3,14 @@ import { Case, CaseState, CaseTask, Customer, CustomerNotification, HistoryRecor
 // When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("auth_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(options?.headers || {}) },
     credentials: 'include',
     ...options,
   });
@@ -144,7 +149,10 @@ export type StoredDocument = {
 };
 
 export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string): Promise<StoredDocument[]> {
-  const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, {
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to fetch documents');
   return (await res.json()) as StoredDocument[];
 }
@@ -154,7 +162,12 @@ export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: st
   form.append('ownerType', ownerType);
   form.append('ownerId', ownerId);
   form.append('file', file);
-  const res = await fetch(`${API_URL}/api/documents/upload`, { method: 'POST', body: form, credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents/upload`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Upload failed');
   return await res.json();
 }
@@ -164,7 +177,10 @@ export async function deleteDocument(docId: string) {
 }
 
 export async function fetchDocumentBlob(docId: string): Promise<{ blob: Blob; fileName: string | null }> {
-  const res = await fetch(`${API_URL}/api/documents/${docId}`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents/${docId}`, {
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to load document');
   const blob = await res.blob();
   const disposition = res.headers.get('content-disposition') || '';

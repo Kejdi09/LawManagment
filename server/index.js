@@ -318,6 +318,16 @@ function createAuthCookie(req, res, token) {
   res.cookie("token", token, getCookieOptions(req));
 }
 
+function extractAuthToken(req) {
+  const cookieToken = req.cookies?.token;
+  if (cookieToken) return cookieToken;
+  const authHeader = req.headers?.authorization || "";
+  if (typeof authHeader === "string" && authHeader.toLowerCase().startsWith("bearer ")) {
+    return authHeader.slice(7).trim();
+  }
+  return null;
+}
+
 app.post("/api/logout", (req, res) => {
   // Clear cookie using the same options to ensure browser removes it in cross-site scenarios
   res.clearCookie("token", getCookieOptions(req));
@@ -326,7 +336,7 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   try {
-    const token = req.cookies?.token;
+    const token = extractAuthToken(req);
     if (!token) return res.json({ authenticated: false });
     const payload = jwt.verify(token, JWT_SECRET);
     return res.json({ authenticated: true, user: payload });
@@ -355,7 +365,7 @@ app.get("/api/_debug/cookies", (req, res) => {
 // --- Auth middleware ---
 function verifyAuth(req, res, next) {
   try {
-    const token = req.cookies?.token;
+    const token = extractAuthToken(req);
     if (!token) return res.status(401).json({ error: 'unauthenticated' });
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
@@ -414,7 +424,7 @@ app.post("/api/login", async (req, res) => {
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
-    return res.json({ success: true, username: user.username });
+    return res.json({ success: true, username: user.username, token });
   } catch (err) {
     console.error("/api/login error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
