@@ -41,7 +41,7 @@ import { mapCaseStateToStage, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 
-const UNASSIGNED_LAWYER = "__UNASSIGNED__";
+const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 
 const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
@@ -103,7 +103,7 @@ const ClientsPage = () => {
       getCustomerHistory(client.customerId).catch(() => []),
       getDocuments("customer", client.customerId).catch(() => []),
     ]);
-    setSelectedCases(cases);
+    setSelectedCases(cases.filter((row) => row.customerId === client.customerId));
     setStatusHistoryRows(history);
     setClientDocuments(docs);
   };
@@ -125,19 +125,26 @@ const ClientsPage = () => {
     if (!form.customerId) return;
     const payload: Partial<Customer> = {
       ...form,
-      assignedTo: isAdmin ? (form.assignedTo || "") : (user?.lawyerName || form.assignedTo || ""),
+      assignedTo: isAdmin ? (form.assignedTo || "") : (user?.consultantName || user?.lawyerName || form.assignedTo || ""),
       followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(String(form.followUpDate)).toISOString() : null,
       services: form.services || [],
       serviceDescription: form.serviceDescription || "",
       notes: form.notes ?? "",
       contact: form.contact || form.name || "",
     };
-    await updateConfirmedClient(form.customerId, payload);
-    setShowEdit(false);
-    await load();
-    if (selectedClient?.customerId === form.customerId) {
-      const updated = await getConfirmedClients().then((rows) => rows.find((x) => x.customerId === form.customerId) || null);
-      if (updated) await openDetail(updated);
+    const { customerId, ...withoutId } = payload as Partial<Customer> & { customerId?: string; _id?: unknown };
+    const { _id, ...safePayload } = withoutId as typeof withoutId & { _id?: unknown };
+    try {
+      await updateConfirmedClient(form.customerId, safePayload);
+      setShowEdit(false);
+      await load();
+      if (selectedClient?.customerId === form.customerId) {
+        const updated = await getConfirmedClients().then((rows) => rows.find((x) => x.customerId === form.customerId) || null);
+        if (updated) await openDetail(updated);
+      }
+      toast({ title: "Saved", description: "Confirmed client updated" });
+    } catch (err) {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : "Unable to update confirmed client", variant: "destructive" });
     }
   };
 
@@ -214,6 +221,9 @@ const ClientsPage = () => {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Consultant</TableHead>
+                  <TableHead>Channel</TableHead>
+                  <TableHead>Services</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Status</TableHead>
@@ -223,7 +233,7 @@ const ClientsPage = () => {
               <TableBody>
                 {clients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
                       No confirmed clients yet.
                     </TableCell>
                   </TableRow>
@@ -232,6 +242,11 @@ const ClientsPage = () => {
                     <TableRow key={client.customerId} className="cursor-pointer" onClick={() => openDetail(client)}>
                       <TableCell className="font-mono text-xs">{client.customerId}</TableCell>
                       <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.assignedTo || "Unassigned"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[client.contactChannel]}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.services?.length || 0}</TableCell>
                       <TableCell className="text-sm">{client.phone}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{client.email}</TableCell>
                       <TableCell>
@@ -346,7 +361,7 @@ const ClientsPage = () => {
                             </div>
                             <div className="text-right text-muted-foreground">
                               <div>{formatDate(row.date, true)}</div>
-                              <div>{row.changedByLawyer || row.changedBy || "System"}</div>
+                              <div>{row.changedByConsultant || row.changedByLawyer || row.changedBy || "System"}</div>
                             </div>
                           </div>
                         ))}
@@ -441,17 +456,17 @@ const ClientsPage = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Assigned Lawyer</Label>
+                <Label>Assigned Consultant</Label>
                 {isAdmin ? (
-                  <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
+                  <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
                     <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
+                      <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
                       {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input value={user?.lawyerName || form.assignedTo || "My clients"} disabled />
+                  <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My clients"} disabled />
                 )}
               </div>
               <div className="space-y-2 md:col-span-2">

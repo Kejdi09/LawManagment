@@ -41,7 +41,7 @@ const Index = () => {
     assignedTo: LAWYERS[0],
   });
   const isAdmin = user?.role === "admin";
-  const currentLawyer = user?.lawyerName || "";
+  const currentLawyer = user?.consultantName || user?.lawyerName || "";
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -349,7 +349,7 @@ const Index = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Assigned To</label>
+              <label className="text-sm font-medium">Assigned Consultant</label>
               {isAdmin ? (
                 <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

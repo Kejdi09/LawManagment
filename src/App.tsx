@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-d
 import Index from "./pages/Index";
 import Customers from "./pages/Customers";
 import Clients from "./pages/Clients";
+import AdminActivity from "./pages/AdminActivity";
 import Archived from "./pages/Archived";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
             <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
             <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
+            <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
             <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

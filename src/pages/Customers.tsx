@@ -65,7 +65,7 @@ function safeFormatDate(dateValue: string | Date | null | undefined) {
 
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
-const UNASSIGNED_LAWYER = "__UNASSIGNED__";
+const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
 
 function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
@@ -133,7 +133,7 @@ const Customers = () => {
       return acc;
     }, {});
     setCaseCounts(counts);
-    // compute assigned lawyer per customer (most recent case assignedTo)
+    // compute assigned consultant per customer (most recent case assignedTo)
     const map: Record<string, { assignedTo: string; lastChange: number }> = {};
     for (const c of allCases) {
       const last = new Date(c.lastStateChange || 0).getTime();
@@ -292,7 +292,7 @@ const Customers = () => {
     try {
       const payload = {
         ...form,
-        assignedTo: form.assignedTo === UNASSIGNED_LAWYER ? "" : form.assignedTo,
+        assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : form.assignedTo,
         followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(form.followUpDate).toISOString() : null,
         contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
@@ -643,7 +643,7 @@ const Customers = () => {
 
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(c.customerId); }} aria-label="Delete">
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
@@ -717,17 +717,17 @@ const Customers = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Assigned Lawyer</Label>
+              <Label>Assigned Consultant</Label>
               {isAdmin ? (
-                <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
+                <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
+                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
                     {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               ) : (
-                <Input value={user?.lawyerName || form.assignedTo || "My customers"} disabled />
+                <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My customers"} disabled />
               )}
             </div>
             <div className="space-y-2">
@@ -888,7 +888,7 @@ const Customers = () => {
                                   <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[record.statusFrom as LeadStatus] || record.statusFrom}</span>
                                 </div>
                                 <span className="text-right text-muted-foreground">
-                                  {safeFormatDate(record.date)} • {record.changedByLawyer || record.changedBy || "System"}
+                                  {safeFormatDate(record.date)} • {record.changedByConsultant || record.changedByLawyer || record.changedBy || "System"}
                                 </span>
                               </div>
                             ))}

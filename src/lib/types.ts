@@ -66,7 +66,20 @@ export interface CustomerHistoryRecord {
   date: string;
   changedBy?: string | null;
   changedByRole?: string | null;
+  changedByConsultant?: string | null;
   changedByLawyer?: string | null;
+}
+
+export interface AuditLogRecord {
+  _id?: string;
+  username?: string | null;
+  role?: string | null;
+  consultantName?: string | null;
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+  details?: Record<string, unknown>;
+  at: string;
 }
 
 export interface Note {

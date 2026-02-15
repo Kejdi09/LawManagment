@@ -137,7 +137,7 @@ const MAX_STALE_HOURS = 120;
 const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
 const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
-const LAWYER_BY_USERNAME = {
+const CONSULTANT_BY_USERNAME = {
   adi: "Dr. Weber",
   fischer: "Mag. Fischer",
   klein: "Dr. Klein",
@@ -149,7 +149,7 @@ function isAdminUser(user) {
 
 function getUserLawyerName(user) {
   if (!user) return "";
-  return user.lawyerName || LAWYER_BY_USERNAME[user.username] || "";
+  return user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || "";
 }
 
 function buildCaseScopeFilter(user) {
@@ -340,9 +340,9 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 async function seedDemoUser() {
   try {
     const demoUsers = [
-      { username: "adi", password: "890", role: "admin", lawyerName: "Dr. Weber" },
-      { username: "fischer", password: "890", role: "lawyer", lawyerName: "Mag. Fischer" },
-      { username: "klein", password: "890", role: "lawyer", lawyerName: "Dr. Klein" },
+      { username: "adi", password: "890", role: "admin", consultantName: "Dr. Weber" },
+      { username: "fischer", password: "890", role: "consultant", consultantName: "Mag. Fischer" },
+      { username: "klein", password: "890", role: "consultant", consultantName: "Dr. Klein" },
     ];
 
     for (const demoUser of demoUsers) {
@@ -353,7 +353,8 @@ async function seedDemoUser() {
         username: demoUser.username,
         password: hashed,
         role: demoUser.role,
-        lawyerName: demoUser.lawyerName,
+        consultantName: demoUser.consultantName,
+        lawyerName: demoUser.consultantName,
         createdAt: new Date().toISOString(),
       });
     }
@@ -465,7 +466,16 @@ function requireRole(role) {
 async function logAudit({ username, role, action, resource, resourceId, details = {} }) {
   try {
     if (!auditLogsCol) return;
-    await auditLogsCol.insertOne({ username, role, action, resource, resourceId, details, at: new Date().toISOString() });
+    await auditLogsCol.insertOne({
+      username,
+      role,
+      consultantName: role === "admin" ? null : (CONSULTANT_BY_USERNAME[username] || null),
+      action,
+      resource,
+      resourceId,
+      details,
+      at: new Date().toISOString(),
+    });
   } catch (err) {
     console.warn('Failed to write audit log', err?.message || err);
   }
@@ -501,9 +511,10 @@ app.post("/api/login", async (req, res) => {
     if (!user) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
-    const token = jwt.sign({ username: user.username, role: user.role || "user", lawyerName: user.lawyerName || null }, JWT_SECRET, { expiresIn: "7d" });
+    const consultantName = user.consultantName || user.lawyerName || null;
+    const token = jwt.sign({ username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
-    return res.json({ success: true, username: user.username, role: user.role || "user", lawyerName: user.lawyerName || null, token });
+    return res.json({ success: true, username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName, token });
   } catch (err) {
     console.error("/api/login error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -570,6 +581,8 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
 app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+  delete update._id;
+  delete update.customerId;
 
   // Check if status is changing
   const scope = buildCustomerScopeFilter(req.user);
@@ -589,6 +602,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       date: new Date().toISOString(),
       changedBy: req.user?.username || null,
       changedByRole: req.user?.role || null,
+      changedByConsultant: getUserLawyerName(req.user) || null,
       changedByLawyer: getUserLawyerName(req.user) || null,
     });
 
@@ -630,6 +644,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+  delete update._id;
+  delete update.customerId;
   const scope = buildCustomerScopeFilter(req.user);
   const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
@@ -647,6 +663,7 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
       date: new Date().toISOString(),
       changedBy: req.user?.username || null,
       changedByRole: req.user?.role || null,
+      changedByConsultant: getUserLawyerName(req.user) || null,
       changedByLawyer: getUserLawyerName(req.user) || null,
     });
     if (!update.statusHistory) {
@@ -710,6 +727,9 @@ app.get("/api/customers/:id/cases", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/:id/history", verifyAuth, async (req, res) => {
+  const existsInCustomers = await customersCol.findOne({ customerId: req.params.id, ...buildCustomerScopeFilter(req.user) });
+  const existsInConfirmed = await confirmedClientsCol.findOne({ customerId: req.params.id, ...buildCustomerScopeFilter(req.user) });
+  if (!existsInCustomers && !existsInConfirmed) return res.status(404).json({ error: "Not found" });
   const docs = await customerHistoryCol.find({ customerId: req.params.id }).sort({ date: 1 }).toArray();
   res.json(docs);
 });
@@ -726,6 +746,7 @@ app.post("/api/customers/:id/history", verifyAuth, async (req, res) => {
     date: new Date().toISOString(),
     changedBy: req.user?.username || null,
     changedByRole: req.user?.role || null,
+    changedByConsultant: getUserLawyerName(req.user) || null,
     changedByLawyer: getUserLawyerName(req.user) || null,
   };
   await customerHistoryCol.insertOne(record);
@@ -855,6 +876,7 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
   const record = { historyId, caseId: id, stateFrom, stateIn, date: new Date().toISOString() };
   await historyCol.insertOne(record);
   await casesCol.updateOne({ caseId: id }, { $set: { state: stateIn, lastStateChange: record.date } });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case-history', resourceId: historyId, details: { caseId: id, stateFrom, stateIn } });
   res.status(201).json(record);
 });
 
@@ -913,6 +935,7 @@ app.post("/api/tasks/:taskId/toggle", verifyAuth, async (req, res) => {
   const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
   if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.updateOne({ taskId }, { $set: { done: !t.done } });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'toggle', resource: 'task', resourceId: taskId, details: { caseId: t.caseId, done: !t.done } });
   res.json({ ...t, done: !t.done });
 });
 
@@ -923,6 +946,7 @@ app.delete("/api/tasks/:taskId", verifyAuth, async (req, res) => {
   const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
   if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.deleteOne({ taskId });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'task', resourceId: taskId, details: { caseId: t.caseId } });
   res.json({ ok: true, taskId });
 });
 

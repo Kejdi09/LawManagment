@@ -68,7 +68,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const currentLawyer = user?.lawyerName || "";
+  const currentLawyer = user?.consultantName || user?.lawyerName || "";
   const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
   const formatOptionalDateTime = (value: string | null | undefined) => {
     if (!value) return "N/A";
@@ -459,7 +459,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                         <Input value={editForm.communicationMethod} onChange={(e) => setEditForm({ ...editForm, communicationMethod: e.target.value })} />
                       </div>
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">Assigned To</span>
+                        <span className="text-xs text-muted-foreground">Assigned Consultant</span>
                         {isAdmin ? (
                           <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm({ ...editForm, assignedTo: v })}>
                             <SelectTrigger><SelectValue /></SelectTrigger>

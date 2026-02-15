@@ -1,4 +1,4 @@
-import { Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
 
 // When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -216,4 +216,8 @@ export async function changeState(caseId: string, newState: CaseState): Promise<
 // ── Background rules ── (now driven by backend; keep placeholder)
 export async function checkAutomaticRules() {
   return { deletedCustomers: [], deletedCases: [], inactivityReminders: [], sendReminders: [] };
+}
+
+export async function getAuditLogs(): Promise<AuditLogRecord[]> {
+  return api<AuditLogRecord[]>("/api/audit/logs");
 }
