@@ -139,8 +139,8 @@ const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
 const CONSULTANT_BY_USERNAME = {
   adi: "Dr. Weber",
-  fischer: "Mag. Fischer",
-  klein: "Dr. Klein",
+  albert: "Mag. Albert",
+  kejdi: "Dr. Kejdi",
 };
 
 function isAdminUser(user) {
@@ -341,8 +341,8 @@ async function seedDemoUser() {
   try {
     const demoUsers = [
       { username: "adi", password: "890", role: "admin", consultantName: "Dr. Weber" },
-      { username: "fischer", password: "890", role: "consultant", consultantName: "Mag. Fischer" },
-      { username: "klein", password: "890", role: "consultant", consultantName: "Dr. Klein" },
+      { username: "albert", password: "890", role: "consultant", consultantName: "Mag. Albert" },
+      { username: "kejdi", password: "890", role: "consultant", consultantName: "Dr. Kejdi" },
     ];
 
     for (const demoUser of demoUsers) {
@@ -358,7 +358,7 @@ async function seedDemoUser() {
         createdAt: new Date().toISOString(),
       });
     }
-    console.log("Seeded default users: adi, fischer, klein.");
+    console.log("Seeded default users: adi, albert, kejdi.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
