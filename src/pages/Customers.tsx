@@ -529,7 +529,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                   <TableHead>Channel</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Cases</TableHead>
-                  <TableHead className="w-[120px] text-right">Actions</TableHead>
+                  <TableHead className="w-[220px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -592,10 +592,10 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                           <Badge variant="secondary">{caseCount}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => openEdit(c.customerId)} aria-label="Edit">
+                                <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                               </TooltipTrigger>
@@ -604,7 +604,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSetStatus(c.customerId, 'CLIENT')} aria-label="Mark as Client">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleSetStatus(c.customerId, 'CLIENT'); }} aria-label="Mark as Client">
                                   <Badge className="text-[10px]">Client</Badge>
                                 </Button>
                               </TooltipTrigger>
@@ -617,8 +617,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 text-destructive"
-                                    onClick={() => {
+                                    className="h-8 w-8 text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
                                         handleSetStatus(c.customerId, 'ARCHIVED');
                                       }
@@ -636,8 +637,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => {
+                                    className="h-8 w-8"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
                                         handleSetStatus(c.customerId, 'INTAKE');
                                       }
@@ -653,7 +655,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </TooltipTrigger>
