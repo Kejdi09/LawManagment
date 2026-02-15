@@ -167,81 +167,101 @@ async function insertCustomerNotification({ customerId, message, kind, severity 
 
 async function syncCustomerNotifications() {
   const nowMs = Date.now();
-  const customers = await customersCol.find({}).toArray();
+  const customerSets = [
+    { col: customersCol, docs: await customersCol.find({}).toArray() },
+    { col: confirmedClientsCol, docs: await confirmedClientsCol.find({}).toArray() },
+  ];
 
-  for (const customer of customers) {
-    const status = customer.status;
-    const lastStatusChangeAt = getLastStatusChangeAt(customer);
-    const prevTracker = customer.notificationTracker || {};
-    const statusChanged = prevTracker.status !== status || prevTracker.lastStatusChangeAt !== lastStatusChangeAt;
+  for (const set of customerSets) {
+    for (const customer of set.docs) {
+      const status = customer.status;
+      const lastStatusChangeAt = getLastStatusChangeAt(customer);
+      const prevTracker = customer.notificationTracker || {};
+      const statusChanged = prevTracker.status !== status || prevTracker.lastStatusChangeAt !== lastStatusChangeAt;
 
-    const tracker = statusChanged
-      ? {
-        status,
-        lastStatusChangeAt,
-        followupCount: 0,
-        lastFollowupAt: null,
-        lastRespondAt: null,
-        followupSuppressed: false,
+      const tracker = statusChanged
+        ? {
+          status,
+          lastStatusChangeAt,
+          followupCount: 0,
+          lastFollowupAt: null,
+          lastRespondAt: null,
+          followupSuppressed: false,
+          onHoldFollowupNotifiedFor: null,
+        }
+        : {
+          status,
+          lastStatusChangeAt,
+          followupCount: Number(prevTracker.followupCount || 0),
+          lastFollowupAt: prevTracker.lastFollowupAt || null,
+          lastRespondAt: prevTracker.lastRespondAt || null,
+          followupSuppressed: Boolean(prevTracker.followupSuppressed),
+          onHoldFollowupNotifiedFor: prevTracker.onHoldFollowupNotifiedFor || null,
+        };
+
+      if (statusChanged) {
+        await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
       }
-      : {
-        status,
-        lastStatusChangeAt,
-        followupCount: Number(prevTracker.followupCount || 0),
-        lastFollowupAt: prevTracker.lastFollowupAt || null,
-        lastRespondAt: prevTracker.lastRespondAt || null,
-        followupSuppressed: Boolean(prevTracker.followupSuppressed),
-      };
 
-    if (statusChanged) {
-      await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
-    }
+      const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
 
-    const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
+      if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
+        const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
+        const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
 
-    if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
-      const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
-      const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
-
-      if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
-        if (tracker.followupCount >= 3) {
-          tracker.followupSuppressed = true;
-          await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
-        } else {
-          await insertCustomerNotification({
-            customerId: customer.customerId,
-            message: `Follow up ${customer.name}`,
-            kind: "follow",
-            severity: followupInterval === 72 ? "critical" : "warn",
-          });
-          tracker.followupCount += 1;
-          tracker.lastFollowupAt = new Date(nowMs).toISOString();
+        if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
           if (tracker.followupCount >= 3) {
             tracker.followupSuppressed = true;
             await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+          } else {
+            await insertCustomerNotification({
+              customerId: customer.customerId,
+              message: `Follow up ${customer.name}`,
+              kind: "follow",
+              severity: followupInterval === 72 ? "critical" : "warn",
+            });
+            tracker.followupCount += 1;
+            tracker.lastFollowupAt = new Date(nowMs).toISOString();
+            if (tracker.followupCount >= 3) {
+              tracker.followupSuppressed = true;
+              await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+            }
           }
         }
       }
-    }
 
-    if (RESPOND_24H_STATUSES.includes(status)) {
-      const respondInterval = 24;
-      const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
-      if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
-        await insertCustomerNotification({
-          customerId: customer.customerId,
-          message: `Respond to ${customer.name}`,
-          kind: "respond",
-          severity: "warn",
-        });
-        tracker.lastRespondAt = new Date(nowMs).toISOString();
+      if (RESPOND_24H_STATUSES.includes(status)) {
+        const respondInterval = 24;
+        const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
+        if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Respond to ${customer.name}`,
+            kind: "respond",
+            severity: "warn",
+          });
+          tracker.lastRespondAt = new Date(nowMs).toISOString();
+        }
       }
-    }
 
-    await customersCol.updateOne(
-      { customerId: customer.customerId },
-      { $set: { notificationTracker: tracker } }
-    );
+      if (status === "ON_HOLD" && customer.followUpDate) {
+        const followUpTime = new Date(customer.followUpDate).getTime();
+        if (Number.isFinite(followUpTime) && followUpTime <= nowMs && tracker.onHoldFollowupNotifiedFor !== customer.followUpDate) {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Follow up ${customer.name} ${customer.customerId}`,
+            kind: "follow",
+            severity: "warn",
+          });
+          tracker.onHoldFollowupNotifiedFor = customer.followUpDate;
+        }
+      }
+
+      await set.col.updateOne(
+        { customerId: customer.customerId },
+        { $set: { notificationTracker: tracker } }
+      );
+    }
   }
 }
 async function genCustomerId() {
@@ -437,13 +457,19 @@ app.post("/api/login", async (req, res) => {
 
 // Customers
 app.get("/api/customers", async (req, res) => {
-  const docs = await customersCol.find({}).sort({ customerId: 1 }).toArray();
+  const docs = await customersCol.find({ status: { $ne: "CLIENT" } }).sort({ customerId: 1 }).toArray();
   res.json(docs);
 });
 
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
   const docs = await confirmedClientsCol.find({}).sort({ customerId: 1 }).toArray();
   res.json(docs);
+});
+
+app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const doc = await confirmedClientsCol.findOne({ customerId: req.params.id });
+  if (!doc) return res.status(404).json({ error: "Not found" });
+  res.json(doc);
 });
 
 app.get("/api/customers/notifications", async (req, res) => {
@@ -531,6 +557,36 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   res.json(updated);
 });
 
+app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const { id } = req.params;
+  const update = { ...req.body };
+  const current = await confirmedClientsCol.findOne({ customerId: id });
+  if (!current) return res.status(404).json({ error: "Not found" });
+
+  if (current.status !== update.status) {
+    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    await customerHistoryCol.insertOne({
+      historyId,
+      customerId: id,
+      statusFrom: current.status,
+      statusTo: update.status,
+      date: new Date().toISOString(),
+    });
+    if (!update.statusHistory) {
+      update.statusHistory = (current.statusHistory || []);
+    }
+    update.statusHistory.push({
+      status: update.status,
+      date: new Date().toISOString(),
+    });
+  }
+
+  await confirmedClientsCol.updateOne({ customerId: id }, { $set: update });
+  const updated = await confirmedClientsCol.findOne({ customerId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
+  res.json(updated);
+});
+
 app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
@@ -544,6 +600,22 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customersCol.deleteOne({ customerId: id }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'customer', resourceId: id });
+  res.json({ ok: true });
+});
+
+app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const { id } = req.params;
+  const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
+  const relatedCaseIds = relatedCases.map((c) => c.caseId);
+  await Promise.all([
+    casesCol.deleteMany({ customerId: id }),
+    historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    customerHistoryCol.deleteMany({ customerId: id }),
+    confirmedClientsCol.deleteOne({ customerId: id }),
+  ]);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'confirmedClient', resourceId: id });
   res.json({ ok: true });
 });
 

@@ -44,10 +44,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import SharedHeader from "@/components/SharedHeader";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -84,8 +83,8 @@ const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
 ];
 
 const Customers = () => {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -103,6 +102,7 @@ const Customers = () => {
     serviceDescription: "",
     contactChannel: "email" as keyof typeof CONTACT_CHANNEL_LABELS,
     assignedTo: "",
+    followUpDate: "",
     status: "INTAKE",
     notes: "",
   });
@@ -195,13 +195,18 @@ const Customers = () => {
   }, [filteredCustomers, selectedCategories]);
 
   const groupedCustomers = useMemo(() => {
+    const sectionFiltered = categoryFilteredCustomers.filter((customer) => {
+      if (sectionView === "on_hold") return customer.status === "ON_HOLD";
+      if (sectionView === "archived") return customer.status === "ARCHIVED";
+      return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
+    });
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: categoryFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: sectionFiltered.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [categoryFilteredCustomers]);
+  }, [categoryFilteredCustomers, sectionView]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -248,6 +253,7 @@ const Customers = () => {
       serviceDescription: "",
       contactChannel: "email",
       assignedTo: "",
+      followUpDate: "",
       status: "INTAKE",
       notes: "",
     });
@@ -268,6 +274,7 @@ const Customers = () => {
       services: c.services || [],
       serviceDescription: c.serviceDescription || "",
       assignedTo: c.assignedTo || "",
+      followUpDate: c.followUpDate ? String(c.followUpDate).slice(0, 10) : "",
       notes: c.notes ?? "",
     });
     setShowForm(true);
@@ -278,6 +285,7 @@ const Customers = () => {
       const payload = {
         ...form,
         assignedTo: form.assignedTo === UNASSIGNED_LAWYER ? "" : form.assignedTo,
+        followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(form.followUpDate).toISOString() : null,
         contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
         services: form.services || [],
@@ -506,6 +514,11 @@ const Customers = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button variant={sectionView === "main" ? "default" : "outline"} size="sm" onClick={() => setSectionView("main")}>Main</Button>
+            <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
+            <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
+          </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
@@ -715,6 +728,16 @@ const Customers = () => {
                 </SelectContent>
               </Select>
             </div>
+            {form.status === "ON_HOLD" && (
+              <div className="space-y-2">
+                <Label>Follow Up Date</Label>
+                <Input
+                  type="date"
+                  value={form.followUpDate || ""}
+                  onChange={(e) => setForm({ ...form, followUpDate: e.target.value })}
+                />
+              </div>
+            )}
             <div className="md:col-span-2 space-y-2">
               <Label>Services</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">

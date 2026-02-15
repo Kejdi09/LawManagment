@@ -76,6 +76,14 @@ export async function getConfirmedClients(): Promise<Customer[]> {
   return api<Customer[]>("/api/confirmed-clients");
 }
 
+export async function updateConfirmedClient(customerId: string, patch: Partial<Customer>): Promise<Customer> {
+  return api<Customer>(`/api/confirmed-clients/${customerId}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+
+export async function deleteConfirmedClient(customerId: string): Promise<void> {
+  await api(`/api/confirmed-clients/${customerId}`, { method: "DELETE" });
+}
+
 export async function getCustomerById(customerId: string): Promise<Customer | null> {
   try {
     return await api<Customer>(`/api/customers/${customerId}`);

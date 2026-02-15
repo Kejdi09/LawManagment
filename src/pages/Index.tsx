@@ -83,7 +83,7 @@ const Index = () => {
       }
 
       // Deadline notifications
-      if (c.deadline) {
+      if (c.deadline && mapCaseStateToStage(c.state) !== "FINALIZED") {
         const deadlineTime = new Date(c.deadline).getTime();
         const hoursUntilDeadline = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
         
