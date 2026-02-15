@@ -43,8 +43,8 @@ export interface Customer {
   services: ServiceType[];
   serviceDescription: string;
   contactChannel: ContactChannel;
-  status: LeadStatus;
   assignedTo?: string;
+  status: LeadStatus;
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
   notes?: string;
 }

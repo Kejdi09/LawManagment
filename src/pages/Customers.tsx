@@ -19,6 +19,7 @@ import {
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
+  LAWYERS,
   Customer,
   Case,
   CustomerNotification,
@@ -27,7 +28,6 @@ import {
   ServiceType,
 } from "@/lib/types";
 import { mapCaseStateToStage } from "@/lib/utils";
-import { LAWYERS } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -89,8 +89,8 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     services: [] as (keyof typeof SERVICE_LABELS)[],
     serviceDescription: "",
     contactChannel: "email" as keyof typeof CONTACT_CHANNEL_LABELS,
-    status: "INTAKE",
     assignedTo: "",
+    status: "INTAKE",
     notes: "",
   });
 
@@ -559,7 +559,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                     return (
                       <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
                         <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{c.assignedTo || assignedMap[c.customerId] || '-'}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{assignedMap[c.customerId] || '-'}</TableCell>
                         <TableCell className="font-medium">{c.name}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
                         <TableCell className="text-sm">{c.phone}</TableCell>
@@ -592,11 +592,11 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                           <Badge variant="secondary">{caseCount}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end items-center space-x-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => openEdit(c.customerId)} aria-label="Edit">
-                                  <Pencil className="h-4 w-4" />
+                                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => openEdit(c.customerId)} aria-label="Edit">
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Edit</TooltipContent>
@@ -604,8 +604,8 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleSetStatus(c.customerId, 'CLIENT')} aria-label="Mark as Client">
-                                  <Badge className="text-xs">Client</Badge>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSetStatus(c.customerId, 'CLIENT')} aria-label="Mark as Client">
+                                  <Badge className="text-[10px]">Client</Badge>
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Mark as Client</TooltipContent>
@@ -617,7 +617,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-9 w-9 text-destructive"
+                                    className="h-7 w-7 text-destructive"
                                     onClick={() => {
                                       if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
                                         handleSetStatus(c.customerId, 'ARCHIVED');
@@ -625,7 +625,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                     }}
                                     aria-label="Archive"
                                   >
-                                    <Archive className="h-4 w-4" />
+                                    <Archive className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Archive</TooltipContent>
@@ -636,7 +636,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-9 w-9"
+                                    className="h-7 w-7"
                                     onClick={() => {
                                       if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
                                         handleSetStatus(c.customerId, 'INTAKE');
@@ -644,7 +644,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                                     }}
                                     aria-label="Unarchive"
                                   >
-                                    <Archive className="h-4 w-4 rotate-180" />
+                                    <Archive className="h-3.5 w-3.5 rotate-180" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Unarchive</TooltipContent>
@@ -653,8 +653,8 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => { if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Delete</TooltipContent>
