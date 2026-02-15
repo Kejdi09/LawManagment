@@ -70,7 +70,20 @@ function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
 }
 
-const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 'active' | 'clients' | 'archived' } = {}) => {
+const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
+  "INTAKE",
+  "SEND_PROPOSAL",
+  "WAITING_APPROVAL",
+  "SEND_CONTRACT",
+  "WAITING_ACCEPTANCE",
+  "SEND_RESPONSE",
+  "CLIENT",
+  "ARCHIVED",
+  "ON_HOLD",
+  "CONSULTATION_SCHEDULED",
+];
+
+const Customers = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,7 +116,6 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [statusView, setStatusView] = useState<'all' | 'active' | 'clients' | 'archived'>(initialStatusView);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
@@ -182,22 +194,14 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     return filteredCustomers.filter((customer) => selectedCategories.includes(getCustomerCategory(customer.customerType)));
   }, [filteredCustomers, selectedCategories]);
 
-  const statusFilteredCustomers = useMemo(() => {
-    if (statusView === 'all') return categoryFilteredCustomers;
-    if (statusView === 'clients') return categoryFilteredCustomers.filter((c) => c.status === 'CLIENT');
-    if (statusView === 'archived') return categoryFilteredCustomers.filter((c) => c.status === 'ARCHIVED');
-    // active = not client and not archived
-    return categoryFilteredCustomers.filter((c) => c.status !== 'CLIENT' && c.status !== 'ARCHIVED');
-  }, [categoryFilteredCustomers, statusView]);
-
   const groupedCustomers = useMemo(() => {
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: statusFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: categoryFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [statusFilteredCustomers]);
+  }, [categoryFilteredCustomers]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -228,7 +232,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
   const serviceEntries = Object.entries(SERVICE_LABELS);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
-  const statusEntries = Object.entries(LEAD_STATUS_LABELS);
+  const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
 
   const resetForm = () => {
     setEditingId(null);
@@ -502,12 +506,6 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className="flex items-center gap-2">
-            <Button variant={statusView === 'all' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('all')}>All</Button>
-            <Button variant={statusView === 'active' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('active')}>Active</Button>
-            <Button variant={statusView === 'clients' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('clients')}>Clients</Button>
-            <Button variant={statusView === 'archived' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('archived')}>Archived</Button>
-          </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
             <Plus className="h-4 w-4" /> New Customer
@@ -520,13 +518,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">ID</TableHead>
-                  <TableHead>Lawyer</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Registration</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Services</TableHead>
-                  <TableHead>Channel</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Cases</TableHead>
                   <TableHead className="w-[220px] text-right">Actions</TableHead>
@@ -535,14 +529,14 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
               <TableBody>
                 {groupedCustomers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                       No customers match the selected categories/search.
                     </TableCell>
                   </TableRow>
                 )}
                 {groupedCustomers.flatMap((group) => ([
                   <TableRow key={`group-${group.type}-header`} className="bg-muted/30">
-                    <TableCell colSpan={10} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableCell colSpan={7} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <button
                         type="button"
                         className="inline-flex items-center gap-1"
@@ -553,119 +547,91 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                       </button>
                     </TableCell>
                   </TableRow>,
-                  ...(collapsedCategories.includes(group.type) ? [] : group.items.map((c) => {
-                    const caseCount = caseCounts[c.customerId] || 0;
-                    const servicesLabel = c.services.map((s) => SERVICE_LABELS[s]);
-                    return (
-                      <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
-                        <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{assignedMap[c.customerId] || '-'}</TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
-                        <TableCell className="text-sm">{c.phone}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm" className="h-7 px-2">
-                                {servicesLabel[0]}{servicesLabel.length > 1 ? ` +${servicesLabel.length - 1}` : ""}
-                                <ChevronDown className="h-3 w-3 ml-1" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              {servicesLabel.map((s) => (
-                                <DropdownMenuItem key={s}>{s}</DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[c.contactChannel]}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
-                            {LEAD_STATUS_LABELS[c.status]}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right flex items-center justify-end gap-2">
-                          {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
-                          <Badge variant="secondary">{caseCount}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Edit</TooltipContent>
-                            </Tooltip>
-
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleSetStatus(c.customerId, 'CLIENT'); }} aria-label="Mark as Client">
-                                  <Badge className="text-[10px]">Client</Badge>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Mark as Client</TooltipContent>
-                            </Tooltip>
-
-                            {c.status !== 'ARCHIVED' ? (
+                  ...(collapsedCategories.includes(group.type)
+                    ? []
+                    : group.items.map((c) => {
+                      const caseCount = caseCounts[c.customerId] || 0;
+                      return (
+                        <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
+                          <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-sm">{c.phone}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
+                              {LEAD_STATUS_LABELS[c.status]}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right flex items-center justify-end gap-2">
+                            {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
+                            <Badge variant="secondary">{caseCount}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-destructive"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
-                                        handleSetStatus(c.customerId, 'ARCHIVED');
-                                      }
-                                    }}
-                                    aria-label="Archive"
-                                  >
-                                    <Archive className="h-3.5 w-3.5" />
+                                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
+                                    <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Archive</TooltipContent>
+                                <TooltipContent>Edit</TooltipContent>
                               </Tooltip>
-                            ) : (
+
+                              {c.status !== 'ARCHIVED' ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
+                                          handleSetStatus(c.customerId, 'ARCHIVED');
+                                        }
+                                      }}
+                                      aria-label="Archive"
+                                    >
+                                      <Archive className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Archive</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
+                                          handleSetStatus(c.customerId, 'INTAKE');
+                                        }
+                                      }}
+                                      aria-label="Unarchive"
+                                    >
+                                      <Archive className="h-3.5 w-3.5 rotate-180" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Unarchive</TooltipContent>
+                                </Tooltip>
+                              )}
+
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
-                                        handleSetStatus(c.customerId, 'INTAKE');
-                                      }
-                                    }}
-                                    aria-label="Unarchive"
-                                  >
-                                    <Archive className="h-3.5 w-3.5 rotate-180" />
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Unarchive</TooltipContent>
+                                <TooltipContent>Delete</TooltipContent>
                               </Tooltip>
-                            )}
-
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }))
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }))
                 ]))}
               </TableBody>
             </Table>

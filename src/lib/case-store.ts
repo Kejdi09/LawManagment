@@ -72,6 +72,10 @@ export async function getAllCustomers(): Promise<Customer[]> {
   return api<Customer[]>("/api/customers");
 }
 
+export async function getConfirmedClients(): Promise<Customer[]> {
+  return api<Customer[]>("/api/confirmed-clients");
+}
+
 export async function getCustomerById(customerId: string): Promise<Customer | null> {
   try {
     return await api<Customer>(`/api/customers/${customerId}`);

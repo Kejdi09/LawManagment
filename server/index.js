@@ -57,6 +57,7 @@ let casesCol;
 let historyCol;
 let customerHistoryCol;
 let customerNotificationsCol;
+let confirmedClientsCol;
 let notesCol;
 let tasksCol;
 let usersCol;
@@ -95,6 +96,7 @@ async function connectDb() {
   historyCol = db.collection("history");
   customerHistoryCol = db.collection("customerHistory");
   customerNotificationsCol = db.collection("customerNotifications");
+  confirmedClientsCol = db.collection("confirmedClients");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
   usersCol = db.collection("users");
@@ -439,6 +441,11 @@ app.get("/api/customers", async (req, res) => {
   res.json(docs);
 });
 
+app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
+  const docs = await confirmedClientsCol.find({}).sort({ customerId: 1 }).toArray();
+  res.json(docs);
+});
+
 app.get("/api/customers/notifications", async (req, res) => {
   await syncCustomerNotifications();
   const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(50).toArray();
@@ -454,7 +461,20 @@ app.get("/api/customers/:id", async (req, res) => {
 app.post("/api/customers", verifyAuth, async (req, res) => {
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId };
-  await customersCol.insertOne(payload);
+  if (payload.status === "CLIENT") {
+    const confirmedPayload = {
+      ...payload,
+      sourceCustomerId: customerId,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne(
+      { customerId },
+      { $set: confirmedPayload },
+      { upsert: true }
+    );
+  } else {
+    await customersCol.insertOne(payload);
+  }
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'customer', resourceId: customerId, details: { payload } });
   res.status(201).json(payload);
 });
@@ -484,6 +504,24 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       status: update.status,
       date: new Date().toISOString()
     });
+  }
+
+  if (update.status === "CLIENT") {
+    const confirmedPayload = {
+      ...current,
+      ...update,
+      customerId: id,
+      sourceCustomerId: id,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne(
+      { customerId: id },
+      { $set: confirmedPayload },
+      { upsert: true }
+    );
+    await customersCol.deleteOne({ customerId: id });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'migrate', resource: 'customer', resourceId: id, details: { to: 'confirmedClients' } });
+    return res.json(confirmedPayload);
   }
 
   await customersCol.updateOne({ customerId: id }, { $set: update });
