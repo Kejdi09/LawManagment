@@ -14,38 +14,52 @@ const AUTH_TOKEN_KEY = 'auth_token';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem(AUTH_FLAG_KEY) === 'true');
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    localStorage.getItem(AUTH_FLAG_KEY) === 'true' || Boolean(localStorage.getItem(AUTH_TOKEN_KEY))
+  );
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const refreshSession = async (): Promise<boolean> => {
+    setIsAuthLoading(true);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const fallbackAuthenticated = localStorage.getItem(AUTH_FLAG_KEY) === 'true' || Boolean(token);
+
     try {
       const API_URL = import.meta.env.VITE_API_URL ?? '';
-      const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      const res = await fetch(`${API_URL}/api/me`, {
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) {
-        setIsAuthenticated(false);
-        localStorage.removeItem(AUTH_FLAG_KEY);
-        return false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const res = await fetch(`${API_URL}/api/me`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          });
+          if (!res.ok) throw new Error(`session_check_failed_${res.status}`);
+          const data = await res.json();
+
+          if (data?.authenticated) {
+            setIsAuthenticated(true);
+            localStorage.setItem(AUTH_FLAG_KEY, 'true');
+            return true;
+          }
+
+          setIsAuthenticated(false);
+          localStorage.removeItem(AUTH_FLAG_KEY);
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          return false;
+        } catch (err) {
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+          }
+        }
       }
-      const data = await res.json();
-      if (data?.authenticated) {
-        setIsAuthenticated(true);
-        localStorage.setItem(AUTH_FLAG_KEY, 'true');
-        return true;
-      } else {
-        setIsAuthenticated(false);
-        localStorage.removeItem(AUTH_FLAG_KEY);
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        return false;
-      }
+
+      // Keep local authenticated state on transient outages (e.g., Render cold start)
+      setIsAuthenticated(fallbackAuthenticated);
+      if (fallbackAuthenticated) localStorage.setItem(AUTH_FLAG_KEY, 'true');
+      return fallbackAuthenticated;
     } catch {
-      setIsAuthenticated(false);
-      localStorage.removeItem(AUTH_FLAG_KEY);
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      return false;
+      setIsAuthenticated(fallbackAuthenticated);
+      if (fallbackAuthenticated) localStorage.setItem(AUTH_FLAG_KEY, 'true');
+      return fallbackAuthenticated;
     } finally {
       setIsAuthLoading(false);
     }

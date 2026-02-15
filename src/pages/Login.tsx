@@ -27,22 +27,19 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
         credentials: 'include',
         body: JSON.stringify({ username, password })
       });
-      const data = await res.json();
-      if (data.success) {
-        if (data.token) login(data.token);
-        const authenticated = await refreshSession();
-        if (authenticated) {
-          setError('');
-          if (onLogin) onLogin();
-          else navigate(returnTo, { replace: true });
-        } else {
-          setError('Session could not be established. Please try again.');
-        }
+      const data = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (res.ok && (data as { success?: boolean }).success) {
+        login((data as { token?: string }).token);
+        setError('');
+        if (onLogin) onLogin();
+        else navigate(returnTo, { replace: true });
+        void refreshSession();
       } else {
-        setError('Invalid credentials');
+        const message = (data as { message?: string }).message || (res.status >= 500 ? 'Server is unavailable. Please try again shortly.' : 'Invalid credentials');
+        setError(message);
       }
-    } catch (err) {
-      setError('Server error');
+    } catch {
+      setError('Could not reach server. Check backend URL/deployment and try again.');
     } finally {
       setLoading(false);
     }
