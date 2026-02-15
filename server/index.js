@@ -137,6 +137,48 @@ const MAX_STALE_HOURS = 120;
 const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
 const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
+const LAWYER_BY_USERNAME = {
+  adi: "Dr. Weber",
+  fischer: "Mag. Fischer",
+  klein: "Dr. Klein",
+};
+
+function isAdminUser(user) {
+  return user?.role === "admin";
+}
+
+function getUserLawyerName(user) {
+  if (!user) return "";
+  return user.lawyerName || LAWYER_BY_USERNAME[user.username] || "";
+}
+
+function buildCaseScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  return { assignedTo: lawyerName };
+}
+
+function buildCustomerScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  return { assignedTo: lawyerName };
+}
+
+function userCanAccessCustomer(user, customer) {
+  if (!customer) return false;
+  if (isAdminUser(user)) return true;
+  const lawyerName = getUserLawyerName(user);
+  return Boolean(lawyerName) && customer.assignedTo === lawyerName;
+}
+
+function userCanAccessCase(user, doc) {
+  if (!doc) return false;
+  if (isAdminUser(user)) return true;
+  const lawyerName = getUserLawyerName(user);
+  return Boolean(lawyerName) && doc.assignedTo === lawyerName;
+}
 
 function getLastStatusChangeAt(customer) {
   if (Array.isArray(customer.statusHistory) && customer.statusHistory.length > 0) {
@@ -297,12 +339,25 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 // Auth helpers
 async function seedDemoUser() {
   try {
-    const existing = await usersCol.findOne({ username: "adi" });
-    if (!existing) {
-      const hashed = await bcrypt.hash("890", 10);
-      await usersCol.insertOne({ username: "adi", password: hashed, role: "admin", createdAt: new Date().toISOString() });
-      console.log("Seeded demo user 'adi'.");
+    const demoUsers = [
+      { username: "adi", password: "890", role: "admin", lawyerName: "Dr. Weber" },
+      { username: "fischer", password: "890", role: "lawyer", lawyerName: "Mag. Fischer" },
+      { username: "klein", password: "890", role: "lawyer", lawyerName: "Dr. Klein" },
+    ];
+
+    for (const demoUser of demoUsers) {
+      const existing = await usersCol.findOne({ username: demoUser.username });
+      if (existing) continue;
+      const hashed = await bcrypt.hash(demoUser.password, 10);
+      await usersCol.insertOne({
+        username: demoUser.username,
+        password: hashed,
+        role: demoUser.role,
+        lawyerName: demoUser.lawyerName,
+        createdAt: new Date().toISOString(),
+      });
     }
+    console.log("Seeded default users: adi, fischer, klein.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
@@ -446,9 +501,9 @@ app.post("/api/login", async (req, res) => {
     if (!user) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
-    const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ username: user.username, role: user.role || "user", lawyerName: user.lawyerName || null }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
-    return res.json({ success: true, username: user.username, token });
+    return res.json({ success: true, username: user.username, role: user.role || "user", lawyerName: user.lawyerName || null, token });
   } catch (err) {
     console.error("/api/login error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -456,18 +511,21 @@ app.post("/api/login", async (req, res) => {
 });
 
 // Customers
-app.get("/api/customers", async (req, res) => {
-  const docs = await customersCol.find({ status: { $ne: "CLIENT" } }).sort({ customerId: 1 }).toArray();
+app.get("/api/customers", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const docs = await customersCol.find({ status: { $ne: "CLIENT" }, ...scope }).sort({ customerId: 1 }).toArray();
   res.json(docs);
 });
 
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
-  const docs = await confirmedClientsCol.find({}).sort({ customerId: 1 }).toArray();
+  const scope = buildCustomerScopeFilter(req.user);
+  const docs = await confirmedClientsCol.find(scope).sort({ customerId: 1 }).toArray();
   res.json(docs);
 });
 
 app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
-  const doc = await confirmedClientsCol.findOne({ customerId: req.params.id });
+  const scope = buildCustomerScopeFilter(req.user);
+  const doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...scope });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
@@ -478,8 +536,9 @@ app.get("/api/customers/notifications", async (req, res) => {
   res.json(docs);
 });
 
-app.get("/api/customers/:id", async (req, res) => {
-  const doc = await customersCol.findOne({ customerId: req.params.id });
+app.get("/api/customers/:id", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const doc = await customersCol.findOne({ customerId: req.params.id, ...scope });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
@@ -487,6 +546,9 @@ app.get("/api/customers/:id", async (req, res) => {
 app.post("/api/customers", verifyAuth, async (req, res) => {
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId };
+  if (!isAdminUser(req.user)) {
+    payload.assignedTo = getUserLawyerName(req.user);
+  }
   if (payload.status === "CLIENT") {
     const confirmedPayload = {
       ...payload,
@@ -510,7 +572,12 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const update = { ...req.body };
 
   // Check if status is changing
-  const current = await customersCol.findOne({ customerId: id });
+  const scope = buildCustomerScopeFilter(req.user);
+  const current = await customersCol.findOne({ customerId: id, ...scope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
   if (current && current.status !== update.status) {
     // Create status history entry
     const historyId = `CH${pad3(Date.now() % 1000)}`;
@@ -519,7 +586,10 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       customerId: id,
       statusFrom: current.status,
       statusTo: update.status,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      changedBy: req.user?.username || null,
+      changedByRole: req.user?.role || null,
+      changedByLawyer: getUserLawyerName(req.user) || null,
     });
 
     // Initialize or update statusHistory array
@@ -545,13 +615,13 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       { $set: confirmedPayload },
       { upsert: true }
     );
-    await customersCol.deleteOne({ customerId: id });
+    await customersCol.deleteOne({ customerId: id, ...scope });
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'migrate', resource: 'customer', resourceId: id, details: { to: 'confirmedClients' } });
     return res.json(confirmedPayload);
   }
 
-  await customersCol.updateOne({ customerId: id }, { $set: update });
-  const updated = await customersCol.findOne({ customerId: id });
+  await customersCol.updateOne({ customerId: id, ...scope }, { $set: update });
+  const updated = await customersCol.findOne({ customerId: id, ...scope });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
   if (!updated) return res.status(404).json({ error: "Not found" });
   res.json(updated);
@@ -560,8 +630,12 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
-  const current = await confirmedClientsCol.findOne({ customerId: id });
+  const scope = buildCustomerScopeFilter(req.user);
+  const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
 
   if (current.status !== update.status) {
     const historyId = `CH${pad3(Date.now() % 1000)}`;
@@ -571,6 +645,9 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
       statusFrom: current.status,
       statusTo: update.status,
       date: new Date().toISOString(),
+      changedBy: req.user?.username || null,
+      changedByRole: req.user?.role || null,
+      changedByLawyer: getUserLawyerName(req.user) || null,
     });
     if (!update.statusHistory) {
       update.statusHistory = (current.statusHistory || []);
@@ -581,23 +658,27 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     });
   }
 
-  await confirmedClientsCol.updateOne({ customerId: id }, { $set: update });
-  const updated = await confirmedClientsCol.findOne({ customerId: id });
+  await confirmedClientsCol.updateOne({ customerId: id, ...scope }, { $set: update });
+  const updated = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
   res.json(updated);
 });
 
 app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
-  const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
+  const customerScope = buildCustomerScopeFilter(req.user);
+  const current = await customersCol.findOne({ customerId: id, ...customerScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  const caseScope = buildCaseScopeFilter(req.user);
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
   await Promise.all([
-    casesCol.deleteMany({ customerId: id }),
+    casesCol.deleteMany({ customerId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     customerHistoryCol.deleteMany({ customerId: id }),
-    customersCol.deleteOne({ customerId: id }),
+    customersCol.deleteOne({ customerId: id, ...customerScope }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'customer', resourceId: id });
   res.json({ ok: true });
@@ -605,47 +686,60 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
 
 app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
-  const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
+  const customerScope = buildCustomerScopeFilter(req.user);
+  const current = await confirmedClientsCol.findOne({ customerId: id, ...customerScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  const caseScope = buildCaseScopeFilter(req.user);
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
   await Promise.all([
-    casesCol.deleteMany({ customerId: id }),
+    casesCol.deleteMany({ customerId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     customerHistoryCol.deleteMany({ customerId: id }),
-    confirmedClientsCol.deleteOne({ customerId: id }),
+    confirmedClientsCol.deleteOne({ customerId: id, ...customerScope }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'confirmedClient', resourceId: id });
   res.json({ ok: true });
 });
 
-app.get("/api/customers/:id/cases", async (req, res) => {
-  const docs = await casesCol.find({ customerId: req.params.id }).toArray();
+app.get("/api/customers/:id/cases", verifyAuth, async (req, res) => {
+  const docs = await casesCol.find({ customerId: req.params.id, ...buildCaseScopeFilter(req.user) }).toArray();
   res.json(docs);
 });
 
-app.get("/api/customers/:id/history", async (req, res) => {
+app.get("/api/customers/:id/history", verifyAuth, async (req, res) => {
   const docs = await customerHistoryCol.find({ customerId: req.params.id }).sort({ date: 1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/customers/:id/history", async (req, res) => {
+app.post("/api/customers/:id/history", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const { statusFrom, statusTo } = req.body;
   const historyId = `CH${pad3(Date.now() % 1000)}`;
-  const record = { historyId, customerId: id, statusFrom, statusTo, date: new Date().toISOString() };
+  const record = {
+    historyId,
+    customerId: id,
+    statusFrom,
+    statusTo,
+    date: new Date().toISOString(),
+    changedBy: req.user?.username || null,
+    changedByRole: req.user?.role || null,
+    changedByLawyer: getUserLawyerName(req.user) || null,
+  };
   await customerHistoryCol.insertOne(record);
   res.status(201).json(record);
 });
 
 // Cases
-app.get("/api/cases", async (req, res) => {
+app.get("/api/cases", verifyAuth, async (req, res) => {
   const search = req.query.q ? new RegExp(req.query.q, "i") : null;
-  const filters = buildCaseFilters(req.query);
+  const filters = { ...buildCaseFilters(req.query), ...buildCaseScopeFilter(req.user) };
 
   // If searching, include customer name via lookup while preserving other filters
   if (search) {
-    const nonSearchFilters = buildCaseFilters({ ...req.query, q: undefined });
+    const nonSearchFilters = { ...buildCaseFilters({ ...req.query, q: undefined }), ...buildCaseScopeFilter(req.user) };
     const docs = await casesCol
       .aggregate([
         { $match: nonSearchFilters },
@@ -674,16 +768,27 @@ app.get("/api/cases", async (req, res) => {
   res.json(docs);
 });
 
-app.get("/api/cases/:id", async (req, res) => {
-  const doc = await casesCol.findOne({ caseId: req.params.id });
+app.get("/api/cases/:id", verifyAuth, async (req, res) => {
+  const doc = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
 
-app.post("/api/cases", async (req, res) => {
+app.post("/api/cases", verifyAuth, async (req, res) => {
   const caseId = await genCaseId();
   const now = new Date().toISOString();
-  const payload = { ...req.body, caseId, lastStateChange: now };
+  const requestedCustomerId = String(req.body?.customerId || "").trim();
+  if (!requestedCustomerId) return res.status(400).json({ error: "customerId is required" });
+
+  const customer = await confirmedClientsCol.findOne({ customerId: requestedCustomerId, ...buildCustomerScopeFilter(req.user) });
+  if (!customer) {
+    return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+  }
+
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now };
+  if (!isAdminUser(req.user)) {
+    payload.assignedTo = getUserLawyerName(req.user);
+  }
   await casesCol.insertOne(payload);
   await historyCol.insertOne({ historyId: `H${pad3(Date.now() % 1000)}`, caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case', resourceId: caseId, details: { payload } });
@@ -694,12 +799,24 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   const targetId = (req.params.id || "").trim();
   const idPattern = new RegExp(`^${escapeRegex(targetId)}\\s*$`, "i");
   const update = { ...req.body };
+  const current = await casesCol.findOne({ caseId: idPattern, ...buildCaseScopeFilter(req.user) });
+  if (!current) return res.status(404).json({ error: "Not found" });
+
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
+  if (update.customerId) {
+    const targetCustomer = await confirmedClientsCol.findOne({ customerId: String(update.customerId).trim(), ...buildCustomerScopeFilter(req.user) });
+    if (!targetCustomer) {
+      return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+    }
+  }
   // Guarantee caseId stays consistent and create if missing to avoid 404 edits
   update.caseId = targetId;
   const result = await casesCol.findOneAndUpdate(
-    { caseId: idPattern },
+    { caseId: idPattern, ...buildCaseScopeFilter(req.user) },
     { $set: update },
-    { returnDocument: "after", upsert: true }
+    { returnDocument: "after", upsert: false }
   );
   const doc = result.value || (await casesCol.findOne({ caseId: targetId }));
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'case', resourceId: targetId, details: { update } });
@@ -708,8 +825,11 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
 
 app.delete("/api/cases/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const caseScope = buildCaseScopeFilter(req.user);
+  const current = await casesCol.findOne({ caseId: id, ...caseScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
   await Promise.all([
-    casesCol.deleteOne({ caseId: id }),
+    casesCol.deleteOne({ caseId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: id }),
     notesCol.deleteMany({ caseId: id }),
     tasksCol.deleteMany({ caseId: id }),
@@ -719,13 +839,17 @@ app.delete("/api/cases/:id", verifyAuth, async (req, res) => {
 });
 
 // History
-app.get("/api/cases/:id/history", async (req, res) => {
+app.get("/api/cases/:id/history", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await historyCol.find({ caseId: req.params.id }).sort({ date: 1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/cases/:id/history", async (req, res) => {
+app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const { stateFrom, stateIn } = req.body;
   const historyId = `H${pad3(Date.now() % 1000)}`;
   const record = { historyId, caseId: id, stateFrom, stateIn, date: new Date().toISOString() };
@@ -735,13 +859,17 @@ app.post("/api/cases/:id/history", async (req, res) => {
 });
 
 // Notes
-app.get("/api/cases/:id/notes", async (req, res) => {
+app.get("/api/cases/:id/notes", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await notesCol.find({ caseId: req.params.id }).sort({ date: -1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/cases/:id/notes", async (req, res) => {
+app.post("/api/cases/:id/notes", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const noteId = `N${pad3(Date.now() % 1000)}`;
   const note = { noteId, caseId: id, date: new Date().toISOString(), noteText: req.body.noteText };
   await notesCol.insertOne(note);
@@ -750,7 +878,9 @@ app.post("/api/cases/:id/notes", async (req, res) => {
 });
 
 // Tasks
-app.get("/api/cases/:id/tasks", async (req, res) => {
+app.get("/api/cases/:id/tasks", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await tasksCol
     .find({ caseId: req.params.id })
     .sort({ done: 1, createdAt: 1 })
@@ -758,8 +888,10 @@ app.get("/api/cases/:id/tasks", async (req, res) => {
   res.json(docs);
 });
 
-app.post("/api/cases/:id/tasks", async (req, res) => {
+app.post("/api/cases/:id/tasks", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const taskId = `T${pad3(Date.now() % 1000)}`;
   const task = {
     taskId,
@@ -774,18 +906,22 @@ app.post("/api/cases/:id/tasks", async (req, res) => {
   res.status(201).json(task);
 });
 
-app.post("/api/tasks/:taskId/toggle", async (req, res) => {
+app.post("/api/tasks/:taskId/toggle", verifyAuth, async (req, res) => {
   const { taskId } = req.params;
   const t = await tasksCol.findOne({ taskId });
   if (!t) return res.status(404).json({ error: "Not found" });
+  const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.updateOne({ taskId }, { $set: { done: !t.done } });
   res.json({ ...t, done: !t.done });
 });
 
-app.delete("/api/tasks/:taskId", async (req, res) => {
+app.delete("/api/tasks/:taskId", verifyAuth, async (req, res) => {
   const { taskId } = req.params;
   const t = await tasksCol.findOne({ taskId });
   if (!t) return res.status(404).json({ error: "Not found" });
+  const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.deleteOne({ taskId });
   res.json({ ok: true, taskId });
 });

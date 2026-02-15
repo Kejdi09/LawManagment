@@ -12,6 +12,7 @@ import {
   deleteDocument,
   fetchDocumentBlob,
   StoredDocument,
+  getCustomerHistory,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -22,6 +23,7 @@ import {
   LAWYERS,
   Customer,
   Case,
+  CustomerHistoryRecord,
   CustomerNotification,
   ContactChannel,
   LeadStatus,
@@ -119,6 +121,7 @@ const Customers = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
+  const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
 
   const loadCustomers = useCallback(async () => {
@@ -152,13 +155,18 @@ const Customers = () => {
     if (!id) {
       setSelectedCustomer(null);
       setSelectedCases([]);
+      setCustomerStatusLog([]);
       return;
     }
     const customerList = await getAllCustomers();
     const customer = customerList.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
-    const cases = await getCasesByCustomer(id);
+    const [cases, history] = await Promise.all([
+      getCasesByCustomer(id),
+      getCustomerHistory(id).catch(() => []),
+    ]);
     setSelectedCases(cases);
+    setCustomerStatusLog(history);
     try {
       const docs = await getDocuments('customer', id);
       setCustomerDocuments(docs);
@@ -372,7 +380,8 @@ const Customers = () => {
     }
   };
 
-  const { logout } = useAuth();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -709,13 +718,17 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Assigned Lawyer</Label>
-              <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
-                  {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {isAdmin ? (
+                <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
+                    {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={user?.lawyerName || form.assignedTo || "My customers"} disabled />
+              )}
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
@@ -861,17 +874,22 @@ const Customers = () => {
                       </CardContent>
                     </Card>
 
-                    {selectedCustomer.statusHistory && selectedCustomer.statusHistory.length > 0 && (
+                    {customerStatusLog.length > 0 && (
                       <Card>
                         <CardHeader className="pb-2"><CardTitle className="text-sm">Status History</CardTitle></CardHeader>
                         <CardContent className="text-sm">
                           <div className="space-y-2">
-                            {[...selectedCustomer.statusHistory].reverse().map((record: { status: LeadStatus; date: string }, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between text-xs">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[record.status]}`}>
-                                  {LEAD_STATUS_LABELS[record.status]}
+                            {[...customerStatusLog].reverse().map((record: CustomerHistoryRecord, idx: number) => (
+                              <div key={record.historyId || idx} className="flex items-start justify-between gap-3 text-xs rounded-md border p-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[record.statusTo] || "bg-muted text-foreground"}`}>
+                                    {LEAD_STATUS_LABELS[record.statusTo as LeadStatus] || record.statusTo}
+                                  </span>
+                                  <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[record.statusFrom as LeadStatus] || record.statusFrom}</span>
+                                </div>
+                                <span className="text-right text-muted-foreground">
+                                  {safeFormatDate(record.date)} • {record.changedByLawyer || record.changedBy || "System"}
                                 </span>
-                                <span className="text-muted-foreground">{safeFormatDate(record.date)}</span>
                               </div>
                             ))}
                           </div>

@@ -1,4 +1,4 @@
-import { Case, CaseState, CaseTask, Customer, CustomerNotification, HistoryRecord, Note } from "./types";
+import { Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
 
 // When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -120,8 +120,8 @@ export async function addHistory(caseId: string, stateFrom: CaseState, stateIn: 
   });
 }
 
-export async function getCustomerHistory(customerId: string): Promise<any[]> {
-  return api<any[]>(`/api/customers/${customerId}/history`);
+export async function getCustomerHistory(customerId: string): Promise<CustomerHistoryRecord[]> {
+  return api<CustomerHistoryRecord[]>(`/api/customers/${customerId}/history`);
 }
 
 // ── Notes ──

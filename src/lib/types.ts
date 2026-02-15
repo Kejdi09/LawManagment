@@ -58,6 +58,17 @@ export interface HistoryRecord {
   date: string;
 }
 
+export interface CustomerHistoryRecord {
+  historyId: string;
+  customerId: string;
+  statusFrom: LeadStatus;
+  statusTo: LeadStatus;
+  date: string;
+  changedBy?: string | null;
+  changedByRole?: string | null;
+  changedByLawyer?: string | null;
+}
+
 export interface Note {
   noteId: string;
   caseId: string;
