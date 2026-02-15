@@ -23,6 +23,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import {
   FileText, User, Clock, MessageSquare,
   CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap, Trash2,
@@ -50,6 +51,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [taskTitle, setTaskTitle] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTaskBusy, setIsTaskBusy] = useState(false);
+  const [isNoteBusy, setIsNoteBusy] = useState(false);
   const previousCaseIdRef = useRef<string | null>(null);
   const [editForm, setEditForm] = useState({
     category: "",
@@ -63,6 +66,9 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     assignedTo: "",
   });
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const currentLawyer = user?.consultantName || user?.lawyerName || "";
   const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
   const formatOptionalDateTime = (value: string | null | undefined) => {
     if (!value) return "N/A";
@@ -205,85 +211,81 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   };
 
   const handleAddNote = async () => {
-    if (!noteText.trim() || isLoading) return;
+    if (!noteText.trim() || isNoteBusy) return;
+    const text = noteText.trim();
+    const optimisticNote: Note = {
+      noteId: `temp-${Date.now()}`,
+      caseId,
+      noteText: text,
+      date: new Date().toISOString(),
+    };
     try {
-      setIsLoading(true);
-      const optimisticNote: Note = {
-        noteId: `temp-${Date.now()}`,
-        caseId,
-        noteText: noteText.trim(),
-        date: new Date().toISOString(),
-      };
-      setCaseNotes([...caseNotes, optimisticNote]);
+      setIsNoteBusy(true);
+      setCaseNotes((prev) => [optimisticNote, ...prev]);
       setNoteText("");
-      await addNote(caseId, noteText.trim());
-      await loadCaseData(caseId);
+      const created = await addNote(caseId, text);
+      setCaseNotes((prev) => prev.map((note) => (note.noteId === optimisticNote.noteId ? created : note)));
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
-      await loadCaseData(caseId);
+      setCaseNotes((prev) => prev.filter((note) => note.noteId !== optimisticNote.noteId));
     } finally {
-      setIsLoading(false);
+      setIsNoteBusy(false);
     }
   };
 
   const handleAddTask = async () => {
-    if (!taskTitle.trim() || isLoading) return;
+    if (!taskTitle.trim() || isTaskBusy) return;
+    const title = taskTitle.trim();
+    const optimisticTask: CaseTask = {
+      taskId: `temp-${Date.now()}`,
+      caseId,
+      title,
+      done: false,
+      createdAt: new Date().toISOString(),
+      dueDate: null,
+    };
     try {
-      setIsLoading(true);
-      const optimisticTask: CaseTask = {
-        taskId: `temp-${Date.now()}`,
-        caseId,
-        title: taskTitle.trim(),
-        done: false,
-        createdAt: new Date().toISOString(),
-        dueDate: null,
-      };
-      setCaseTasks([...caseTasks, optimisticTask]);
+      setIsTaskBusy(true);
+      setCaseTasks((prev) => [...prev, optimisticTask]);
       setTaskTitle("");
-      await addTask(caseId, taskTitle.trim(), null);
-      await loadCaseData(caseId);
+      const created = await addTask(caseId, title, null);
+      setCaseTasks((prev) => prev.map((task) => (task.taskId === optimisticTask.taskId ? created : task)));
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
-      await loadCaseData(caseId);
+      setCaseTasks((prev) => prev.filter((task) => task.taskId !== optimisticTask.taskId));
     } finally {
-      setIsLoading(false);
+      setIsTaskBusy(false);
     }
   };
 
   const handleToggleTask = async (taskId: string) => {
-    if (isLoading) return;
+    if (isTaskBusy) return;
+    const previous = caseTasks;
     try {
-      setIsLoading(true);
+      setIsTaskBusy(true);
       // Optimistic update
       setCaseTasks(caseTasks.map(t => t.taskId === taskId ? { ...t, done: !t.done } : t));
       await toggleTask(taskId);
-      // Light refresh - only get tasks instead of full reload
-      const updatedTasks = await getTasksByCaseId(caseId);
-      setCaseTasks(updatedTasks);
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
-      // Reload to restore correct state on error
-      const tasks = await getTasksByCaseId(caseId);
-      setCaseTasks(tasks);
+      setCaseTasks(previous);
     } finally {
-      setIsLoading(false);
+      setIsTaskBusy(false);
     }
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (isLoading) return;
+    if (isTaskBusy) return;
+    const previous = caseTasks;
     try {
-      setIsLoading(true);
+      setIsTaskBusy(true);
       setCaseTasks((prev) => prev.filter((task) => task.taskId !== taskId));
       await deleteTask(taskId);
-      const updatedTasks = await getTasksByCaseId(caseId);
-      setCaseTasks(updatedTasks);
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
-      const tasks = await getTasksByCaseId(caseId);
-      setCaseTasks(tasks);
+      setCaseTasks(previous);
     } finally {
-      setIsLoading(false);
+      setIsTaskBusy(false);
     }
   };
 
@@ -309,7 +311,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         generalNote: editForm.generalNote,
         priority: editForm.priority,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
-        assignedTo: editForm.assignedTo,
+        assignedTo: isAdmin ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
       };
       setCaseData(updatedCaseData);
       setEditMode(false);
@@ -317,6 +319,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       // Send update to backend
       const updatePayload: Partial<Case> = {
         ...editForm,
+        assignedTo: isAdmin ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       };
@@ -456,13 +459,17 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                         <Input value={editForm.communicationMethod} onChange={(e) => setEditForm({ ...editForm, communicationMethod: e.target.value })} />
                       </div>
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">Assigned To</span>
-                        <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm({ ...editForm, assignedTo: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <span className="text-xs text-muted-foreground">Assigned Consultant</span>
+                        {isAdmin ? (
+                          <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm({ ...editForm, assignedTo: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input value={currentLawyer || editForm.assignedTo} disabled />
+                        )}
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Deadline</span>
@@ -556,14 +563,14 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex gap-2">
-                <Input placeholder="New task..." value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} disabled={isLoading} />
-                <Button size="sm" onClick={handleAddTask} disabled={isLoading}>{isLoading ? "Adding..." : "Add"}</Button>
+                <Input placeholder="New task..." value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} disabled={isTaskBusy} />
+                <Button size="sm" onClick={handleAddTask} disabled={isTaskBusy}>{isTaskBusy ? "Adding..." : "Add"}</Button>
               </div>
               {caseTasks.length > 0 && (
                 <div className="space-y-1">
                   {caseTasks.map((t) => (
                     <div key={t.taskId} className={`flex items-center gap-3 rounded-md border p-2 text-sm ${t.done ? "opacity-50" : ""}`}>
-                      <Checkbox checked={t.done} onCheckedChange={() => handleToggleTask(t.taskId)} disabled={isLoading} />
+                      <Checkbox checked={t.done} onCheckedChange={() => handleToggleTask(t.taskId)} disabled={isTaskBusy} />
                       <span className={t.done ? "line-through" : ""}>{t.title}</span>
                       <div className="ml-auto flex items-center gap-2">
                         {t.dueDate && (
@@ -577,7 +584,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                           size="icon"
                           className="h-7 w-7 text-destructive"
                           onClick={() => handleDeleteTask(t.taskId)}
-                          disabled={isLoading}
+                          disabled={isTaskBusy}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -622,8 +629,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex gap-2">
-                  <Textarea placeholder="Add a note..." value={noteText} onChange={(e) => setNoteText(e.target.value)} className="min-h-[50px]" disabled={isLoading} />
-                  <Button onClick={handleAddNote} className="self-end" size="sm" disabled={isLoading}>{isLoading ? "Adding..." : "Add"}</Button>
+                  <Textarea placeholder="Add a note..." value={noteText} onChange={(e) => setNoteText(e.target.value)} className="min-h-[50px]" disabled={isNoteBusy} />
+                  <Button onClick={handleAddNote} className="self-end" size="sm" disabled={isNoteBusy}>{isNoteBusy ? "Adding..." : "Add"}</Button>
                 </div>
                 {caseNotes.length > 0 && (
                   <div className="space-y-2 max-h-[200px] overflow-y-auto">

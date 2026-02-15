@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
+import { getAllCases, searchCases, createCase, getAllCustomers, getConfirmedClients } from "@/lib/case-store";
 import { ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
@@ -20,7 +20,7 @@ import SharedHeader from "@/components/SharedHeader";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
-  const { logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -40,6 +40,8 @@ const Index = () => {
     deadline: "",
     assignedTo: LAWYERS[0],
   });
+  const isAdmin = user?.role === "admin";
+  const currentLawyer = user?.consultantName || user?.lawyerName || "";
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -83,7 +85,7 @@ const Index = () => {
       }
 
       // Deadline notifications
-      if (c.deadline) {
+      if (c.deadline && mapCaseStateToStage(c.state) !== "FINALIZED") {
         const deadlineTime = new Date(c.deadline).getTime();
         const hoursUntilDeadline = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
         
@@ -143,12 +145,12 @@ const Index = () => {
 
   useEffect(() => {
     (async () => {
-      const customers = await getAllCustomers();
-      const map = customers.reduce<Record<string, string>>((acc, c) => {
+      const [customers, confirmedClients] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
+      const map = [...customers, ...confirmedClients].reduce<Record<string, string>>((acc, c) => {
         acc[c.customerId] = c.name;
         return acc;
       }, {});
-      setCustomers(customers);
+      setCustomers(confirmedClients);
       setCustomerNames(map);
     })();
   }, []);
@@ -192,7 +194,7 @@ const Index = () => {
       generalNote: "",
       priority: "medium",
       deadline: "",
-      assignedTo: LAWYERS[0],
+      assignedTo: isAdmin ? LAWYERS[0] : (currentLawyer || LAWYERS[0]),
     });
     setShowCaseForm(true);
   };
@@ -207,6 +209,7 @@ const Index = () => {
       const mappedState = mapStageToState(caseForm.state as any);
       await createCase({
         ...caseForm,
+        assignedTo: isAdmin ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
         state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
       } as any);
@@ -346,13 +349,17 @@ const Index = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Assigned To</label>
-              <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Assigned Consultant</label>
+              {isAdmin ? (
+                <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={currentLawyer || "My Cases"} disabled />
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Category *</label>

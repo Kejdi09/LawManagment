@@ -12,6 +12,7 @@ import {
   deleteDocument,
   fetchDocumentBlob,
   StoredDocument,
+  getCustomerHistory,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -19,15 +20,16 @@ import {
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
+  LAWYERS,
   Customer,
   Case,
+  CustomerHistoryRecord,
   CustomerNotification,
   ContactChannel,
   LeadStatus,
   ServiceType,
 } from "@/lib/types";
 import { mapCaseStateToStage } from "@/lib/utils";
-import { LAWYERS } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,10 +46,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ArrowLeft, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import SharedHeader from "@/components/SharedHeader";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -64,15 +65,28 @@ function safeFormatDate(dateValue: string | Date | null | undefined) {
 
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
-const UNASSIGNED_LAWYER = "__UNASSIGNED__";
+const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
 
 function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
 }
 
-const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 'active' | 'clients' | 'archived' } = {}) => {
-  const navigate = useNavigate();
+const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
+  "INTAKE",
+  "SEND_PROPOSAL",
+  "WAITING_APPROVAL",
+  "SEND_CONTRACT",
+  "WAITING_ACCEPTANCE",
+  "SEND_RESPONSE",
+  "CLIENT",
+  "ARCHIVED",
+  "ON_HOLD",
+  "CONSULTATION_SCHEDULED",
+];
+
+const Customers = () => {
   const [search, setSearch] = useState("");
+  const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -89,8 +103,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     services: [] as (keyof typeof SERVICE_LABELS)[],
     serviceDescription: "",
     contactChannel: "email" as keyof typeof CONTACT_CHANNEL_LABELS,
-    status: "INTAKE",
     assignedTo: "",
+    followUpDate: "",
+    status: "INTAKE",
     notes: "",
   });
 
@@ -103,10 +118,10 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [statusView, setStatusView] = useState<'all' | 'active' | 'clients' | 'archived'>(initialStatusView);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
+  const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
 
   const loadCustomers = useCallback(async () => {
@@ -118,7 +133,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
       return acc;
     }, {});
     setCaseCounts(counts);
-    // compute assigned lawyer per customer (most recent case assignedTo)
+    // compute assigned consultant per customer (most recent case assignedTo)
     const map: Record<string, { assignedTo: string; lastChange: number }> = {};
     for (const c of allCases) {
       const last = new Date(c.lastStateChange || 0).getTime();
@@ -140,13 +155,18 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     if (!id) {
       setSelectedCustomer(null);
       setSelectedCases([]);
+      setCustomerStatusLog([]);
       return;
     }
     const customerList = await getAllCustomers();
     const customer = customerList.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
-    const cases = await getCasesByCustomer(id);
+    const [cases, history] = await Promise.all([
+      getCasesByCustomer(id),
+      getCustomerHistory(id).catch(() => []),
+    ]);
     setSelectedCases(cases);
+    setCustomerStatusLog(history);
     try {
       const docs = await getDocuments('customer', id);
       setCustomerDocuments(docs);
@@ -182,22 +202,19 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     return filteredCustomers.filter((customer) => selectedCategories.includes(getCustomerCategory(customer.customerType)));
   }, [filteredCustomers, selectedCategories]);
 
-  const statusFilteredCustomers = useMemo(() => {
-    if (statusView === 'all') return categoryFilteredCustomers;
-    if (statusView === 'clients') return categoryFilteredCustomers.filter((c) => c.status === 'CLIENT');
-    if (statusView === 'archived') return categoryFilteredCustomers.filter((c) => c.status === 'ARCHIVED');
-    // active = not client and not archived
-    return categoryFilteredCustomers.filter((c) => c.status !== 'CLIENT' && c.status !== 'ARCHIVED');
-  }, [categoryFilteredCustomers, statusView]);
-
   const groupedCustomers = useMemo(() => {
+    const sectionFiltered = categoryFilteredCustomers.filter((customer) => {
+      if (sectionView === "on_hold") return customer.status === "ON_HOLD";
+      if (sectionView === "archived") return customer.status === "ARCHIVED";
+      return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
+    });
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: statusFilteredCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: sectionFiltered.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [statusFilteredCustomers]);
+  }, [categoryFilteredCustomers, sectionView]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -228,7 +245,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
 
   const serviceEntries = Object.entries(SERVICE_LABELS);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
-  const statusEntries = Object.entries(LEAD_STATUS_LABELS);
+  const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
 
   const resetForm = () => {
     setEditingId(null);
@@ -244,6 +261,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
       serviceDescription: "",
       contactChannel: "email",
       assignedTo: "",
+      followUpDate: "",
       status: "INTAKE",
       notes: "",
     });
@@ -264,6 +282,7 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
       services: c.services || [],
       serviceDescription: c.serviceDescription || "",
       assignedTo: c.assignedTo || "",
+      followUpDate: c.followUpDate ? String(c.followUpDate).slice(0, 10) : "",
       notes: c.notes ?? "",
     });
     setShowForm(true);
@@ -273,7 +292,8 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     try {
       const payload = {
         ...form,
-        assignedTo: form.assignedTo === UNASSIGNED_LAWYER ? "" : form.assignedTo,
+        assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : form.assignedTo,
+        followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(form.followUpDate).toISOString() : null,
         contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
         services: form.services || [],
@@ -360,7 +380,8 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
     }
   };
 
-  const { logout } = useAuth();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -503,10 +524,9 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="flex items-center gap-2">
-            <Button variant={statusView === 'all' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('all')}>All</Button>
-            <Button variant={statusView === 'active' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('active')}>Active</Button>
-            <Button variant={statusView === 'clients' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('clients')}>Clients</Button>
-            <Button variant={statusView === 'archived' ? 'default' : 'ghost'} size="sm" onClick={() => setStatusView('archived')}>Archived</Button>
+            <Button variant={sectionView === "main" ? "default" : "outline"} size="sm" onClick={() => setSectionView("main")}>Main</Button>
+            <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
+            <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
           </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
@@ -520,29 +540,25 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">ID</TableHead>
-                  <TableHead>Lawyer</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Registration</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Services</TableHead>
-                  <TableHead>Channel</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Cases</TableHead>
-                  <TableHead className="w-[120px] text-right">Actions</TableHead>
+                  <TableHead className="w-[220px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {groupedCustomers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                       No customers match the selected categories/search.
                     </TableCell>
                   </TableRow>
                 )}
                 {groupedCustomers.flatMap((group) => ([
                   <TableRow key={`group-${group.type}-header`} className="bg-muted/30">
-                    <TableCell colSpan={10} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableCell colSpan={7} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <button
                         type="button"
                         className="inline-flex items-center gap-1"
@@ -553,117 +569,91 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                       </button>
                     </TableCell>
                   </TableRow>,
-                  ...(collapsedCategories.includes(group.type) ? [] : group.items.map((c) => {
-                    const caseCount = caseCounts[c.customerId] || 0;
-                    const servicesLabel = c.services.map((s) => SERVICE_LABELS[s]);
-                    return (
-                      <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
-                        <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{c.assignedTo || assignedMap[c.customerId] || '-'}</TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{safeFormatDate(c.registeredAt)}</TableCell>
-                        <TableCell className="text-sm">{c.phone}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm" className="h-7 px-2">
-                                {servicesLabel[0]}{servicesLabel.length > 1 ? ` +${servicesLabel.length - 1}` : ""}
-                                <ChevronDown className="h-3 w-3 ml-1" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              {servicesLabel.map((s) => (
-                                <DropdownMenuItem key={s}>{s}</DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[c.contactChannel]}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
-                            {LEAD_STATUS_LABELS[c.status]}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right flex items-center justify-end gap-2">
-                          {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
-                          <Badge variant="secondary">{caseCount}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end items-center space-x-3" onClick={(e) => e.stopPropagation()}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => openEdit(c.customerId)} aria-label="Edit">
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Edit</TooltipContent>
-                            </Tooltip>
-
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleSetStatus(c.customerId, 'CLIENT')} aria-label="Mark as Client">
-                                  <Badge className="text-xs">Client</Badge>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Mark as Client</TooltipContent>
-                            </Tooltip>
-
-                            {c.status !== 'ARCHIVED' ? (
+                  ...(collapsedCategories.includes(group.type)
+                    ? []
+                    : group.items.map((c) => {
+                      const caseCount = caseCounts[c.customerId] || 0;
+                      return (
+                        <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
+                          <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-sm">{c.phone}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
+                              {LEAD_STATUS_LABELS[c.status]}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right flex items-center justify-end gap-2">
+                            {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
+                            <Badge variant="secondary">{caseCount}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-9 w-9 text-destructive"
-                                    onClick={() => {
-                                      if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
-                                        handleSetStatus(c.customerId, 'ARCHIVED');
-                                      }
-                                    }}
-                                    aria-label="Archive"
-                                  >
-                                    <Archive className="h-4 w-4" />
+                                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
+                                    <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Archive</TooltipContent>
+                                <TooltipContent>Edit</TooltipContent>
                               </Tooltip>
-                            ) : (
+
+                              {c.status !== 'ARCHIVED' ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('Archive this customer? They will be hidden from Active lists.')) {
+                                          handleSetStatus(c.customerId, 'ARCHIVED');
+                                        }
+                                      }}
+                                      aria-label="Archive"
+                                    >
+                                      <Archive className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Archive</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
+                                          handleSetStatus(c.customerId, 'INTAKE');
+                                        }
+                                      }}
+                                      aria-label="Unarchive"
+                                    >
+                                      <Archive className="h-3.5 w-3.5 rotate-180" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Unarchive</TooltipContent>
+                                </Tooltip>
+                              )}
+
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-9 w-9"
-                                    onClick={() => {
-                                      if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
-                                        handleSetStatus(c.customerId, 'INTAKE');
-                                      }
-                                    }}
-                                    aria-label="Unarchive"
-                                  >
-                                    <Archive className="h-4 w-4 rotate-180" />
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(c.customerId); }} aria-label="Delete">
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Unarchive</TooltipContent>
+                                <TooltipContent>Delete</TooltipContent>
                               </Tooltip>
-                            )}
-
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => { if (window.confirm('Delete this customer? This is permanent.')) handleDelete(c.customerId); }} aria-label="Delete">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }))
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }))
                 ]))}
               </TableBody>
             </Table>
@@ -727,14 +717,18 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Assigned Lawyer</Label>
-              <Select value={form.assignedTo || UNASSIGNED_LAWYER} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_LAWYER ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_LAWYER}>Unassigned</SelectItem>
-                  {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Assigned Consultant</Label>
+              {isAdmin ? (
+                <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
+                    {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My customers"} disabled />
+              )}
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
@@ -747,6 +741,16 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                 </SelectContent>
               </Select>
             </div>
+            {form.status === "ON_HOLD" && (
+              <div className="space-y-2">
+                <Label>Follow Up Date</Label>
+                <Input
+                  type="date"
+                  value={form.followUpDate || ""}
+                  onChange={(e) => setForm({ ...form, followUpDate: e.target.value })}
+                />
+              </div>
+            )}
             <div className="md:col-span-2 space-y-2">
               <Label>Services</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -870,17 +874,22 @@ const Customers = ({ initialStatusView = 'all' }: { initialStatusView?: 'all' | 
                       </CardContent>
                     </Card>
 
-                    {selectedCustomer.statusHistory && selectedCustomer.statusHistory.length > 0 && (
+                    {customerStatusLog.length > 0 && (
                       <Card>
                         <CardHeader className="pb-2"><CardTitle className="text-sm">Status History</CardTitle></CardHeader>
                         <CardContent className="text-sm">
                           <div className="space-y-2">
-                            {[...selectedCustomer.statusHistory].reverse().map((record: { status: LeadStatus; date: string }, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between text-xs">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[record.status]}`}>
-                                  {LEAD_STATUS_LABELS[record.status]}
+                            {[...customerStatusLog].reverse().map((record: CustomerHistoryRecord, idx: number) => (
+                              <div key={record.historyId || idx} className="flex items-start justify-between gap-3 text-xs rounded-md border p-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[record.statusTo] || "bg-muted text-foreground"}`}>
+                                    {LEAD_STATUS_LABELS[record.statusTo as LeadStatus] || record.statusTo}
+                                  </span>
+                                  <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[record.statusFrom as LeadStatus] || record.statusFrom}</span>
+                                </div>
+                                <span className="text-right text-muted-foreground">
+                                  {safeFormatDate(record.date)} • {record.changedByConsultant || record.changedByLawyer || record.changedBy || "System"}
                                 </span>
-                                <span className="text-muted-foreground">{safeFormatDate(record.date)}</span>
                               </div>
                             ))}
                           </div>

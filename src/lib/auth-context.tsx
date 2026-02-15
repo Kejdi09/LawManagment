@@ -1,53 +1,70 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
-  login: () => void;
+  user: { username: string; role: string; consultantName?: string | null; lawyerName?: string | null } | null;
+  login: (token?: string) => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
 }
 
+const AUTH_FLAG_KEY = 'auth';
+const AUTH_TOKEN_KEY = 'auth_token';
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('auth') === 'true');
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    localStorage.getItem(AUTH_FLAG_KEY) === 'true' || Boolean(localStorage.getItem(AUTH_TOKEN_KEY))
+  );
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [user, setUser] = useState<{ username: string; role: string; consultantName?: string | null; lawyerName?: string | null } | null>(null);
 
   const refreshSession = async (): Promise<boolean> => {
+    setIsAuthLoading(true);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const fallbackAuthenticated = localStorage.getItem(AUTH_FLAG_KEY) === 'true' || Boolean(token);
+
     try {
       const API_URL = import.meta.env.VITE_API_URL ?? '';
-      const res = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
-      const data = await res.json();
-      if (data?.authenticated) {
-        setIsAuthenticated(true);
-        localStorage.setItem('auth', 'true');
-        return true;
-      } else {
-        // If server reports unauthenticated, attempt a development fallback using
-        // a stored dev token (returned by /api/login in non-production).
-        const devToken = localStorage.getItem('devToken');
-        if (devToken) {
-          try {
-            const res2 = await fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${devToken}` }, credentials: 'include' });
-            const data2 = await res2.json();
-            if (data2?.authenticated) {
-              setIsAuthenticated(true);
-              localStorage.setItem('auth', 'true');
-              return true;
-            }
-          } catch (e) {
-            // ignore and fall through to clearing state
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const res = await fetch(`${API_URL}/api/me`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          });
+          if (!res.ok) throw new Error(`session_check_failed_${res.status}`);
+          const data = await res.json();
+
+          if (data?.authenticated) {
+            setIsAuthenticated(true);
+            setUser(data?.user ?? null);
+            localStorage.setItem(AUTH_FLAG_KEY, 'true');
+            return true;
+          }
+
+          setIsAuthenticated(false);
+          setUser(null);
+          localStorage.removeItem(AUTH_FLAG_KEY);
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          return false;
+        } catch (err) {
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
           }
         }
-        setIsAuthenticated(false);
-        localStorage.removeItem('auth');
-        return false;
       }
+
+      // Keep local authenticated state on transient outages (e.g., Render cold start)
+      setIsAuthenticated(fallbackAuthenticated);
+      if (fallbackAuthenticated) localStorage.setItem(AUTH_FLAG_KEY, 'true');
+      return fallbackAuthenticated;
     } catch {
-      setIsAuthenticated(false);
-      localStorage.removeItem('auth');
-      return false;
+      setIsAuthenticated(fallbackAuthenticated);
+      if (fallbackAuthenticated) localStorage.setItem(AUTH_FLAG_KEY, 'true');
+      return fallbackAuthenticated;
     } finally {
       setIsAuthLoading(false);
     }
@@ -58,31 +75,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, []);
 
-  const login = () => {
+  const login = (token?: string) => {
     setIsAuthenticated(true);
-    localStorage.setItem('auth', 'true');
+    localStorage.setItem(AUTH_FLAG_KEY, 'true');
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
   };
 
   const logout = async () => {
     setIsAuthLoading(true);
+    setIsAuthenticated(false);
+    setUser(null);
+    localStorage.removeItem(AUTH_FLAG_KEY);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     try {
       const API_URL = import.meta.env.VITE_API_URL ?? '';
-      await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-    } catch (err) {
-      // ignore network errors but still clear client state
-    }
-    // Refresh session from server to ensure cookie was cleared
-    await refreshSession();
-    // Clear any dev fallback token used in local development
-    if (localStorage) {
-      localStorage.removeItem('devToken');
-      localStorage.removeItem('auth');
+      await fetch(`${API_URL}/api/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+    } catch {
+      // ignore network errors; local auth already cleared
     }
     setIsAuthLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, login, logout, refreshSession }}>
+    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, user, login, logout, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

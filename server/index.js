@@ -40,6 +40,8 @@ app.use(
       return callback(new Error("CORS not allowed"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
@@ -55,6 +57,7 @@ let casesCol;
 let historyCol;
 let customerHistoryCol;
 let customerNotificationsCol;
+let confirmedClientsCol;
 let notesCol;
 let tasksCol;
 let usersCol;
@@ -93,6 +96,7 @@ async function connectDb() {
   historyCol = db.collection("history");
   customerHistoryCol = db.collection("customerHistory");
   customerNotificationsCol = db.collection("customerNotifications");
+  confirmedClientsCol = db.collection("confirmedClients");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
   usersCol = db.collection("users");
@@ -133,6 +137,48 @@ const MAX_STALE_HOURS = 120;
 const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
 const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
+const CONSULTANT_BY_USERNAME = {
+  adi: "Dr. Weber",
+  fischer: "Mag. Fischer",
+  klein: "Dr. Klein",
+};
+
+function isAdminUser(user) {
+  return user?.role === "admin";
+}
+
+function getUserLawyerName(user) {
+  if (!user) return "";
+  return user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || "";
+}
+
+function buildCaseScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  return { assignedTo: lawyerName };
+}
+
+function buildCustomerScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  return { assignedTo: lawyerName };
+}
+
+function userCanAccessCustomer(user, customer) {
+  if (!customer) return false;
+  if (isAdminUser(user)) return true;
+  const lawyerName = getUserLawyerName(user);
+  return Boolean(lawyerName) && customer.assignedTo === lawyerName;
+}
+
+function userCanAccessCase(user, doc) {
+  if (!doc) return false;
+  if (isAdminUser(user)) return true;
+  const lawyerName = getUserLawyerName(user);
+  return Boolean(lawyerName) && doc.assignedTo === lawyerName;
+}
 
 function getLastStatusChangeAt(customer) {
   if (Array.isArray(customer.statusHistory) && customer.statusHistory.length > 0) {
@@ -163,81 +209,101 @@ async function insertCustomerNotification({ customerId, message, kind, severity 
 
 async function syncCustomerNotifications() {
   const nowMs = Date.now();
-  const customers = await customersCol.find({}).toArray();
+  const customerSets = [
+    { col: customersCol, docs: await customersCol.find({}).toArray() },
+    { col: confirmedClientsCol, docs: await confirmedClientsCol.find({}).toArray() },
+  ];
 
-  for (const customer of customers) {
-    const status = customer.status;
-    const lastStatusChangeAt = getLastStatusChangeAt(customer);
-    const prevTracker = customer.notificationTracker || {};
-    const statusChanged = prevTracker.status !== status || prevTracker.lastStatusChangeAt !== lastStatusChangeAt;
+  for (const set of customerSets) {
+    for (const customer of set.docs) {
+      const status = customer.status;
+      const lastStatusChangeAt = getLastStatusChangeAt(customer);
+      const prevTracker = customer.notificationTracker || {};
+      const statusChanged = prevTracker.status !== status || prevTracker.lastStatusChangeAt !== lastStatusChangeAt;
 
-    const tracker = statusChanged
-      ? {
-        status,
-        lastStatusChangeAt,
-        followupCount: 0,
-        lastFollowupAt: null,
-        lastRespondAt: null,
-        followupSuppressed: false,
+      const tracker = statusChanged
+        ? {
+          status,
+          lastStatusChangeAt,
+          followupCount: 0,
+          lastFollowupAt: null,
+          lastRespondAt: null,
+          followupSuppressed: false,
+          onHoldFollowupNotifiedFor: null,
+        }
+        : {
+          status,
+          lastStatusChangeAt,
+          followupCount: Number(prevTracker.followupCount || 0),
+          lastFollowupAt: prevTracker.lastFollowupAt || null,
+          lastRespondAt: prevTracker.lastRespondAt || null,
+          followupSuppressed: Boolean(prevTracker.followupSuppressed),
+          onHoldFollowupNotifiedFor: prevTracker.onHoldFollowupNotifiedFor || null,
+        };
+
+      if (statusChanged) {
+        await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
       }
-      : {
-        status,
-        lastStatusChangeAt,
-        followupCount: Number(prevTracker.followupCount || 0),
-        lastFollowupAt: prevTracker.lastFollowupAt || null,
-        lastRespondAt: prevTracker.lastRespondAt || null,
-        followupSuppressed: Boolean(prevTracker.followupSuppressed),
-      };
 
-    if (statusChanged) {
-      await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
-    }
+      const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
 
-    const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
+      if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
+        const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
+        const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
 
-    if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
-      const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
-      const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
-
-      if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
-        if (tracker.followupCount >= 3) {
-          tracker.followupSuppressed = true;
-          await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
-        } else {
-          await insertCustomerNotification({
-            customerId: customer.customerId,
-            message: `Follow up ${customer.name}`,
-            kind: "follow",
-            severity: followupInterval === 72 ? "critical" : "warn",
-          });
-          tracker.followupCount += 1;
-          tracker.lastFollowupAt = new Date(nowMs).toISOString();
+        if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
           if (tracker.followupCount >= 3) {
             tracker.followupSuppressed = true;
             await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+          } else {
+            await insertCustomerNotification({
+              customerId: customer.customerId,
+              message: `Follow up ${customer.name}`,
+              kind: "follow",
+              severity: followupInterval === 72 ? "critical" : "warn",
+            });
+            tracker.followupCount += 1;
+            tracker.lastFollowupAt = new Date(nowMs).toISOString();
+            if (tracker.followupCount >= 3) {
+              tracker.followupSuppressed = true;
+              await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
+            }
           }
         }
       }
-    }
 
-    if (RESPOND_24H_STATUSES.includes(status)) {
-      const respondInterval = 24;
-      const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
-      if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
-        await insertCustomerNotification({
-          customerId: customer.customerId,
-          message: `Respond to ${customer.name}`,
-          kind: "respond",
-          severity: "warn",
-        });
-        tracker.lastRespondAt = new Date(nowMs).toISOString();
+      if (RESPOND_24H_STATUSES.includes(status)) {
+        const respondInterval = 24;
+        const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
+        if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Respond to ${customer.name}`,
+            kind: "respond",
+            severity: "warn",
+          });
+          tracker.lastRespondAt = new Date(nowMs).toISOString();
+        }
       }
-    }
 
-    await customersCol.updateOne(
-      { customerId: customer.customerId },
-      { $set: { notificationTracker: tracker } }
-    );
+      if (status === "ON_HOLD" && customer.followUpDate) {
+        const followUpTime = new Date(customer.followUpDate).getTime();
+        if (Number.isFinite(followUpTime) && followUpTime <= nowMs && tracker.onHoldFollowupNotifiedFor !== customer.followUpDate) {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Follow up ${customer.name} ${customer.customerId}`,
+            kind: "follow",
+            severity: "warn",
+          });
+          tracker.onHoldFollowupNotifiedFor = customer.followUpDate;
+        }
+      }
+
+      await set.col.updateOne(
+        { customerId: customer.customerId },
+        { $set: { notificationTracker: tracker } }
+      );
+    }
   }
 }
 async function genCustomerId() {
@@ -273,12 +339,26 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 // Auth helpers
 async function seedDemoUser() {
   try {
-    const existing = await usersCol.findOne({ username: "adi" });
-    if (!existing) {
-      const hashed = await bcrypt.hash("890", 10);
-      await usersCol.insertOne({ username: "adi", password: hashed, role: "admin", createdAt: new Date().toISOString() });
-      console.log("Seeded demo user 'adi'.");
+    const demoUsers = [
+      { username: "adi", password: "890", role: "admin", consultantName: "Dr. Weber" },
+      { username: "fischer", password: "890", role: "consultant", consultantName: "Mag. Fischer" },
+      { username: "klein", password: "890", role: "consultant", consultantName: "Dr. Klein" },
+    ];
+
+    for (const demoUser of demoUsers) {
+      const existing = await usersCol.findOne({ username: demoUser.username });
+      if (existing) continue;
+      const hashed = await bcrypt.hash(demoUser.password, 10);
+      await usersCol.insertOne({
+        username: demoUser.username,
+        password: hashed,
+        role: demoUser.role,
+        consultantName: demoUser.consultantName,
+        lawyerName: demoUser.consultantName,
+        createdAt: new Date().toISOString(),
+      });
     }
+    console.log("Seeded default users: adi, fischer, klein.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
@@ -318,6 +398,16 @@ function createAuthCookie(req, res, token) {
   res.cookie("token", token, getCookieOptions(req));
 }
 
+function extractAuthToken(req) {
+  const cookieToken = req.cookies?.token;
+  if (cookieToken) return cookieToken;
+  const authHeader = req.headers?.authorization || "";
+  if (typeof authHeader === "string" && authHeader.toLowerCase().startsWith("bearer ")) {
+    return authHeader.slice(7).trim();
+  }
+  return null;
+}
+
 app.post("/api/logout", (req, res) => {
   // Clear cookie using the same options to ensure browser removes it in cross-site scenarios
   res.clearCookie("token", getCookieOptions(req));
@@ -326,12 +416,7 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   try {
-    // Accept token from cookie OR Bearer Authorization header as a developer fallback
-    let token = req.cookies?.token;
-    if (!token) {
-      const auth = req.headers.authorization || "";
-      if (auth.startsWith("Bearer ")) token = auth.slice(7).trim();
-    }
+    const token = extractAuthToken(req);
     if (!token) return res.json({ authenticated: false });
     const payload = jwt.verify(token, JWT_SECRET);
     return res.json({ authenticated: true, user: payload });
@@ -360,7 +445,7 @@ app.get("/api/_debug/cookies", (req, res) => {
 // --- Auth middleware ---
 function verifyAuth(req, res, next) {
   try {
-    const token = req.cookies?.token;
+    const token = extractAuthToken(req);
     if (!token) return res.status(401).json({ error: 'unauthenticated' });
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
@@ -381,7 +466,16 @@ function requireRole(role) {
 async function logAudit({ username, role, action, resource, resourceId, details = {} }) {
   try {
     if (!auditLogsCol) return;
-    await auditLogsCol.insertOne({ username, role, action, resource, resourceId, details, at: new Date().toISOString() });
+    await auditLogsCol.insertOne({
+      username,
+      role,
+      consultantName: role === "admin" ? null : (CONSULTANT_BY_USERNAME[username] || null),
+      action,
+      resource,
+      resourceId,
+      details,
+      at: new Date().toISOString(),
+    });
   } catch (err) {
     console.warn('Failed to write audit log', err?.message || err);
   }
@@ -417,14 +511,10 @@ app.post("/api/login", async (req, res) => {
     if (!user) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
-    const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
+    const consultantName = user.consultantName || user.lawyerName || null;
+    const token = jwt.sign({ username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
-    // In development, also return the token in the response body as a fallback
-    // for local setups where cross-site cookies (SameSite=None; Secure) are blocked.
-    if (process.env.NODE_ENV !== 'production') {
-      return res.json({ success: true, username: user.username, token });
-    }
-    return res.json({ success: true, username: user.username });
+    return res.json({ success: true, username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName, token });
   } catch (err) {
     console.error("/api/login error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -432,9 +522,23 @@ app.post("/api/login", async (req, res) => {
 });
 
 // Customers
-app.get("/api/customers", async (req, res) => {
-  const docs = await customersCol.find({}).sort({ customerId: 1 }).toArray();
+app.get("/api/customers", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const docs = await customersCol.find({ status: { $ne: "CLIENT" }, ...scope }).sort({ customerId: 1 }).toArray();
   res.json(docs);
+});
+
+app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const docs = await confirmedClientsCol.find(scope).sort({ customerId: 1 }).toArray();
+  res.json(docs);
+});
+
+app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...scope });
+  if (!doc) return res.status(404).json({ error: "Not found" });
+  res.json(doc);
 });
 
 app.get("/api/customers/notifications", async (req, res) => {
@@ -443,8 +547,9 @@ app.get("/api/customers/notifications", async (req, res) => {
   res.json(docs);
 });
 
-app.get("/api/customers/:id", async (req, res) => {
-  const doc = await customersCol.findOne({ customerId: req.params.id });
+app.get("/api/customers/:id", verifyAuth, async (req, res) => {
+  const scope = buildCustomerScopeFilter(req.user);
+  const doc = await customersCol.findOne({ customerId: req.params.id, ...scope });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
@@ -452,7 +557,23 @@ app.get("/api/customers/:id", async (req, res) => {
 app.post("/api/customers", verifyAuth, async (req, res) => {
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId };
-  await customersCol.insertOne(payload);
+  if (!isAdminUser(req.user)) {
+    payload.assignedTo = getUserLawyerName(req.user);
+  }
+  if (payload.status === "CLIENT") {
+    const confirmedPayload = {
+      ...payload,
+      sourceCustomerId: customerId,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne(
+      { customerId },
+      { $set: confirmedPayload },
+      { upsert: true }
+    );
+  } else {
+    await customersCol.insertOne(payload);
+  }
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'customer', resourceId: customerId, details: { payload } });
   res.status(201).json(payload);
 });
@@ -460,9 +581,16 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
 app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+  delete update._id;
+  delete update.customerId;
 
   // Check if status is changing
-  const current = await customersCol.findOne({ customerId: id });
+  const scope = buildCustomerScopeFilter(req.user);
+  const current = await customersCol.findOne({ customerId: id, ...scope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
   if (current && current.status !== update.status) {
     // Create status history entry
     const historyId = `CH${pad3(Date.now() % 1000)}`;
@@ -471,7 +599,11 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       customerId: id,
       statusFrom: current.status,
       statusTo: update.status,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      changedBy: req.user?.username || null,
+      changedByRole: req.user?.role || null,
+      changedByConsultant: getUserLawyerName(req.user) || null,
+      changedByLawyer: getUserLawyerName(req.user) || null,
     });
 
     // Initialize or update statusHistory array
@@ -484,56 +616,151 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     });
   }
 
-  await customersCol.updateOne({ customerId: id }, { $set: update });
-  const updated = await customersCol.findOne({ customerId: id });
+  if (update.status === "CLIENT") {
+    const confirmedPayload = {
+      ...current,
+      ...update,
+      customerId: id,
+      sourceCustomerId: id,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne(
+      { customerId: id },
+      { $set: confirmedPayload },
+      { upsert: true }
+    );
+    await customersCol.deleteOne({ customerId: id, ...scope });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'migrate', resource: 'customer', resourceId: id, details: { to: 'confirmedClients' } });
+    return res.json(confirmedPayload);
+  }
+
+  await customersCol.updateOne({ customerId: id, ...scope }, { $set: update });
+  const updated = await customersCol.findOne({ customerId: id, ...scope });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
   if (!updated) return res.status(404).json({ error: "Not found" });
   res.json(updated);
 });
 
+app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const { id } = req.params;
+  const update = { ...req.body };
+  delete update._id;
+  delete update.customerId;
+  const scope = buildCustomerScopeFilter(req.user);
+  const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
+
+  if (current.status !== update.status) {
+    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    await customerHistoryCol.insertOne({
+      historyId,
+      customerId: id,
+      statusFrom: current.status,
+      statusTo: update.status,
+      date: new Date().toISOString(),
+      changedBy: req.user?.username || null,
+      changedByRole: req.user?.role || null,
+      changedByConsultant: getUserLawyerName(req.user) || null,
+      changedByLawyer: getUserLawyerName(req.user) || null,
+    });
+    if (!update.statusHistory) {
+      update.statusHistory = (current.statusHistory || []);
+    }
+    update.statusHistory.push({
+      status: update.status,
+      date: new Date().toISOString(),
+    });
+  }
+
+  await confirmedClientsCol.updateOne({ customerId: id, ...scope }, { $set: update });
+  const updated = await confirmedClientsCol.findOne({ customerId: id, ...scope });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
+  res.json(updated);
+});
+
 app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
-  const relatedCases = await casesCol.find({ customerId: id }).project({ caseId: 1 }).toArray();
+  const customerScope = buildCustomerScopeFilter(req.user);
+  const current = await customersCol.findOne({ customerId: id, ...customerScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  const caseScope = buildCaseScopeFilter(req.user);
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
   await Promise.all([
-    casesCol.deleteMany({ customerId: id }),
+    casesCol.deleteMany({ customerId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     customerHistoryCol.deleteMany({ customerId: id }),
-    customersCol.deleteOne({ customerId: id }),
+    customersCol.deleteOne({ customerId: id, ...customerScope }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'customer', resourceId: id });
   res.json({ ok: true });
 });
 
-app.get("/api/customers/:id/cases", async (req, res) => {
-  const docs = await casesCol.find({ customerId: req.params.id }).toArray();
+app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
+  const { id } = req.params;
+  const customerScope = buildCustomerScopeFilter(req.user);
+  const current = await confirmedClientsCol.findOne({ customerId: id, ...customerScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
+  const caseScope = buildCaseScopeFilter(req.user);
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
+  const relatedCaseIds = relatedCases.map((c) => c.caseId);
+  await Promise.all([
+    casesCol.deleteMany({ customerId: id, ...caseScope }),
+    historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    notesCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
+    customerHistoryCol.deleteMany({ customerId: id }),
+    confirmedClientsCol.deleteOne({ customerId: id, ...customerScope }),
+  ]);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'confirmedClient', resourceId: id });
+  res.json({ ok: true });
+});
+
+app.get("/api/customers/:id/cases", verifyAuth, async (req, res) => {
+  const docs = await casesCol.find({ customerId: req.params.id, ...buildCaseScopeFilter(req.user) }).toArray();
   res.json(docs);
 });
 
-app.get("/api/customers/:id/history", async (req, res) => {
+app.get("/api/customers/:id/history", verifyAuth, async (req, res) => {
+  const existsInCustomers = await customersCol.findOne({ customerId: req.params.id, ...buildCustomerScopeFilter(req.user) });
+  const existsInConfirmed = await confirmedClientsCol.findOne({ customerId: req.params.id, ...buildCustomerScopeFilter(req.user) });
+  if (!existsInCustomers && !existsInConfirmed) return res.status(404).json({ error: "Not found" });
   const docs = await customerHistoryCol.find({ customerId: req.params.id }).sort({ date: 1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/customers/:id/history", async (req, res) => {
+app.post("/api/customers/:id/history", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const { statusFrom, statusTo } = req.body;
   const historyId = `CH${pad3(Date.now() % 1000)}`;
-  const record = { historyId, customerId: id, statusFrom, statusTo, date: new Date().toISOString() };
+  const record = {
+    historyId,
+    customerId: id,
+    statusFrom,
+    statusTo,
+    date: new Date().toISOString(),
+    changedBy: req.user?.username || null,
+    changedByRole: req.user?.role || null,
+    changedByConsultant: getUserLawyerName(req.user) || null,
+    changedByLawyer: getUserLawyerName(req.user) || null,
+  };
   await customerHistoryCol.insertOne(record);
   res.status(201).json(record);
 });
 
 // Cases
-app.get("/api/cases", async (req, res) => {
+app.get("/api/cases", verifyAuth, async (req, res) => {
   const search = req.query.q ? new RegExp(req.query.q, "i") : null;
-  const filters = buildCaseFilters(req.query);
+  const filters = { ...buildCaseFilters(req.query), ...buildCaseScopeFilter(req.user) };
 
   // If searching, include customer name via lookup while preserving other filters
   if (search) {
-    const nonSearchFilters = buildCaseFilters({ ...req.query, q: undefined });
+    const nonSearchFilters = { ...buildCaseFilters({ ...req.query, q: undefined }), ...buildCaseScopeFilter(req.user) };
     const docs = await casesCol
       .aggregate([
         { $match: nonSearchFilters },
@@ -562,16 +789,27 @@ app.get("/api/cases", async (req, res) => {
   res.json(docs);
 });
 
-app.get("/api/cases/:id", async (req, res) => {
-  const doc = await casesCol.findOne({ caseId: req.params.id });
+app.get("/api/cases/:id", verifyAuth, async (req, res) => {
+  const doc = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
 
-app.post("/api/cases", async (req, res) => {
+app.post("/api/cases", verifyAuth, async (req, res) => {
   const caseId = await genCaseId();
   const now = new Date().toISOString();
-  const payload = { ...req.body, caseId, lastStateChange: now };
+  const requestedCustomerId = String(req.body?.customerId || "").trim();
+  if (!requestedCustomerId) return res.status(400).json({ error: "customerId is required" });
+
+  const customer = await confirmedClientsCol.findOne({ customerId: requestedCustomerId, ...buildCustomerScopeFilter(req.user) });
+  if (!customer) {
+    return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+  }
+
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now };
+  if (!isAdminUser(req.user)) {
+    payload.assignedTo = getUserLawyerName(req.user);
+  }
   await casesCol.insertOne(payload);
   await historyCol.insertOne({ historyId: `H${pad3(Date.now() % 1000)}`, caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case', resourceId: caseId, details: { payload } });
@@ -582,12 +820,24 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   const targetId = (req.params.id || "").trim();
   const idPattern = new RegExp(`^${escapeRegex(targetId)}\\s*$`, "i");
   const update = { ...req.body };
+  const current = await casesCol.findOne({ caseId: idPattern, ...buildCaseScopeFilter(req.user) });
+  if (!current) return res.status(404).json({ error: "Not found" });
+
+  if (!isAdminUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
+  if (update.customerId) {
+    const targetCustomer = await confirmedClientsCol.findOne({ customerId: String(update.customerId).trim(), ...buildCustomerScopeFilter(req.user) });
+    if (!targetCustomer) {
+      return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+    }
+  }
   // Guarantee caseId stays consistent and create if missing to avoid 404 edits
   update.caseId = targetId;
   const result = await casesCol.findOneAndUpdate(
-    { caseId: idPattern },
+    { caseId: idPattern, ...buildCaseScopeFilter(req.user) },
     { $set: update },
-    { returnDocument: "after", upsert: true }
+    { returnDocument: "after", upsert: false }
   );
   const doc = result.value || (await casesCol.findOne({ caseId: targetId }));
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'case', resourceId: targetId, details: { update } });
@@ -596,8 +846,11 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
 
 app.delete("/api/cases/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const caseScope = buildCaseScopeFilter(req.user);
+  const current = await casesCol.findOne({ caseId: id, ...caseScope });
+  if (!current) return res.status(404).json({ error: "Not found" });
   await Promise.all([
-    casesCol.deleteOne({ caseId: id }),
+    casesCol.deleteOne({ caseId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: id }),
     notesCol.deleteMany({ caseId: id }),
     tasksCol.deleteMany({ caseId: id }),
@@ -607,29 +860,38 @@ app.delete("/api/cases/:id", verifyAuth, async (req, res) => {
 });
 
 // History
-app.get("/api/cases/:id/history", async (req, res) => {
+app.get("/api/cases/:id/history", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await historyCol.find({ caseId: req.params.id }).sort({ date: 1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/cases/:id/history", async (req, res) => {
+app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const { stateFrom, stateIn } = req.body;
   const historyId = `H${pad3(Date.now() % 1000)}`;
   const record = { historyId, caseId: id, stateFrom, stateIn, date: new Date().toISOString() };
   await historyCol.insertOne(record);
   await casesCol.updateOne({ caseId: id }, { $set: { state: stateIn, lastStateChange: record.date } });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case-history', resourceId: historyId, details: { caseId: id, stateFrom, stateIn } });
   res.status(201).json(record);
 });
 
 // Notes
-app.get("/api/cases/:id/notes", async (req, res) => {
+app.get("/api/cases/:id/notes", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await notesCol.find({ caseId: req.params.id }).sort({ date: -1 }).toArray();
   res.json(docs);
 });
 
-app.post("/api/cases/:id/notes", async (req, res) => {
+app.post("/api/cases/:id/notes", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const noteId = `N${pad3(Date.now() % 1000)}`;
   const note = { noteId, caseId: id, date: new Date().toISOString(), noteText: req.body.noteText };
   await notesCol.insertOne(note);
@@ -638,7 +900,9 @@ app.post("/api/cases/:id/notes", async (req, res) => {
 });
 
 // Tasks
-app.get("/api/cases/:id/tasks", async (req, res) => {
+app.get("/api/cases/:id/tasks", verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const docs = await tasksCol
     .find({ caseId: req.params.id })
     .sort({ done: 1, createdAt: 1 })
@@ -646,8 +910,10 @@ app.get("/api/cases/:id/tasks", async (req, res) => {
   res.json(docs);
 });
 
-app.post("/api/cases/:id/tasks", async (req, res) => {
+app.post("/api/cases/:id/tasks", verifyAuth, async (req, res) => {
   const { id } = req.params;
+  const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   const taskId = `T${pad3(Date.now() % 1000)}`;
   const task = {
     taskId,
@@ -662,19 +928,25 @@ app.post("/api/cases/:id/tasks", async (req, res) => {
   res.status(201).json(task);
 });
 
-app.post("/api/tasks/:taskId/toggle", async (req, res) => {
+app.post("/api/tasks/:taskId/toggle", verifyAuth, async (req, res) => {
   const { taskId } = req.params;
   const t = await tasksCol.findOne({ taskId });
   if (!t) return res.status(404).json({ error: "Not found" });
+  const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.updateOne({ taskId }, { $set: { done: !t.done } });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'toggle', resource: 'task', resourceId: taskId, details: { caseId: t.caseId, done: !t.done } });
   res.json({ ...t, done: !t.done });
 });
 
-app.delete("/api/tasks/:taskId", async (req, res) => {
+app.delete("/api/tasks/:taskId", verifyAuth, async (req, res) => {
   const { taskId } = req.params;
   const t = await tasksCol.findOne({ taskId });
   if (!t) return res.status(404).json({ error: "Not found" });
+  const allowed = await casesCol.findOne({ caseId: t.caseId, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: "Not found" });
   await tasksCol.deleteOne({ taskId });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'task', resourceId: taskId, details: { caseId: t.caseId } });
   res.json({ ok: true, taskId });
 });
 

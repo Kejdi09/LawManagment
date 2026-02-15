@@ -1,11 +1,16 @@
-import { Case, CaseState, CaseTask, Customer, CustomerNotification, HistoryRecord, Note } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
 
 // When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("auth_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(options?.headers || {}) },
     credentials: 'include',
     ...options,
   });
@@ -67,6 +72,18 @@ export async function getAllCustomers(): Promise<Customer[]> {
   return api<Customer[]>("/api/customers");
 }
 
+export async function getConfirmedClients(): Promise<Customer[]> {
+  return api<Customer[]>("/api/confirmed-clients");
+}
+
+export async function updateConfirmedClient(customerId: string, patch: Partial<Customer>): Promise<Customer> {
+  return api<Customer>(`/api/confirmed-clients/${customerId}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+
+export async function deleteConfirmedClient(customerId: string): Promise<void> {
+  await api(`/api/confirmed-clients/${customerId}`, { method: "DELETE" });
+}
+
 export async function getCustomerById(customerId: string): Promise<Customer | null> {
   try {
     return await api<Customer>(`/api/customers/${customerId}`);
@@ -103,8 +120,8 @@ export async function addHistory(caseId: string, stateFrom: CaseState, stateIn: 
   });
 }
 
-export async function getCustomerHistory(customerId: string): Promise<any[]> {
-  return api<any[]>(`/api/customers/${customerId}/history`);
+export async function getCustomerHistory(customerId: string): Promise<CustomerHistoryRecord[]> {
+  return api<CustomerHistoryRecord[]>(`/api/customers/${customerId}/history`);
 }
 
 // ── Notes ──
@@ -144,7 +161,10 @@ export type StoredDocument = {
 };
 
 export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string): Promise<StoredDocument[]> {
-  const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents?ownerType=${ownerType}&ownerId=${ownerId}`, {
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to fetch documents');
   return (await res.json()) as StoredDocument[];
 }
@@ -154,7 +174,12 @@ export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: st
   form.append('ownerType', ownerType);
   form.append('ownerId', ownerId);
   form.append('file', file);
-  const res = await fetch(`${API_URL}/api/documents/upload`, { method: 'POST', body: form, credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents/upload`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Upload failed');
   return await res.json();
 }
@@ -164,7 +189,10 @@ export async function deleteDocument(docId: string) {
 }
 
 export async function fetchDocumentBlob(docId: string): Promise<{ blob: Blob; fileName: string | null }> {
-  const res = await fetch(`${API_URL}/api/documents/${docId}`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/documents/${docId}`, {
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to load document');
   const blob = await res.blob();
   const disposition = res.headers.get('content-disposition') || '';
@@ -188,4 +216,8 @@ export async function changeState(caseId: string, newState: CaseState): Promise<
 // ── Background rules ── (now driven by backend; keep placeholder)
 export async function checkAutomaticRules() {
   return { deletedCustomers: [], deletedCases: [], inactivityReminders: [], sendReminders: [] };
+}
+
+export async function getAuditLogs(): Promise<AuditLogRecord[]> {
+  return api<AuditLogRecord[]>("/api/audit/logs");
 }

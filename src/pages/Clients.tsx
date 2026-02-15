@@ -1,7 +1,534 @@
-import Customers from "./Customers";
+import { useEffect, useRef, useState } from "react";
+import SharedHeader from "@/components/SharedHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Phone, Mail, MapPin, StickyNote, Trash2 } from "lucide-react";
+import {
+  Customer,
+  CustomerHistoryRecord,
+  CONTACT_CHANNEL_LABELS,
+  LEAD_STATUS_LABELS,
+  LeadStatus,
+  Case,
+  STAGE_LABELS,
+  PRIORITY_CONFIG,
+  ContactChannel,
+  ServiceType,
+  SERVICE_LABELS,
+  LAWYERS,
+} from "@/lib/types";
+import {
+  deleteConfirmedClient,
+  getCasesByCustomer,
+  getConfirmedClients,
+  updateConfirmedClient,
+  getCustomerHistory,
+  getDocuments,
+  uploadDocument,
+  deleteDocument,
+  fetchDocumentBlob,
+  StoredDocument,
+} from "@/lib/case-store";
+import { mapCaseStateToStage, formatDate } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/hooks/use-toast";
+
+const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
+const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
+
+const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
+  "INTAKE",
+  "SEND_PROPOSAL",
+  "WAITING_APPROVAL",
+  "SEND_CONTRACT",
+  "WAITING_ACCEPTANCE",
+  "SEND_RESPONSE",
+  "CLIENT",
+  "ARCHIVED",
+  "ON_HOLD",
+  "CONSULTATION_SCHEDULED",
+];
+
+const statusAccent: Record<string, string> = {
+  INTAKE: "bg-slate-100 text-slate-800",
+  SEND_PROPOSAL: "bg-blue-100 text-blue-800",
+  WAITING_APPROVAL: "bg-amber-100 text-amber-800",
+  SEND_CONTRACT: "bg-indigo-100 text-indigo-800",
+  WAITING_ACCEPTANCE: "bg-orange-100 text-orange-800",
+  SEND_RESPONSE: "bg-emerald-100 text-emerald-800",
+  CONFIRMED: "bg-green-100 text-green-800",
+  CLIENT: "bg-emerald-100 text-emerald-800",
+  ARCHIVED: "bg-gray-100 text-gray-600",
+  CONSULTATION_SCHEDULED: "bg-blue-50 text-blue-800",
+  CONSULTATION_DONE: "bg-emerald-50 text-emerald-800",
+  ON_HOLD: "bg-gray-100 text-gray-800",
+};
 
 const ClientsPage = () => {
-  return <Customers initialStatusView="clients" />;
+  const [clients, setClients] = useState<Customer[]>([]);
+  const [selectedClient, setSelectedClient] = useState<Customer | null>(null);
+  const [selectedCases, setSelectedCases] = useState<Case[]>([]);
+  const [statusHistoryRows, setStatusHistoryRows] = useState<CustomerHistoryRecord[]>([]);
+  const [showEdit, setShowEdit] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [clientDocuments, setClientDocuments] = useState<StoredDocument[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [form, setForm] = useState<Partial<Customer>>({});
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const isAdmin = user?.role === "admin";
+  const serviceEntries = Object.entries(SERVICE_LABELS);
+  const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
+  const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
+
+  const load = () => getConfirmedClients().then(setClients).catch(() => setClients([]));
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const openDetail = async (client: Customer) => {
+    setSelectedClient(client);
+    const [cases, history, docs] = await Promise.all([
+      getCasesByCustomer(client.customerId),
+      getCustomerHistory(client.customerId).catch(() => []),
+      getDocuments("customer", client.customerId).catch(() => []),
+    ]);
+    setSelectedCases(cases.filter((row) => row.customerId === client.customerId));
+    setStatusHistoryRows(history);
+    setClientDocuments(docs);
+  };
+
+  const openEdit = (client: Customer) => {
+    setForm({
+      ...client,
+      registeredAt: client.registeredAt || new Date().toISOString(),
+      services: client.services || [],
+      serviceDescription: client.serviceDescription || "",
+      assignedTo: client.assignedTo || "",
+      followUpDate: client.followUpDate ? String(client.followUpDate).slice(0, 10) : "",
+      notes: client.notes ?? "",
+    });
+    setShowEdit(true);
+  };
+
+  const saveEdit = async () => {
+    if (!form.customerId) return;
+    const payload: Partial<Customer> = {
+      ...form,
+      assignedTo: isAdmin ? (form.assignedTo || "") : (user?.consultantName || user?.lawyerName || form.assignedTo || ""),
+      followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(String(form.followUpDate)).toISOString() : null,
+      services: form.services || [],
+      serviceDescription: form.serviceDescription || "",
+      notes: form.notes ?? "",
+      contact: form.contact || form.name || "",
+    };
+    const { customerId, ...withoutId } = payload as Partial<Customer> & { customerId?: string; _id?: unknown };
+    const { _id, ...safePayload } = withoutId as typeof withoutId & { _id?: unknown };
+    try {
+      await updateConfirmedClient(form.customerId, safePayload);
+      setShowEdit(false);
+      await load();
+      if (selectedClient?.customerId === form.customerId) {
+        const updated = await getConfirmedClients().then((rows) => rows.find((x) => x.customerId === form.customerId) || null);
+        if (updated) await openDetail(updated);
+      }
+      toast({ title: "Saved", description: "Confirmed client updated" });
+    } catch (err) {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : "Unable to update confirmed client", variant: "destructive" });
+    }
+  };
+
+  const removeClient = async (customerId: string) => {
+    if (!window.confirm("Delete this confirmed client?")) return;
+    await deleteConfirmedClient(customerId);
+    if (selectedClient?.customerId === customerId) setSelectedClient(null);
+    load();
+  };
+
+  const handleUploadClientDocument = async (file?: File) => {
+    if (!file || !selectedClient) return;
+    try {
+      setIsUploading(true);
+      await uploadDocument("customer", selectedClient.customerId, file);
+      const docs = await getDocuments("customer", selectedClient.customerId);
+      setClientDocuments(docs);
+      toast({ title: "Uploaded", description: "Document uploaded" });
+    } catch (err: unknown) {
+      toast({ title: "Upload failed", description: String(err), variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteClientDocument = async (docId: string) => {
+    try {
+      setIsUploading(true);
+      await deleteDocument(docId);
+      setClientDocuments((d) => d.filter((x) => x.docId !== docId));
+      toast({ title: "Deleted", description: "Document removed" });
+    } catch (err: unknown) {
+      toast({ title: "Delete failed", description: String(err), variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handlePreviewClientDocument = async (docId: string) => {
+    try {
+      const { blob } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: unknown) {
+      toast({ title: "Preview failed", description: err instanceof Error ? err.message : "Unable to preview document", variant: "destructive" });
+    }
+  };
+
+  const handleDownloadClientDocument = async (docId: string, originalName?: string) => {
+    try {
+      const { blob, fileName } = await fetchDocumentBlob(docId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName || originalName || "document";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      toast({ title: "Download failed", description: err instanceof Error ? err.message : "Unable to download document", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <SharedHeader title="Confirmed Clients" />
+      <main className="container py-6 space-y-4">
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Consultant</TableHead>
+                  <TableHead>Channel</TableHead>
+                  <TableHead>Services</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {clients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
+                      No confirmed clients yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  clients.map((client) => (
+                    <TableRow key={client.customerId} className="cursor-pointer" onClick={() => openDetail(client)}>
+                      <TableCell className="font-mono text-xs">{client.customerId}</TableCell>
+                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.assignedTo || "Unassigned"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[client.contactChannel]}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.services?.length || 0}</TableCell>
+                      <TableCell className="text-sm">{client.phone}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.email}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[client.status]}`}>
+                          {LEAD_STATUS_LABELS[client.status]}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openEdit(client)}>Edit</Button>
+                          <Button size="sm" variant="destructive" onClick={() => removeClient(client.customerId)}>Delete</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Dialog open={!!selectedClient} onOpenChange={(o) => !o && setSelectedClient(null)}>
+          <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
+            {selectedClient && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selectedClient.name}</DialogTitle>
+                </DialogHeader>
+
+                <div className="grid gap-4">
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Overview</CardTitle></CardHeader>
+                    <CardContent className="grid gap-2 text-sm">
+                      <div className="flex items-center gap-2"><Phone className="h-3 w-3 text-muted-foreground" />{selectedClient.phone}</div>
+                      <div className="flex items-center gap-2"><Mail className="h-3 w-3 text-muted-foreground" />{selectedClient.email}</div>
+                      <div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-muted-foreground" />{selectedClient.address}</div>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[selectedClient.status]}`}>
+                          {LEAD_STATUS_LABELS[selectedClient.status]}
+                        </span>
+                        <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedClient.contactChannel]}</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Services</CardTitle></CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="flex flex-wrap gap-2">
+                        {selectedClient.services.map((s) => (
+                          <Badge key={s} variant="secondary" className="text-xs">{SERVICE_LABELS[s]}</Badge>
+                        ))}
+                      </div>
+                      <p className="text-muted-foreground text-sm">{selectedClient.serviceDescription}</p>
+                      {selectedClient.notes && (
+                        <div className="rounded-md border p-2 text-sm">
+                          <div className="flex items-center gap-2 text-muted-foreground mb-1"><StickyNote className="h-3 w-3" />Notes</div>
+                          <p>{selectedClient.notes}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          className="hidden"
+                          disabled={!selectedClient || isUploading}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleUploadClientDocument(f);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={!selectedClient || isUploading}>
+                          {isUploading ? "Uploading..." : "Upload"}
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        {clientDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
+                        {clientDocuments.map((d) => (
+                          <div key={d.docId} className="flex items-center justify-between gap-2 text-sm rounded-md border p-2">
+                            <div className="truncate" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" onClick={() => handlePreviewClientDocument(d.docId)}>Preview</Button>
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadClientDocument(d.docId, d.originalName || d.filename)}>Download</Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteClientDocument(d.docId)} className="text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {statusHistoryRows.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Status History</CardTitle></CardHeader>
+                      <CardContent className="space-y-2 text-xs">
+                        {[...statusHistoryRows].reverse().map((row, idx) => (
+                          <div key={`${row.historyId || idx}`} className="flex items-start justify-between gap-3 rounded-md border p-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[row.statusTo] || "bg-muted text-foreground"}`}>
+                                {LEAD_STATUS_LABELS[row.statusTo as LeadStatus] || row.statusTo}
+                              </span>
+                              <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[row.statusFrom as LeadStatus] || row.statusFrom}</span>
+                            </div>
+                            <div className="text-right text-muted-foreground">
+                              <div>{formatDate(row.date, true)}</div>
+                              <div>{row.changedByConsultant || row.changedByLawyer || row.changedBy || "System"}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Cases ({selectedCases.length})</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Case ID</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>State</TableHead>
+                            <TableHead>Priority</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedCases.map((sc) => {
+                            const pCfg = PRIORITY_CONFIG[sc.priority];
+                            return (
+                              <TableRow key={sc.caseId}>
+                                <TableCell className="font-mono text-xs">{sc.caseId}</TableCell>
+                                <TableCell className="text-sm">{sc.category} / {sc.subcategory}</TableCell>
+                                <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(sc.state)]}</Badge></TableCell>
+                                <TableCell><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span></TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showEdit} onOpenChange={setShowEdit}>
+          <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Confirmed Client</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Type</Label>
+                <Select value={form.customerType || "Individual"} onValueChange={(v) => setForm({ ...form, customerType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CUSTOMER_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Registered At</Label>
+                <Input
+                  type="date"
+                  value={String(form.registeredAt || new Date().toISOString()).slice(0, 10)}
+                  onChange={(e) => setForm({ ...form, registeredAt: new Date(e.target.value).toISOString() })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Channel</Label>
+                <Select value={(form.contactChannel as ContactChannel) || "email"} onValueChange={(v) => setForm({ ...form, contactChannel: v as ContactChannel })}>
+                  <SelectTrigger><SelectValue placeholder="Channel" /></SelectTrigger>
+                  <SelectContent>
+                    {channelEntries.map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Assigned Consultant</Label>
+                {isAdmin ? (
+                  <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
+                      {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My clients"} disabled />
+                )}
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Status</Label>
+                <Select value={(form.status as LeadStatus) || "CLIENT"} onValueChange={(v) => setForm({ ...form, status: v as LeadStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {statusEntries.map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.status === "ON_HOLD" && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Follow Up Date</Label>
+                  <Input type="date" value={(form.followUpDate as string) || ""} onChange={(e) => setForm({ ...form, followUpDate: e.target.value })} />
+                </div>
+              )}
+              <div className="md:col-span-2 space-y-2">
+                <Label>Services</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {serviceEntries.map(([key, label]) => {
+                    const checked = (form.services || []).includes(key as ServiceType);
+                    return (
+                      <label key={key} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => {
+                            const on = Boolean(v);
+                            setForm({
+                              ...form,
+                              services: on
+                                ? [...(form.services || []), key as ServiceType]
+                                : (form.services || []).filter((s) => s !== key),
+                            });
+                          }}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <Label>Service Description</Label>
+                <Textarea value={form.serviceDescription || ""} onChange={(e) => setForm({ ...form, serviceDescription: e.target.value })} />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <Label>Notes</Label>
+                <Textarea value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowEdit(false)}>Cancel</Button>
+              <Button onClick={saveEdit}>Save</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </main>
+    </div>
+  );
 };
 
 export default ClientsPage;

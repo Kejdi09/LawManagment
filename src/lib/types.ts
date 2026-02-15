@@ -43,8 +43,9 @@ export interface Customer {
   services: ServiceType[];
   serviceDescription: string;
   contactChannel: ContactChannel;
-  status: LeadStatus;
   assignedTo?: string;
+  followUpDate?: string | null;
+  status: LeadStatus;
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
   notes?: string;
 }
@@ -55,6 +56,30 @@ export interface HistoryRecord {
   stateFrom: CaseState;
   stateIn: CaseState;
   date: string;
+}
+
+export interface CustomerHistoryRecord {
+  historyId: string;
+  customerId: string;
+  statusFrom: LeadStatus;
+  statusTo: LeadStatus;
+  date: string;
+  changedBy?: string | null;
+  changedByRole?: string | null;
+  changedByConsultant?: string | null;
+  changedByLawyer?: string | null;
+}
+
+export interface AuditLogRecord {
+  _id?: string;
+  username?: string | null;
+  role?: string | null;
+  consultantName?: string | null;
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+  details?: Record<string, unknown>;
+  at: string;
 }
 
 export interface Note {
@@ -110,11 +135,11 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   WAITING_APPROVAL: "Waiting Approval",
   SEND_CONTRACT: "Send Contract",
   WAITING_ACCEPTANCE: "Waiting Acceptance",
-  SEND_RESPONSE: "Send Response",
+  SEND_RESPONSE: "Send Respond",
   CONFIRMED: "Confirmed",
-  CLIENT: "Client",
+  CLIENT: "Client Confirmed",
   ARCHIVED: "Archived",
-  CONSULTATION_SCHEDULED: "Consultation Scheduled",
+  CONSULTATION_SCHEDULED: "Consulation Scheduled",
   CONSULTATION_DONE: "Consultation Done",
   ON_HOLD: "On Hold",
 };
