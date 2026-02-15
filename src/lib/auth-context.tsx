@@ -24,6 +24,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('auth', 'true');
         return true;
       } else {
+        // If server reports unauthenticated, attempt a development fallback using
+        // a stored dev token (returned by /api/login in non-production).
+        const devToken = localStorage.getItem('devToken');
+        if (devToken) {
+          try {
+            const res2 = await fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${devToken}` }, credentials: 'include' });
+            const data2 = await res2.json();
+            if (data2?.authenticated) {
+              setIsAuthenticated(true);
+              localStorage.setItem('auth', 'true');
+              return true;
+            }
+          } catch (e) {
+            // ignore and fall through to clearing state
+          }
+        }
         setIsAuthenticated(false);
         localStorage.removeItem('auth');
         return false;
@@ -57,12 +73,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // Refresh session from server to ensure cookie was cleared
     await refreshSession();
-    // Guarantee local state cleared if server didn't report authenticated
-    if (!localStorage) return setIsAuthLoading(false);
-    if (!localStorage.getItem('auth')) {
-      setIsAuthenticated(false);
+    // Clear any dev fallback token used in local development
+    if (localStorage) {
+      localStorage.removeItem('devToken');
+      localStorage.removeItem('auth');
     }
-    localStorage.removeItem('auth');
     setIsAuthLoading(false);
   };
 

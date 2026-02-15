@@ -29,6 +29,10 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
       });
       const data = await res.json();
       if (data.success) {
+        // If server returned a token (development fallback), persist it locally
+        if (data.token && typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('devToken', data.token);
+        }
         const authenticated = await refreshSession();
         if (authenticated) {
           setError('');

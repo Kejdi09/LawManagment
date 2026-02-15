@@ -326,7 +326,12 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   try {
-    const token = req.cookies?.token;
+    // Accept token from cookie OR Bearer Authorization header as a developer fallback
+    let token = req.cookies?.token;
+    if (!token) {
+      const auth = req.headers.authorization || "";
+      if (auth.startsWith("Bearer ")) token = auth.slice(7).trim();
+    }
     if (!token) return res.json({ authenticated: false });
     const payload = jwt.verify(token, JWT_SECRET);
     return res.json({ authenticated: true, user: payload });
@@ -414,6 +419,11 @@ app.post("/api/login", async (req, res) => {
     if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
     const token = jwt.sign({ username: user.username, role: user.role || "user" }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
+    // In development, also return the token in the response body as a fallback
+    // for local setups where cross-site cookies (SameSite=None; Secure) are blocked.
+    if (process.env.NODE_ENV !== 'production') {
+      return res.json({ success: true, username: user.username, token });
+    }
     return res.json({ success: true, username: user.username });
   } catch (err) {
     console.error("/api/login error:", err);
