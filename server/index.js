@@ -661,42 +661,6 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
   res.json(updated);
 });
-    });
-  }
-
-  // If update contains assignedTo but status is not CLIENT, ignore assignment changes
-  if (Object.prototype.hasOwnProperty.call(update, 'assignedTo') && update.status !== 'CLIENT') {
-    delete update.assignedTo;
-  }
-
-  if (update.status === "CLIENT") {
-    // Require assignedTo for confirmed clients
-    if (!update.assignedTo) {
-      return res.status(400).json({ error: 'must_assign_confirmed_client' });
-    }
-    const confirmedPayload = {
-      ...current,
-      ...update,
-      customerId: id,
-      sourceCustomerId: id,
-      confirmedAt: new Date().toISOString(),
-    };
-    await confirmedClientsCol.updateOne(
-      { customerId: id },
-      { $set: confirmedPayload },
-      { upsert: true }
-    );
-    await customersCol.deleteOne({ customerId: id, ...scope });
-    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'migrate', resource: 'customer', resourceId: id, details: { to: 'confirmedClients' } });
-    return res.json(confirmedPayload);
-  }
-
-  await customersCol.updateOne({ customerId: id, ...scope }, { $set: update });
-  const updated = await customersCol.findOne({ customerId: id, ...scope });
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
-  if (!updated) return res.status(404).json({ error: "Not found" });
-  res.json(updated);
-});
 
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
