@@ -772,16 +772,19 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Assigned Consultant</Label>
-              {(isAdmin || user?.role === 'intake') ? (
-                <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
-                    {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My customers"} disabled />
+              <Select
+                value={form.assignedTo || UNASSIGNED_CONSULTANT}
+                onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}
+                disabled={form.status !== 'CLIENT'}
+              >
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
+                  {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {form.status !== 'CLIENT' && (
+                <p className="text-xs text-muted-foreground">Assignment can only be changed when confirming to a client.</p>
               )}
             </div>
             <div className="space-y-2">

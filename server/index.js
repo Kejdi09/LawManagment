@@ -550,12 +550,16 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
 
 app.post("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users can create new (non-confirmed) customers
-  if (req.user?.role !== 'intake') return res.status(403).json({ error: 'forbidden' });
+  if (req.user?.role !== 'intake' && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null };
-  // If intake is creating a confirmed client, require assignedTo
-  if (payload.status === "CLIENT" && req.user?.role === 'intake' && !payload.assignedTo) {
+  // Require assignedTo for confirmed clients regardless of role
+  if (payload.status === "CLIENT" && !payload.assignedTo) {
     return res.status(400).json({ error: 'must_assign_confirmed_client' });
+  }
+  // For non-client creations, ensure assignedTo is cleared
+  if (payload.status !== "CLIENT") {
+    payload.assignedTo = "";
   }
   if (payload.status === "CLIENT") {
     const confirmedPayload = {
@@ -600,26 +604,19 @@ app.get("/api/customers/notifications", async (req, res) => {
 
 
 
-app.put("/api/customers/:id", verifyAuth, async (req, res) => {
+app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
   delete update._id;
   delete update.customerId;
-
-  // Check if status is changing
   const scope = buildCustomerScopeFilter(req.user);
-  // Intake users may modify any non-confirmed customer
-  const current = req.user?.role === 'intake'
-    ? await customersCol.findOne({ customerId: id })
-    : await customersCol.findOne({ customerId: id, ...scope });
+  const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
-  if (!isAdminUser(req.user)) {
-    // Only override assignedTo for non-admins if they have an associated lawyer/consultant name.
-    const lawyerName = getUserLawyerName(req.user);
-    if (lawyerName) update.assignedTo = lawyerName;
-  }
-  if (current && current.status !== update.status) {
-    // Create status history entry
+
+  // Only admins may modify confirmed client records
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
+
+  if (current.status !== update.status) {
     const historyId = `CH${pad3(Date.now() % 1000)}`;
     await customerHistoryCol.insertOne({
       historyId,
@@ -632,20 +629,49 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       changedByConsultant: getUserLawyerName(req.user) || null,
       changedByLawyer: getUserLawyerName(req.user) || null,
     });
-
-    // Initialize or update statusHistory array
     if (!update.statusHistory) {
       update.statusHistory = (current.statusHistory || []);
     }
     update.statusHistory.push({
       status: update.status,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
     });
   }
 
+  // If admin demotes a confirmed client back to non-CLIENT, migrate it to customersCol
+  if (update.status && update.status !== 'CLIENT') {
+    const demoted = {
+      ...current,
+      ...update,
+      customerId: id,
+      assignedTo: "",
+    };
+    // Clean up confirmed-specific fields
+    delete demoted.confirmedAt;
+    delete demoted.sourceCustomerId;
+    await customersCol.updateOne({ customerId: id }, { $set: demoted }, { upsert: true });
+    await confirmedClientsCol.deleteOne({ customerId: id });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'demote', resource: 'confirmedClient', resourceId: id, details: { to: 'customers' } });
+    return res.json(demoted);
+  }
+
+  // Admin updates stay within confirmedClients
+  await confirmedClientsCol.updateOne({ customerId: id, ...scope }, { $set: update });
+  const updated = await confirmedClientsCol.findOne({ customerId: id, ...scope });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
+  res.json(updated);
+});
+    });
+  }
+
+  // If update contains assignedTo but status is not CLIENT, ignore assignment changes
+  if (Object.prototype.hasOwnProperty.call(update, 'assignedTo') && update.status !== 'CLIENT') {
+    delete update.assignedTo;
+  }
+
   if (update.status === "CLIENT") {
-    // If an intake user is confirming, require an assignee to be specified.
-    if (req.user?.role === 'intake' && !update.assignedTo) {
+    // Require assignedTo for confirmed clients
+    if (!update.assignedTo) {
       return res.status(400).json({ error: 'must_assign_confirmed_client' });
     }
     const confirmedPayload = {
