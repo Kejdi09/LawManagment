@@ -614,7 +614,9 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     : await customersCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
   if (!isAdminUser(req.user)) {
-    update.assignedTo = getUserLawyerName(req.user);
+    // Only override assignedTo for non-admins if they have an associated lawyer/consultant name.
+    const lawyerName = getUserLawyerName(req.user);
+    if (lawyerName) update.assignedTo = lawyerName;
   }
   if (current && current.status !== update.status) {
     // Create status history entry
@@ -642,6 +644,10 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   }
 
   if (update.status === "CLIENT") {
+    // If an intake user is confirming, require an assignee to be specified.
+    if (req.user?.role === 'intake' && !update.assignedTo) {
+      return res.status(400).json({ error: 'must_assign_confirmed_client' });
+    }
     const confirmedPayload = {
       ...current,
       ...update,
@@ -675,7 +681,8 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
   if (!isAdminUser(req.user)) {
-    update.assignedTo = getUserLawyerName(req.user);
+    const lawyerName = getUserLawyerName(req.user);
+    if (lawyerName) update.assignedTo = lawyerName;
   }
 
   if (current.status !== update.status) {

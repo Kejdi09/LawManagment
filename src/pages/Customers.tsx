@@ -247,9 +247,8 @@ const Customers = () => {
   const serviceEntries = Object.entries(SERVICE_LABELS);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
   const statusEntriesBase = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
-  const statusEntries = (user?.role === 'intake')
-    ? statusEntriesBase.filter(([key]) => key !== 'CLIENT')
-    : statusEntriesBase;
+  // Allow intake users to choose CLIENT via the form, but we'll require assignment when they do.
+  const statusEntries = statusEntriesBase;
 
   const resetForm = () => {
     setEditingId(null);
@@ -294,6 +293,11 @@ const Customers = () => {
 
   const handleSave = async () => {
     try {
+      // UI-level validation: intake must choose assignee when confirming
+      if (form.status === 'CLIENT' && user?.role === 'intake' && !form.assignedTo) {
+        toast({ title: 'Assign required', description: 'Please select someone to assign the confirmed client', variant: 'destructive' });
+        return;
+      }
       const payload = {
         ...form,
         assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : form.assignedTo,
@@ -304,6 +308,20 @@ const Customers = () => {
         serviceDescription: form.serviceDescription || "",
         notes: form.notes ?? "",
       };
+      // Intake users are not allowed to change assignment except when confirming to CLIENT.
+      if (user?.role === 'intake') {
+        if (form.status === 'CLIENT') {
+          // keep assignedTo from form (already mapped above)
+        } else {
+          // If editing, preserve existing assignedTo; if creating, ensure empty
+          if (editingId) {
+            const orig = customers.find((x) => x.customerId === editingId);
+            payload.assignedTo = orig?.assignedTo || "";
+          } else {
+            payload.assignedTo = "";
+          }
+        }
+      }
       const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as Record<string, unknown>;
       if (editingId) {
         const original = customers.find((x) => x.customerId === editingId);
@@ -754,7 +772,7 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Assigned Consultant</Label>
-              {isAdmin ? (
+              {(isAdmin || user?.role === 'intake') ? (
                 <Select value={form.assignedTo || UNASSIGNED_CONSULTANT} onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
