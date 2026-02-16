@@ -10,7 +10,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, refreshSession, user } = useAuth();
+  const { login, refreshSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
@@ -29,15 +29,18 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
       });
       const data = await res.json().catch(() => ({} as Record<string, unknown>));
       if (res.ok && (data as { success?: boolean }).success) {
-        login((data as { token?: string }).token);
+        const token = (data as { token?: string }).token;
+        const role = (data as { role?: string }).role;
+        login(token);
         setError('');
         if (onLogin) {
           onLogin();
         } else {
-          // Refresh session to populate `user` then redirect based on role
-          await refreshSession();
-          const dest = user?.role === 'intake' ? '/customers' : returnTo;
+          // Redirect based on role returned from login API (avoid stale context)
+          const dest = role === 'intake' ? '/customers' : returnTo;
           navigate(dest, { replace: true });
+          // Refresh session in background
+          void refreshSession();
         }
       } else {
         const message = (data as { message?: string }).message || (res.status >= 500 ? 'Server is unavailable. Please try again shortly.' : 'Invalid credentials');

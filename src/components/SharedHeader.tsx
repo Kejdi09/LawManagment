@@ -15,7 +15,7 @@ import { Menu } from "lucide-react";
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, isAuthLoading } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const onCustomers = location.pathname.startsWith("/customers");
   const onClients = location.pathname.startsWith("/clients");
@@ -38,13 +38,13 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
                 <DrawerDescription>Quick access to pages</DrawerDescription>
               </DrawerHeader>
               <div className="flex flex-col p-4 gap-2">
-                {user?.role !== "intake" && (
+                {!isAuthLoading && user?.role !== "intake" && (
                   <Button variant={onCases ? "default" : "ghost"} onClick={() => { navigate("/"); setDrawerOpen(false); }}>Cases</Button>
                 )}
-                {(user?.role === "intake" || user?.role === "admin") && (
+                {!isAuthLoading && (user?.role === "intake" || user?.role === "admin") && (
                   <Button variant={onCustomers ? "default" : "ghost"} onClick={() => { navigate("/customers"); setDrawerOpen(false); }}>Customers</Button>
                 )}
-                {user?.role !== "intake" && (
+                {!isAuthLoading && user?.role !== "intake" && (
                   <Button variant={onClients ? "default" : "ghost"} onClick={() => { navigate("/clients"); setDrawerOpen(false); }}>Confirmed Clients</Button>
                 )}
                 {user?.role === "admin" && (
