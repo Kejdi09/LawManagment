@@ -366,6 +366,13 @@ const Customers = () => {
 
   const handleSetStatus = async (customerId: string, status: LeadStatus) => {
     try {
+      // If current user is intake and confirming to CLIENT, require assignee selection
+      if (user?.role === 'intake' && status === 'CLIENT') {
+        setConfirmAssignCustomerId(customerId);
+        setShowConfirmAssign(true);
+        return;
+      }
+
       // optimistic update
       setCustomers((prev) => prev.map((c) => (c.customerId === customerId ? { ...c, status } : c)));
       if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
@@ -377,6 +384,29 @@ const Customers = () => {
       const errorMessage = err instanceof Error ? err.message : 'Unable to update status';
       toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
       await loadCustomers();
+    }
+  };
+
+  // Confirm-assign dialog state
+  const [showConfirmAssign, setShowConfirmAssign] = useState(false);
+  const [confirmAssignCustomerId, setConfirmAssignCustomerId] = useState<string | null>(null);
+  const [confirmAssignSelected, setConfirmAssignSelected] = useState<string>(LAWYERS[0] || "");
+
+  const handleConfirmAssign = async () => {
+    if (!confirmAssignCustomerId) return;
+    if (!confirmAssignSelected) {
+      toast({ title: 'Select assignee', description: 'Please choose someone to assign the confirmed client', variant: 'destructive' });
+      return;
+    }
+    try {
+      await updateCustomer(confirmAssignCustomerId, { status: 'CLIENT', assignedTo: confirmAssignSelected });
+      toast({ title: 'Client confirmed', description: `Assigned to ${confirmAssignSelected}` });
+      setShowConfirmAssign(false);
+      setConfirmAssignCustomerId(null);
+      await loadCustomers();
+      if (selectedId) await loadCustomerDetail(selectedId);
+    } catch (err: unknown) {
+      toast({ title: 'Confirm failed', description: String(err), variant: 'destructive' });
     }
   };
 
@@ -788,6 +818,33 @@ const Customers = () => {
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editingId ? "Save" : "Create"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm-assign dialog for intake users */}
+      <Dialog open={showConfirmAssign} onOpenChange={(o) => { if (!o) setShowConfirmAssign(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm client — assign to</DialogTitle>
+            <DialogDescription>Please choose a consultant or lawyer to assign this confirmed client to.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Label>Assign to</Label>
+            <Select value={confirmAssignSelected} onValueChange={(v) => setConfirmAssignSelected(String(v))}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select consultant" />
+              </SelectTrigger>
+              <SelectContent>
+                {LAWYERS.map((l) => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => { setShowConfirmAssign(false); setConfirmAssignCustomerId(null); }}>Cancel</Button>
+              <Button onClick={handleConfirmAssign}>Confirm & Assign</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
