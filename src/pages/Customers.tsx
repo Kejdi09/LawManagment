@@ -245,7 +245,10 @@ const Customers = () => {
 
   const serviceEntries = Object.entries(SERVICE_LABELS);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
-  const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
+  const statusEntriesBase = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
+  const statusEntries = (user?.role === 'intake')
+    ? statusEntriesBase.filter(([key]) => key !== 'CLIENT')
+    : statusEntriesBase;
 
   const resetForm = () => {
     setEditingId(null);
@@ -324,10 +327,10 @@ const Customers = () => {
         setShowForm(false);
         resetForm();
         await updateCustomer(editingId.trim(), patched);
-        await loadCustomerNotifications();
+        try { await loadCustomerNotifications(); } catch (e) { /* ignore secondary load errors */ }
         toast({ title: "Updated", description: "Customer updated successfully" });
-        await loadCustomers();
-        if (selectedId) await loadCustomerDetail(selectedId);
+        try { await loadCustomers(); } catch (e) { /* ignore reload errors */ }
+        try { if (selectedId) await loadCustomerDetail(selectedId); } catch (e) { /* ignore */ }
         return;
       } else {
         // New customer: initialize statusHistory
@@ -335,6 +338,7 @@ const Customers = () => {
         toCreate.status = form.status as LeadStatus;
         toCreate.statusHistory = [{ status: form.status as LeadStatus, date: new Date().toISOString() }];
         await createCustomer(toCreate as Omit<Customer, "customerId">);
+        try { await loadCustomerNotifications(); } catch (e) { /* ignore */ }
         toast({ title: "Created", description: "Customer created successfully" });
       }
       setShowForm(false);
@@ -559,9 +563,11 @@ const Customers = () => {
             <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
           </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
-          <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
-            <Plus className="h-4 w-4" /> New Customer
-          </Button>
+          {user?.role === 'intake' && (
+            <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
+              <Plus className="h-4 w-4" /> New Customer
+            </Button>
+          )}
         </div>
 
         <Card>

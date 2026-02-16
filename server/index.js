@@ -532,18 +532,18 @@ app.post("/api/login", async (req, res) => {
 
 // Customers
 app.get("/api/customers", verifyAuth, async (req, res) => {
-  // Only intake users should see non-confirmed customers
-  if (req.user?.role !== 'intake') return res.json([]);
-  const scope = buildCustomerScopeFilter(req.user);
-  const docs = await customersCol.find({ status: { $ne: "CLIENT" }, ...scope }).sort({ customerId: 1 }).toArray();
+  // Only intake users and admin should see non-confirmed customers
+  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.json([]);
+  // Intake/admin should be able to view all non-confirmed customers (no assignedTo restriction)
+  const docs = await customersCol.find({ status: { $ne: "CLIENT" } }).sort({ customerId: 1 }).toArray();
   res.json(docs);
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  // Only intake users may view non-confirmed customer records
-  if (req.user?.role !== 'intake') return res.status(404).json({ error: "Not found" });
-  const scope = buildCustomerScopeFilter(req.user);
-  const doc = await customersCol.findOne({ customerId: req.params.id, ...scope });
+  // Only intake users and admin may view non-confirmed customer records
+  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.status(404).json({ error: "Not found" });
+  // Return the non-confirmed customer record
+  const doc = await customersCol.findOne({ customerId: req.params.id });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
 });
@@ -553,6 +553,10 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
   if (req.user?.role !== 'intake') return res.status(403).json({ error: 'forbidden' });
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null };
+  // If intake is creating a confirmed client, require assignedTo
+  if (payload.status === "CLIENT" && req.user?.role === 'intake' && !payload.assignedTo) {
+    return res.status(400).json({ error: 'must_assign_confirmed_client' });
+  }
   if (payload.status === "CLIENT") {
     const confirmedPayload = {
       ...payload,
@@ -604,7 +608,10 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 
   // Check if status is changing
   const scope = buildCustomerScopeFilter(req.user);
-  const current = await customersCol.findOne({ customerId: id, ...scope });
+  // Intake users may modify any non-confirmed customer
+  const current = req.user?.role === 'intake'
+    ? await customersCol.findOne({ customerId: id })
+    : await customersCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
   if (!isAdminUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
@@ -702,7 +709,10 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
 app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const customerScope = buildCustomerScopeFilter(req.user);
-  const current = await customersCol.findOne({ customerId: id, ...customerScope });
+  // Intake users may delete any non-confirmed customer
+  const current = req.user?.role === 'intake'
+    ? await customersCol.findOne({ customerId: id })
+    : await customersCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: "Not found" });
   const caseScope = buildCaseScopeFilter(req.user);
   const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
