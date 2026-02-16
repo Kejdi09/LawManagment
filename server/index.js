@@ -579,6 +579,70 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
   res.status(201).json(payload);
 });
 
+// Update a non-confirmed customer. Intake can edit any non-confirmed customer; other roles
+// can edit only within their scope. If status changes to CLIENT we require `assignedTo`
+// and migrate the record into `confirmedClients`.
+app.put("/api/customers/:id", verifyAuth, async (req, res) => {
+  const { id } = req.params;
+  const update = { ...req.body };
+  delete update._id;
+  delete update.customerId;
+
+  // Find current customer. Intake may view any non-confirmed customer; others respect scope.
+  const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
+  const current = await customersCol.findOne({ customerId: id, ...customerScope });
+  if (!current) return res.status(404).json({ error: 'Not found' });
+
+  // If status is being changed to CLIENT, require assignedTo
+  if (update.status === 'CLIENT' && !update.assignedTo) {
+    return res.status(400).json({ error: 'must_assign_confirmed_client' });
+  }
+
+  // If remaining non-CLIENT, ensure assignedTo is cleared
+  if (!update.status || update.status !== 'CLIENT') {
+    update.assignedTo = "";
+  }
+
+  // Track status history
+  if (current.status !== update.status) {
+    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    await customerHistoryCol.insertOne({
+      historyId,
+      customerId: id,
+      statusFrom: current.status,
+      statusTo: update.status,
+      date: new Date().toISOString(),
+      changedBy: req.user?.username || null,
+      changedByRole: req.user?.role || null,
+      changedByConsultant: getUserLawyerName(req.user) || null,
+      changedByLawyer: getUserLawyerName(req.user) || null,
+    });
+    if (!update.statusHistory) update.statusHistory = (current.statusHistory || []);
+    update.statusHistory.push({ status: update.status, date: new Date().toISOString() });
+  }
+
+  // If becoming a confirmed client, migrate to confirmedClients and remove from customers
+  if (update.status === 'CLIENT') {
+    const confirmedPayload = {
+      ...current,
+      ...update,
+      customerId: id,
+      sourceCustomerId: id,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne({ customerId: id }, { $set: confirmedPayload }, { upsert: true });
+    await customersCol.deleteOne({ customerId: id });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'confirm', resource: 'customer', resourceId: id, details: { assignedTo: confirmedPayload.assignedTo } });
+    return res.json(confirmedPayload);
+  }
+
+  // Regular customer update (stay non-confirmed)
+  await customersCol.updateOne({ customerId: id, ...customerScope }, { $set: update });
+  const updated = await customersCol.findOne({ customerId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
+  res.json(updated);
+});
+
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
   const scope = buildCustomerScopeFilter(req.user);
   // Intake users should not see confirmed clients
