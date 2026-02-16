@@ -532,10 +532,44 @@ app.post("/api/login", async (req, res) => {
 
 // Customers
 app.get("/api/customers", verifyAuth, async (req, res) => {
+  // Only intake users should see non-confirmed customers
+  if (req.user?.role !== 'intake') return res.json([]);
   const scope = buildCustomerScopeFilter(req.user);
   const docs = await customersCol.find({ status: { $ne: "CLIENT" }, ...scope }).sort({ customerId: 1 }).toArray();
   res.json(docs);
+});
+
+app.get("/api/customers/:id", verifyAuth, async (req, res) => {
+  // Only intake users may view non-confirmed customer records
+  if (req.user?.role !== 'intake') return res.status(404).json({ error: "Not found" });
+  const scope = buildCustomerScopeFilter(req.user);
+  const doc = await customersCol.findOne({ customerId: req.params.id, ...scope });
+  if (!doc) return res.status(404).json({ error: "Not found" });
+  res.json(doc);
+});
+
+app.post("/api/customers", verifyAuth, async (req, res) => {
+  // Only intake users can create new (non-confirmed) customers
+  if (req.user?.role !== 'intake') return res.status(403).json({ error: 'forbidden' });
+  const customerId = await genCustomerId();
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null };
+  if (payload.status === "CLIENT") {
+    const confirmedPayload = {
+      ...payload,
+      sourceCustomerId: customerId,
+      confirmedAt: new Date().toISOString(),
+    };
+    await confirmedClientsCol.updateOne(
+      { customerId },
+      { $set: confirmedPayload },
+      { upsert: true }
+    );
+  } else {
+    await customersCol.insertOne(payload);
+  }
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'customer', resourceId: customerId, details: { payload } });
+  res.status(201).json(payload);
+});
 
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
   const scope = buildCustomerScopeFilter(req.user);
@@ -560,36 +594,7 @@ app.get("/api/customers/notifications", async (req, res) => {
   res.json(docs);
 });
 
-app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  const scope = buildCustomerScopeFilter(req.user);
-  const doc = await customersCol.findOne({ customerId: req.params.id, ...scope });
-  if (!doc) return res.status(404).json({ error: "Not found" });
-  res.json(doc);
-});
 
-app.post("/api/customers", verifyAuth, async (req, res) => {
-  const customerId = await genCustomerId();
-  const payload = { ...req.body, customerId };
-  if (!isAdminUser(req.user)) {
-    payload.assignedTo = getUserLawyerName(req.user);
-  }
-  if (payload.status === "CLIENT") {
-    const confirmedPayload = {
-      ...payload,
-      sourceCustomerId: customerId,
-      confirmedAt: new Date().toISOString(),
-    };
-    await confirmedClientsCol.updateOne(
-      { customerId },
-      { $set: confirmedPayload },
-      { upsert: true }
-    );
-  } else {
-    await customersCol.insertOne(payload);
-  }
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'customer', resourceId: customerId, details: { payload } });
-  res.status(201).json(payload);
-});
 
 app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
