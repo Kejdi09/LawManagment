@@ -102,38 +102,8 @@ const Index = () => {
       return items;
     });
 
-    // Add customer status notifications
-    const customerAlerts = customers.flatMap((customer) => {
-      const items: { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
-      
-      if (!customer.statusHistory || customer.statusHistory.length === 0) return items;
-      
-      const lastStatusChange = new Date(customer.statusHistory[customer.statusHistory.length - 1].date).getTime();
-      const hoursSinceChange = (now - lastStatusChange) / (1000 * 60 * 60);
-      
-      const waitingStatuses = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
-      const respondStatuses = ["SEND_RESPONSE"];
-      
-      if (waitingStatuses.includes(customer.status)) {
-        if (hoursSinceChange >= 48 && hoursSinceChange < 72) {
-          items.push({ id: `${customer.customerId}-cust-wait-48`, customerId: customer.customerId, kind: "follow", severity: "warn" });
-        }
-        if (hoursSinceChange >= 72 && hoursSinceChange < 96) {
-          items.push({ id: `${customer.customerId}-cust-wait-72`, customerId: customer.customerId, kind: "follow", severity: "critical" });
-        }
-        if (hoursSinceChange >= 96 && hoursSinceChange < 120) {
-          items.push({ id: `${customer.customerId}-cust-wait-96`, customerId: customer.customerId, kind: "follow", severity: "critical" });
-        }
-      }
-      
-      if (respondStatuses.includes(customer.status) && hoursSinceChange >= 24) {
-        items.push({ id: `${customer.customerId}-cust-respond`, customerId: customer.customerId, kind: "respond", severity: "warn" });
-      }
-      
-      return items;
-    });
-
-    setAlerts([...alertsComputed, ...customerAlerts]);
+    // Customer notifications are surfaced on the Customers page only; keep main alerts for cases
+    setAlerts([...alertsComputed]);
 
     const filtered = base.filter((c) => {
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;

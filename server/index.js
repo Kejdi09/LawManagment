@@ -660,7 +660,9 @@ app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   res.json(doc);
 });
 
-app.get("/api/customers/notifications", async (req, res) => {
+app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
+  // Only intake users and admins should receive customer follow-up/respond notifications
+  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.json([]);
   await syncCustomerNotifications();
   const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(50).toArray();
   res.json(docs);
@@ -1040,20 +1042,26 @@ app.delete("/api/tasks/:taskId", verifyAuth, async (req, res) => {
 });
 
 // KPIs
-app.get("/api/kpis", async (req, res) => {
+app.get("/api/kpis", verifyAuth, async (req, res) => {
   const now = Date.now();
-  const allCases = await casesCol.find({}).toArray();
-  const allTasks = await tasksCol.find({}).toArray();
-  const overdue = allCases.filter((c) => c.deadline && new Date(c.deadline).getTime() < now).length;
-  const missingDocs = allCases.filter((c) => c.documentState === "missing").length;
-  const urgentCases = allCases.filter((c) => c.priority === "urgent" || c.priority === "high").length;
-  const pendingTasks = allTasks.filter((t) => !t.done).length;
-  const stateBreakdown = allCases.reduce((acc, c) => {
+  // Scope cases to the requesting user so counts reflect their visible cases only
+  const caseScope = buildCaseScopeFilter(req.user);
+  const scopedCases = await casesCol.find(caseScope).toArray();
+  const caseIds = scopedCases.map((c) => c.caseId);
+  // Only include tasks that belong to scoped cases
+  const scopedTasks = caseIds.length ? await tasksCol.find({ caseId: { $in: caseIds } }).toArray() : [];
+
+  const overdue = scopedCases.filter((c) => c.deadline && new Date(c.deadline).getTime() < now).length;
+  const missingDocs = scopedCases.filter((c) => c.documentState === "missing").length;
+  const urgentCases = scopedCases.filter((c) => c.priority === "urgent" || c.priority === "high").length;
+  const pendingTasks = scopedTasks.filter((t) => !t.done).length;
+  const stateBreakdown = scopedCases.reduce((acc, c) => {
     acc[c.state] = (acc[c.state] || 0) + 1;
     return acc;
   }, {});
+
   res.json({
-    totalCases: allCases.length,
+    totalCases: scopedCases.length,
     overdue,
     missingDocs,
     urgentCases,
