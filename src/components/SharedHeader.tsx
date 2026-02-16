@@ -41,7 +41,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
                 {user?.role !== "intake" && (
                   <Button variant={onCases ? "default" : "ghost"} onClick={() => { navigate("/"); setDrawerOpen(false); }}>Cases</Button>
                 )}
-                {user?.role === "intake" && (
+                {(user?.role === "intake" || user?.role === "admin") && (
                   <Button variant={onCustomers ? "default" : "ghost"} onClick={() => { navigate("/customers"); setDrawerOpen(false); }}>Customers</Button>
                 )}
                 {user?.role !== "intake" && (

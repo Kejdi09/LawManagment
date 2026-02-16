@@ -123,6 +123,7 @@ const Customers = () => {
   const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const loadCustomers = useCallback(async () => {
     const data = await getAllCustomers();
@@ -414,7 +415,6 @@ const Customers = () => {
     }
   };
 
-  const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
   const handleUploadCustomerDocument = async (file?: File) => {
@@ -563,7 +563,7 @@ const Customers = () => {
             <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
           </div>
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
-          {user?.role === 'intake' && (
+          {(user?.role === 'intake' || user?.role === 'admin') && (
             <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
               <Plus className="h-4 w-4" /> New Customer
             </Button>

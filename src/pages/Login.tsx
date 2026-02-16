@@ -10,7 +10,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, refreshSession } = useAuth();
+  const { login, refreshSession, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
@@ -31,9 +31,14 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
       if (res.ok && (data as { success?: boolean }).success) {
         login((data as { token?: string }).token);
         setError('');
-        if (onLogin) onLogin();
-        else navigate(returnTo, { replace: true });
-        void refreshSession();
+        if (onLogin) {
+          onLogin();
+        } else {
+          // Refresh session to populate `user` then redirect based on role
+          await refreshSession();
+          const dest = user?.role === 'intake' ? '/customers' : returnTo;
+          navigate(dest, { replace: true });
+        }
       } else {
         const message = (data as { message?: string }).message || (res.status >= 500 ? 'Server is unavailable. Please try again shortly.' : 'Invalid credentials');
         setError(message);
