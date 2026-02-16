@@ -26,8 +26,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
   FileText, User, Clock, MessageSquare,
-  CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap, Trash2,
+  CheckSquare, AlertTriangle, Phone, Mail, MapPin, Zap, Trash2, MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { isPast, differenceInHours } from "date-fns";
 import { getDeadlineNotification, mapStageToState, formatDate } from "@/lib/utils";
 import { mapCaseStateToStage } from "@/lib/utils";
@@ -503,11 +509,18 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       <div key={doc.docId} className="flex items-center gap-2 rounded-md border p-2">
                         <span className="font-medium truncate max-w-[220px]" title={doc.originalName}>{doc.originalName}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{new Date(doc.uploadedAt).toLocaleString()}</span>
-                        <Button variant="outline" size="sm" onClick={() => handlePreviewDocument(doc.docId)} disabled={isLoading}>Preview</Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDownloadDocument(doc.docId, doc.originalName)} disabled={isLoading}>Download</Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteDocument(doc.docId)} className="text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="ml-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger className="inline-flex items-center rounded-md px-2 py-1 border">
+                              <MoreVertical className="h-4 w-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              <DropdownMenuItem onClick={() => handlePreviewDocument(doc.docId)}>Preview</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDownloadDocument(doc.docId, doc.originalName)}>Download</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDeleteDocument(doc.docId)} className="text-destructive">Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     ))}
                   </div>

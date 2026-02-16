@@ -464,6 +464,20 @@ function verifyAuth(req, res, next) {
   }
 }
 
+function debugLogEnabled() {
+  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_COOKIES === 'true';
+}
+
+function debugLog(req, label, extra = {}) {
+  if (!debugLogEnabled()) return;
+  try {
+    const user = req.user || null;
+    console.log(`[DEBUG] ${label} ${req.method} ${req.originalUrl} user=${user ? user.username + ':' + user.role : 'anonymous'} params=${JSON.stringify(req.params)} bodyKeys=${Object.keys(req.body || {}).length}`, extra);
+  } catch (e) {
+    /* ignore logging errors */
+  }
+}
+
 function requireRole(role) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'unauthenticated' });
@@ -540,11 +554,16 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  // Only intake users and admin may view non-confirmed customer records
-  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.status(404).json({ error: "Not found" });
-  // Return the non-confirmed customer record
-  const doc = await customersCol.findOne({ customerId: req.params.id });
-  if (!doc) return res.status(404).json({ error: "Not found" });
+  debugLog(req, 'GET /api/customers/:id');
+  // Intake may view any non-confirmed customer. Other users (consultants/admin)
+  // may view customers that are in their scope (assignedTo or createdBy).
+  const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
+  const doc = await customersCol.findOne({ customerId: req.params.id, ...customerScope });
+  if (!doc) {
+    debugLog(req, 'GET /api/customers/:id - not found');
+    return res.status(404).json({ error: "Not found" });
+  }
+  debugLog(req, 'GET /api/customers/:id - ok', { customerId: doc.customerId });
   res.json(doc);
 });
 
@@ -583,6 +602,7 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
 // can edit only within their scope. If status changes to CLIENT we require `assignedTo`
 // and migrate the record into `confirmedClients`.
 app.put("/api/customers/:id", verifyAuth, async (req, res) => {
+  debugLog(req, 'PUT /api/customers/:id');
   const { id } = req.params;
   const update = { ...req.body };
   delete update._id;
@@ -633,6 +653,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     await confirmedClientsCol.updateOne({ customerId: id }, { $set: confirmedPayload }, { upsert: true });
     await customersCol.deleteOne({ customerId: id });
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'confirm', resource: 'customer', resourceId: id, details: { assignedTo: confirmedPayload.assignedTo } });
+    debugLog(req, 'PUT /api/customers/:id - confirmed', { assignedTo: confirmedPayload.assignedTo });
     return res.json(confirmedPayload);
   }
 
@@ -640,6 +661,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   await customersCol.updateOne({ customerId: id, ...customerScope }, { $set: update });
   const updated = await customersCol.findOne({ customerId: id });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
+  debugLog(req, 'PUT /api/customers/:id - updated', { updatedCustomerId: updated?.customerId });
   res.json(updated);
 });
 
@@ -1113,6 +1135,7 @@ const upload = multer({ storage });
 
 app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req, res) => {
   try {
+    debugLog(req, 'POST /api/documents/upload', { filename: req.file?.originalname });
     const ownerType = req.body.ownerType; // 'case' or 'customer'
     const ownerId = req.body.ownerId;
     if (!req.file || !ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
@@ -1130,6 +1153,7 @@ app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req,
     };
     await documentsCol.insertOne(doc);
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'upload', resource: 'document', resourceId: doc.docId, details: { ownerType, ownerId, originalName: doc.originalName } });
+    debugLog(req, 'POST /api/documents/upload - saved', { docId: doc.docId });
     return res.json(doc);
   } catch (err) {
     console.error('/api/documents/upload error', err);
