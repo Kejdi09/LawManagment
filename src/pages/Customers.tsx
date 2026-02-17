@@ -185,7 +185,7 @@ const Customers = () => {
     [customerAlerts, seenAlertIds],
   );
 
-          </div>
+  const filteredCustomers = useMemo(() => {
     if (!search) return customers;
     const q = search.toLowerCase();
     return customers.filter((c) => {
@@ -1025,7 +1025,7 @@ const Customers = () => {
           loadCustomers();
         }}
       />
-    </div>
+    </MainLayout>
   );
 };
 
