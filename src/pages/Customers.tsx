@@ -50,7 +50,7 @@ import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, P
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
-import SharedHeader from "@/components/SharedHeader";
+import MainLayout from "@/components/MainLayout";
 import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
 import { getCustomerNotifications } from "@/lib/case-store";
@@ -185,7 +185,7 @@ const Customers = () => {
     [customerAlerts, seenAlertIds],
   );
 
-  const filteredCustomers = useMemo(() => {
+          </div>
     if (!search) return customers;
     const q = search.toLowerCase();
     return customers.filter((c) => {
@@ -486,49 +486,47 @@ const Customers = () => {
     }
   };
   return (
-    <div className="min-h-screen bg-background">
-      <SharedHeader
-        title="Customers"
-        right={
-          <>
-            <DropdownMenu
-              onOpenChange={(open) => {
-                if (open) {
-                  setSeenAlertIds((prev) => {
-                    const next = new Set(prev);
-                    customerAlerts.forEach((a) => next.add(a.notificationId));
-                    return next;
-                  });
-                }
-              }}
-            >
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="relative">
-                  <Bell className="h-4 w-4" />
-                  {unreadAlertCount > 0 && (
-                    <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
-                      {unreadAlertCount}
-                    </Badge>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
-                {customerAlerts.map((a) => (
-                  <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
-                    <div className="flex flex-col">
-                      <span>{a.message}</span>
-                      <span className="text-xs text-muted-foreground">{a.customerId}</span>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        }
-      />
-
-      <main className="container py-6 space-y-4">
+    <MainLayout
+      title="Customers"
+      right={
+        <>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) {
+                setSeenAlertIds((prev) => {
+                  const next = new Set(prev);
+                  customerAlerts.forEach((a) => next.add(a.notificationId));
+                  return next;
+                });
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="relative">
+                <Bell className="h-4 w-4" />
+                {unreadAlertCount > 0 && (
+                  <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
+                    {unreadAlertCount}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
+              {customerAlerts.map((a) => (
+                <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
+                  <div className="flex flex-col">
+                    <span>{a.message}</span>
+                    <span className="text-xs text-muted-foreground">{a.customerId}</span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -714,7 +712,7 @@ const Customers = () => {
           </CardContent>
         </Card>
 
-      </main>
+      </div>
 
       {/* Create / Edit customer */}
       <Dialog open={showForm} onOpenChange={(o) => !o && setShowForm(false)}>

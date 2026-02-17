@@ -16,7 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
-import SharedHeader from "@/components/SharedHeader";
+import MainLayout from "@/components/MainLayout";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -201,57 +201,55 @@ const Index = () => {
 
   
   return (
-    <div className="min-h-screen bg-background">
-      <SharedHeader
-        title="Case Management"
-        right={
-          <>
-            <DropdownMenu
-              onOpenChange={(open) => {
-                if (open) {
-                  setSeenAlertIds((prev) => {
-                    const next = new Set(prev);
-                    alerts.forEach((a) => next.add(a.id));
-                    return next;
-                  });
-                }
-              }}
-            >
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="relative">
-                  <Bell className="h-4 w-4" />
-                  {unreadCount > 0 && (
-                    <Badge
-                      variant={criticalCount > 0 ? "destructive" : "secondary"}
-                      className="absolute -top-1 -right-2 px-1.5 text-[10px]"
-                    >
-                      {unreadCount}
-                    </Badge>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
-                {alerts.map((a) => {
-                  const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
-                  const message = a.message ?? (a.kind === "deadline" ? "Deadline" : a.kind === "respond" ? "Respond" : "Follow up");
-                  return (
-                    <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
-                      <div className="flex flex-col">
-                        <span>{message}</span>
-                        <span className="text-xs text-muted-foreground">{name}</span>
-                      </div>
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>
-          </>
-        }
-      />
-
-      <main className="container py-6 space-y-6">
+    <MainLayout
+      title="Case Management"
+      right={
+        <>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) {
+                setSeenAlertIds((prev) => {
+                  const next = new Set(prev);
+                  alerts.forEach((a) => next.add(a.id));
+                  return next;
+                });
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="relative">
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <Badge
+                    variant={criticalCount > 0 ? "destructive" : "secondary"}
+                    className="absolute -top-1 -right-2 px-1.5 text-[10px]"
+                  >
+                    {unreadCount}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
+              {alerts.map((a) => {
+                const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
+                const message = a.message ?? (a.kind === "deadline" ? "Deadline" : a.kind === "respond" ? "Respond" : "Follow up");
+                return (
+                  <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
+                    <div className="flex flex-col">
+                      <span>{message}</span>
+                      <span className="text-xs text-muted-foreground">{name}</span>
+                    </div>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>
+        </>
+      }
+    >
+      <div className="space-y-6">
         <DashboardKPIs key={tick} />
 
         <SearchFilterBar
@@ -292,7 +290,7 @@ const Index = () => {
             No cases match your filters.
           </div>
         )}
-      </main>
+      </div>
 
       <CaseDetail
         caseId={selectedCaseId}
@@ -406,7 +404,7 @@ const Index = () => {
           </datalist>
         </DialogContent>
       </Dialog>
-    </div>
+    </MainLayout>
   );
 };
 

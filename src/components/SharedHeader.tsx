@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
@@ -10,6 +10,7 @@ import {
   DrawerTitle,
   DrawerDescription,
 } from "@/components/ui/drawer";
+import Nav from "./Nav";
 import { Menu } from "lucide-react";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
@@ -17,6 +18,21 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
   const location = useLocation();
   const { logout, user, isAuthLoading } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    // Move focus into the drawer on open to avoid aria-hidden hiding a focused background element.
+    const t = setTimeout(() => {
+      try {
+        const root = document.querySelector('[data-drawer-content]');
+        if (!root) return;
+        const firstFocusable = root.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+        firstFocusable?.focus();
+      } catch (e) {
+        // ignore
+      }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [drawerOpen]);
   const onCustomers = location.pathname.startsWith("/customers");
   const onClients = location.pathname.startsWith("/clients");
   const onActivity = location.pathname.startsWith("/activity");
@@ -38,27 +54,10 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
                 <DrawerDescription>Quick access to pages</DrawerDescription>
               </DrawerHeader>
               <div className="flex flex-col p-4 gap-2">
-                {!isAuthLoading && user?.role !== "intake" && (
-                  <Button variant={onCases ? "default" : "ghost"} onClick={() => { navigate("/"); setDrawerOpen(false); }}>Cases</Button>
-                )}
-                {!isAuthLoading && (user?.role === "intake" || user?.role === "admin") && (
-                  <Button variant={onCustomers ? "default" : "ghost"} onClick={() => { navigate("/customers"); setDrawerOpen(false); }}>Customers</Button>
-                )}
-                {!isAuthLoading && user?.role !== "intake" && (
-                  <Button variant={onClients ? "default" : "ghost"} onClick={() => { navigate("/clients"); setDrawerOpen(false); }}>Confirmed Clients</Button>
-                )}
-                {user?.role === "admin" && (
-                  <Button variant={onActivity ? "default" : "ghost"} onClick={() => { navigate("/activity"); setDrawerOpen(false); }}>Activity</Button>
-                )}
+                <Nav onSelect={() => setDrawerOpen(false)} />
               </div>
             </DrawerContent>
           </Drawer>
-          <div className="flex items-center gap-2 border rounded-md px-2 py-1">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Account</span>
-            {user?.role && <span className="text-xs text-muted-foreground capitalize">{user.role}</span>}
-            <span className="text-xs text-muted-foreground">{user?.consultantName || user?.lawyerName || user?.username || ""}</span>
-          </div>
-          <Button variant="outline" size="sm" onClick={logout}>Sign Out</Button>
         </div>
       </div>
     </header>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import SharedHeader from "@/components/SharedHeader";
+import MainLayout from "@/components/MainLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,17 +30,15 @@ const AdminActivity = () => {
 
   if (user?.role !== "admin") {
     return (
-      <div className="min-h-screen bg-background">
-        <SharedHeader title="Activity" />
-        <main className="container py-6 text-sm text-muted-foreground">Only admin can view activity logs.</main>
-      </div>
+      <MainLayout title="Activity">
+        <div className="text-sm text-muted-foreground">Only admin can view activity logs.</div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SharedHeader title="Admin Activity" />
-      <main className="container py-6 space-y-4">
+    <MainLayout title="Admin Activity">
+      <div className="space-y-4">
         <div className="max-w-sm">
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by actor/action/resource" />
         </div>
@@ -82,8 +80,8 @@ const AdminActivity = () => {
             </Table>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </MainLayout>
   );
 };
 

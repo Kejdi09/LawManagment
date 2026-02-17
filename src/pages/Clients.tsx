@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import SharedHeader from "@/components/SharedHeader";
+import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -211,9 +211,8 @@ const ClientsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SharedHeader title="Confirmed Clients" />
-      <main className="container py-6 space-y-4">
+    <MainLayout title="Confirmed Clients">
+      <div className="space-y-4">
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -526,8 +525,8 @@ const ClientsPage = () => {
             </div>
           </DialogContent>
         </Dialog>
-      </main>
-    </div>
+      </div>
+    </MainLayout>
   );
 };
 
