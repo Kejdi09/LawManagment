@@ -111,3 +111,5 @@ export {
   DrawerTitle,
   DrawerDescription,
 };
+
+export { DrawerContentLeft };
