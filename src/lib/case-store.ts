@@ -105,7 +105,12 @@ export async function deleteCustomer(customerId: string): Promise<void> {
 }
 
 export async function getCustomerNotifications(): Promise<CustomerNotification[]> {
-  return api<CustomerNotification[]>("/api/customers/notifications");
+  try {
+    return await api<CustomerNotification[]>("/api/customers/notifications");
+  } catch (err) {
+    // If notifications endpoint is unavailable or returns 404, treat as empty list
+    return [] as CustomerNotification[];
+  }
 }
 
 // ── History ──

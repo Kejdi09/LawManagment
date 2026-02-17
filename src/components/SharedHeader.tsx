@@ -26,7 +26,21 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
         const root = document.querySelector('[data-drawer-content]');
         if (!root) return;
         const firstFocusable = root.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
-        firstFocusable?.focus();
+        // If the currently focused element is inside an aria-hidden ancestor, blur it first
+        const active = document.activeElement as HTMLElement | null;
+        if (active) {
+          const hiddenAncestor = active.closest('[aria-hidden="true"]');
+          if (hiddenAncestor) {
+            try { active.blur(); } catch (e) { /* ignore */ }
+          }
+        }
+        if (firstFocusable) {
+          firstFocusable.focus();
+        } else {
+          // Fallback: focus the drawer content container so assistive tech moves into it
+          (root as HTMLElement).setAttribute('tabindex', '-1');
+          (root as HTMLElement).focus();
+        }
       } catch (e) {
         // ignore
       }
@@ -44,7 +58,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           {right}
           <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <DrawerTrigger className="inline-flex items-center gap-2 border rounded-md px-2 py-1">
+            <DrawerTrigger className="inline-flex items-center gap-2 border rounded-md px-2 py-1 md:hidden">
               <Menu className="h-4 w-4" />
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Menu</span>
             </DrawerTrigger>
