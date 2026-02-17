@@ -17,7 +17,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
     onSelect?.();
   };
 
-  const itemClass = "w-full justify-start text-sm";
+  const itemClass = "w-full justify-start text-sm px-3 py-2";
 
   return (
     <nav className="flex flex-col h-full">

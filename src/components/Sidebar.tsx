@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 export const Sidebar = () => {
   const { user, logout } = useAuth();
   return (
-    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col md:border-r md:bg-background md:shadow-sm">
+    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:bg-background md:shadow-sm">
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-background">
           <div className="flex items-center gap-3">
