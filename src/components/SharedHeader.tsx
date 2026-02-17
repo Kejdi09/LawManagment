@@ -11,6 +11,7 @@ import {
   DrawerDescription,
 } from "@/components/ui/drawer";
 import Nav from "./Nav";
+import { DrawerContentLeft } from "./ui/drawer";
 import { Menu } from "lucide-react";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
@@ -47,6 +48,45 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
     }, 50);
     return () => clearTimeout(t);
   }, [drawerOpen]);
+
+  // Apply `inert` to any aria-hidden background containers when drawer opens to
+  // ensure focused elements are not hidden from assistive tech. Remove on close.
+  useEffect(() => {
+    const applied: Element[] = [];
+    if (drawerOpen) {
+      try {
+        const hiddenEls = Array.from(document.querySelectorAll('[aria-hidden="true"]')) as Element[];
+        hiddenEls.forEach((el) => {
+          try {
+            // Mark so we know to remove later
+            (el as HTMLElement).setAttribute('data-inert-applied', 'true');
+            // Some browsers support inert; set it regardless
+            // @ts-ignore
+            (el as any).inert = true;
+            // Also set attribute for browsers/tools
+            (el as HTMLElement).setAttribute('inert', '');
+            applied.push(el);
+          } catch (e) {
+            // ignore per-element failures
+          }
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return () => {
+      for (const el of applied) {
+        try {
+          (el as any).inert = false;
+          (el as HTMLElement).removeAttribute('inert');
+          (el as HTMLElement).removeAttribute('data-inert-applied');
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  }, [drawerOpen]);
   const onCustomers = location.pathname.startsWith("/customers");
   const onClients = location.pathname.startsWith("/clients");
   const onActivity = location.pathname.startsWith("/activity");
@@ -62,15 +102,15 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
               <Menu className="h-4 w-4" />
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Menu</span>
             </DrawerTrigger>
-            <DrawerContent>
+            <DrawerContentLeft>
               <DrawerHeader>
                 <DrawerTitle>Navigation</DrawerTitle>
                 <DrawerDescription>Quick access to pages</DrawerDescription>
               </DrawerHeader>
-              <div className="flex flex-col p-4 gap-2">
+              <div className="flex flex-col p-2 gap-2">
                 <Nav onSelect={() => setDrawerOpen(false)} />
               </div>
-            </DrawerContent>
+            </DrawerContentLeft>
           </Drawer>
         </div>
       </div>

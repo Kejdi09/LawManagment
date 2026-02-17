@@ -44,6 +44,31 @@ const DrawerContent = React.forwardRef<
 ));
 DrawerContent.displayName = "DrawerContent";
 
+// Left-side drawer (for mobile navigation) — slides in from the left
+const DrawerContentLeft = React.forwardRef<
+  React.ElementRef<typeof DrawerPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DrawerPortal>
+    <DrawerOverlay />
+    <DrawerPrimitive.Content
+      ref={ref}
+      data-drawer-content={true}
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 flex h-full flex-col border-r bg-background",
+        className,
+      )}
+      {...props}
+    >
+      <div className="px-4 py-4 border-b">
+        <div className="h-8 w-full" />
+      </div>
+      {children}
+    </DrawerPrimitive.Content>
+  </DrawerPortal>
+));
+DrawerContentLeft.displayName = "DrawerContentLeft";
+
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("grid gap-1.5 p-4 text-center sm:text-left", className)} {...props} />
 );
