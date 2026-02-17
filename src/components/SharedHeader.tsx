@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
@@ -24,21 +24,21 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
     // Move focus into the drawer on open to avoid aria-hidden hiding a focused background element.
     const t = setTimeout(() => {
       try {
-        const root = document.querySelector('[data-drawer-content]');
-        if (!root) return;
-        const firstFocusable = root.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
-        // If the currently focused element is inside an aria-hidden ancestor, blur it first
+        const root = document.querySelector('[data-drawer-content]') as HTMLElement | null;
         const active = document.activeElement as HTMLElement | null;
-        if (active) {
-          const hiddenAncestor = active.closest('[aria-hidden="true"]');
-          if (hiddenAncestor) {
-            try { active.blur(); } catch (e) { /* ignore */ }
+        // If the active element is not inside the drawer, blur it so it won't become hidden
+        if (active && root && !root.contains(active)) {
+          try {
+            active.blur();
+          } catch (e) {
+            // ignore
           }
         }
+        if (!root) return;
+        const firstFocusable = root.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
         if (firstFocusable) {
           firstFocusable.focus();
         } else {
-          // Fallback: focus the drawer content container so assistive tech moves into it
           (root as HTMLElement).setAttribute('tabindex', '-1');
           (root as HTMLElement).focus();
         }
@@ -55,21 +55,24 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
     const applied: Element[] = [];
     if (drawerOpen) {
       try {
-        const hiddenEls = Array.from(document.querySelectorAll('[aria-hidden="true"]')) as Element[];
-        hiddenEls.forEach((el) => {
+        // Prefer to target the main app container so we don't accidentally inert the drawer itself.
+        const mainEl = document.querySelector('.min-h-screen.bg-background') as HTMLElement | null;
+        const active = document.activeElement as HTMLElement | null;
+        if (active && mainEl && !mainEl.contains(active)) {
+          try { active.blur(); } catch (e) { /* ignore */ }
+        }
+        if (mainEl) {
           try {
-            // Mark so we know to remove later
-            (el as HTMLElement).setAttribute('data-inert-applied', 'true');
-            // Some browsers support inert; set it regardless
+            (mainEl as HTMLElement).setAttribute('data-inert-applied', 'true');
             // @ts-ignore
-            (el as any).inert = true;
-            // Also set attribute for browsers/tools
-            (el as HTMLElement).setAttribute('inert', '');
-            applied.push(el);
+            (mainEl as any).inert = true;
+            (mainEl as HTMLElement).setAttribute('inert', '');
+            (mainEl as HTMLElement).setAttribute('aria-hidden', 'true');
+            applied.push(mainEl);
           } catch (e) {
-            // ignore per-element failures
+            // ignore
           }
-        });
+        }
       } catch (e) {
         // ignore
       }

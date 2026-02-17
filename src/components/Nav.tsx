@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 
-export const Nav = ({ onSelect }: { onSelect?: () => void }) => {
+export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; showAccount?: boolean }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthLoading, logout } = useAuth();
@@ -38,16 +38,18 @@ export const Nav = ({ onSelect }: { onSelect?: () => void }) => {
           <Button className={itemClass} variant={onActivity ? "default" : "ghost"} onClick={() => go("/activity")}>Activity</Button>
         )}
       </div>
-      <div className="mt-auto p-4 border-t">
-        <div className="flex flex-col gap-2">
-          <div className="text-xs text-muted-foreground">Account</div>
-          <div className="text-sm font-medium">{user?.consultantName || user?.lawyerName || user?.username}</div>
-          <div className="text-xs text-muted-foreground capitalize">{user?.role}</div>
-          <div className="pt-2">
-            <Button className="w-full" variant="outline" size="sm" onClick={() => { logout(); onSelect?.(); }}>Sign Out</Button>
+      {showAccount && (
+        <div className="mt-auto p-4 border-t">
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-muted-foreground">Account</div>
+            <div className="text-sm font-medium">{user?.consultantName || user?.lawyerName || user?.username}</div>
+            <div className="text-xs text-muted-foreground capitalize">{user?.role}</div>
+            <div className="pt-2">
+              <Button className="w-full" variant="outline" size="sm" onClick={() => { logout(); onSelect?.(); }}>Sign Out</Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </nav>
   );
 };
