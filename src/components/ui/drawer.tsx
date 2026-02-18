@@ -54,6 +54,7 @@ const DrawerContentLeft = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       data-drawer-content={true}
+      data-side="left"
       className={cn(
         "fixed inset-y-0 left-0 z-50 w-56 flex h-full flex-col border-r bg-background",
         className,

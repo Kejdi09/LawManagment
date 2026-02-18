@@ -138,7 +138,7 @@ const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
 const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
 const CONSULTANT_BY_USERNAME = {
-  adi: "Lenci",
+  adi: "Albert",
   albert: "Albert",
   kejdi: "Kejdi",
 };
@@ -347,7 +347,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 async function seedDemoUser() {
   try {
     const demoUsers = [
-      { username: "adi", password: "890", role: "admin", consultantName: "Lenci" },
+      { username: "adi", password: "890", role: "admin", consultantName: "Albert" },
       { username: "albert", password: "890", role: "consultant", consultantName: "Albert" },
       { username: "kejdi", password: "890", role: "consultant", consultantName: "Kejdi" },
       // Intake-only demo user: can work with non-confirmed customers but not confirmed clients or cases

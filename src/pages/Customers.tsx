@@ -46,7 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -114,7 +114,6 @@ const Customers = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
-  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -149,8 +148,23 @@ const Customers = () => {
 
   const loadCustomerNotifications = useCallback(async () => {
     const notifications = await getCustomerNotifications();
-    setCustomerAlerts(notifications);
-  }, []);
+    // Filter out notifications for already-confirmed/clients and those the current user shouldn't see
+    const visible = notifications.filter((n) => {
+      const cust = customers.find((c) => c.customerId === n.customerId);
+      if (!cust) return false;
+      // Don't surface notifications for confirmed clients
+      if (cust.status === 'CLIENT' || cust.status === 'CONFIRMED') return false;
+      // Admins see all
+      if (user?.role === 'admin') return true;
+      // If assignedTo matches current user (by consultantName, lawyerName or username) allow
+      const viewerNames = new Set([user?.consultantName, user?.lawyerName, user?.username].filter(Boolean) as string[]);
+      const assigned = cust.assignedTo || assignedMap[cust.customerId] || '';
+      if (assigned && viewerNames.has(assigned)) return true;
+      // Otherwise hide
+      return false;
+    });
+    setCustomerAlerts(visible);
+  }, [customers, user, assignedMap]);
 
   const loadCustomerDetail = useCallback(async (id: string | null) => {
     if (!id) {
@@ -180,10 +194,7 @@ const Customers = () => {
   useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
 
-  const unreadAlertCount = useMemo(
-    () => customerAlerts.filter((a) => !seenAlertIds.has(a.notificationId)).length,
-    [customerAlerts, seenAlertIds],
-  );
+  // Customer alerts are filtered server-side; we've applied client-side visibility rules in loader
 
   const filteredCustomers = useMemo(() => {
     if (!search) return customers;
@@ -486,46 +497,7 @@ const Customers = () => {
     }
   };
   return (
-    <MainLayout
-      title="Customers"
-      right={
-        <>
-          <DropdownMenu
-            onOpenChange={(open) => {
-              if (open) {
-                setSeenAlertIds((prev) => {
-                  const next = new Set(prev);
-                  customerAlerts.forEach((a) => next.add(a.notificationId));
-                  return next;
-                });
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-4 w-4" />
-                {unreadAlertCount > 0 && (
-                  <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
-                    {unreadAlertCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
-              {customerAlerts.map((a) => (
-                <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
-                  <div className="flex flex-col">
-                    <span>{a.message}</span>
-                    <span className="text-xs text-muted-foreground">{a.customerId}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
-      }
-    >
+    <MainLayout title="Customers">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">

@@ -329,11 +329,10 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       };
-      await updateCase(targetId, updatePayload);
-      
+      const saved = await updateCase(targetId, updatePayload);
+      // Use server response to update local state immediately (avoid extra fetch)
+      if (saved) setCaseData(saved as Case);
       onStateChanged();
-      // Minimal reload to ensure consistency
-      await loadCaseData(targetId);
       toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });

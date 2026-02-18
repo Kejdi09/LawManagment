@@ -13,6 +13,7 @@ import {
 import Nav from "./Nav";
 import { DrawerContentLeft } from "./ui/drawer";
 import { Menu } from "lucide-react";
+import CaseAlerts from "./CaseAlerts";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -99,6 +100,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
       <div className="container flex h-14 items-center gap-3">
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <CaseAlerts />
           {right}
           <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
             <DrawerTrigger className="inline-flex items-center gap-2 border rounded-md px-2 py-1 md:hidden">
@@ -106,10 +108,6 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Menu</span>
             </DrawerTrigger>
             <DrawerContentLeft>
-              <DrawerHeader>
-                <DrawerTitle>Navigation</DrawerTitle>
-                <DrawerDescription>Quick access to pages</DrawerDescription>
-              </DrawerHeader>
               <div className="flex flex-col p-2 gap-2">
                 <Nav onSelect={() => setDrawerOpen(false)} />
               </div>
