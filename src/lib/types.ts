@@ -219,7 +219,7 @@ export const ALL_STATES: CaseState[] = [
   "WAITING_RESPONSE_C",
 ];
 
-export const LAWYERS = ["Kejdi", "Lenci", "Albert"];
+export const LAWYERS = ["Kejdi", "Albert"];
 
 export interface CustomerNotification {
   notificationId: string;

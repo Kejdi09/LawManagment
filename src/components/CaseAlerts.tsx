@@ -16,14 +16,24 @@ export const CaseAlerts = () => {
   const load = useCallback(async () => {
     const all = await getAllCases();
     const allCustomers = await getAllCustomers();
-    const map = allCustomers.reduce<Record<string, string>>((acc, c) => {
+    const nameMap = allCustomers.reduce<Record<string, string>>((acc, c) => {
       acc[c.customerId] = c.name;
       return acc;
     }, {});
-    setCustomersMap(map);
+    const statusMap = allCustomers.reduce<Record<string, string>>((acc, c) => {
+      acc[c.customerId] = c.status || "";
+      return acc;
+    }, {});
+    setCustomersMap(nameMap);
 
     const now = Date.now();
     const items = all.flatMap((c) => {
+      // Skip alerts for confirmed/clients unless user is admin
+      const custStatus = statusMap[c.customerId];
+      if (custStatus === 'CLIENT' || custStatus === 'CONFIRMED') {
+        if (user?.role !== 'admin') return [] as any[];
+      }
+
       const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
       const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
       const out: any[] = [];
@@ -43,9 +53,15 @@ export const CaseAlerts = () => {
       return out;
     });
     setAlerts(items);
-  }, []);
+  }, [user]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
+
+  useEffect(() => {
+    const onUpdate = () => { load().catch(() => {}); };
+    window.addEventListener('app:data-updated', onUpdate);
+    return () => { window.removeEventListener('app:data-updated', onUpdate); };
+  }, [load]);
 
   const criticalCount = useMemo(() => alerts.filter((a) => a.severity === 'critical').length, [alerts]);
   const warnCount = useMemo(() => alerts.filter((a) => a.severity === 'warn').length, [alerts]);

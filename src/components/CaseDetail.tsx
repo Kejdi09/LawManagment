@@ -210,6 +210,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       await addHistory(caseId, currentState, nextState);
       toast({ title: "State Changed", description: `→ ${STAGE_LABELS[newStage]}` });
       onStateChanged();
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch (e) { /* ignore */ }
       await loadCaseData(caseId);
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
@@ -333,6 +334,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       // Use server response to update local state immediately (avoid extra fetch)
       if (saved) setCaseData(saved as Case);
       onStateChanged();
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch (e) { /* ignore */ }
       toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
@@ -349,6 +351,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     try {
       await deleteCase(caseId);
       onStateChanged();
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch (e) { /* ignore */ }
       onClose();
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });

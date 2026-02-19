@@ -216,9 +216,10 @@ async function insertCustomerNotification({ customerId, message, kind, severity 
 
 async function syncCustomerNotifications() {
   const nowMs = Date.now();
+  // Only generate notifications for non-confirmed customers (customersCol).
+  // Confirmed clients should not receive follow/respond alerts.
   const customerSets = [
     { col: customersCol, docs: await customersCol.find({}).toArray() },
-    { col: confirmedClientsCol, docs: await confirmedClientsCol.find({}).toArray() },
   ];
 
   for (const set of customerSets) {
@@ -683,11 +684,29 @@ app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
-  // Only intake users and admins should receive customer follow-up/respond notifications
-  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.json([]);
+  // Refresh notifications before returning.
   await syncCustomerNotifications();
-  const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(50).toArray();
-  res.json(docs);
+
+  // Load recent notifications then scope them by user access.
+  const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(200).toArray();
+
+  // Load referenced customers (non-confirmed) and restrict notifications to those
+  // customers. This prevents showing notifications for confirmed clients.
+  const customerIds = docs.map(d => d.customerId).filter(Boolean);
+  const customers = customerIds.length ? await customersCol.find({ customerId: { $in: customerIds } }).toArray() : [];
+  const customerMap = customers.reduce((m, c) => { m[c.customerId] = c; return m; }, {});
+  const docsForCustomers = docs.filter(d => Boolean(customerMap[d.customerId]));
+
+  // Admins see notifications for non-confirmed customers.
+  if (isAdminUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
+
+  // Intake users may see notifications for non-confirmed customers.
+  if (req.user?.role === 'intake') return res.json(docsForCustomers.slice(0, 50));
+
+  // Other authenticated users (consultant/lawyer) should only receive notifications
+  // for customers assigned to them.
+  const allowed = docsForCustomers.filter(d => userCanAccessCustomer(req.user, customerMap[d.customerId]));
+  res.json(allowed.slice(0, 50));
 });
 
 

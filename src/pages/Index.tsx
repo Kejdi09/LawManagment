@@ -6,7 +6,7 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
-import { Scale, Users, Bell } from "lucide-react";
+import { Scale, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -203,51 +203,7 @@ const Index = () => {
   return (
     <MainLayout
       title="Case Management"
-      right={
-        <>
-          <DropdownMenu
-            onOpenChange={(open) => {
-              if (open) {
-                setSeenAlertIds((prev) => {
-                  const next = new Set(prev);
-                  alerts.forEach((a) => next.add(a.id));
-                  return next;
-                });
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <Badge
-                    variant={criticalCount > 0 ? "destructive" : "secondary"}
-                    className="absolute -top-1 -right-2 px-1.5 text-[10px]"
-                  >
-                    {unreadCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
-              {alerts.map((a) => {
-                const name = customerNames[a.customerId] ? `${customerNames[a.customerId]} (${a.customerId})` : a.customerId;
-                const message = a.message ?? (a.kind === "deadline" ? "Deadline" : a.kind === "respond" ? "Respond" : "Follow up");
-                return (
-                  <DropdownMenuItem key={a.id} className={a.severity === "critical" ? "text-destructive" : ""}>
-                    <div className="flex flex-col">
-                      <span>{message}</span>
-                      <span className="text-xs text-muted-foreground">{name}</span>
-                    </div>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>
-        </>
-      }
+      right={<Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>}
     >
       <div className="space-y-6">
         <DashboardKPIs key={tick} />
