@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllCases, getAllCustomers } from "@/lib/case-store";
+import { getAllCases, getAllCustomers, getConfirmedClients } from "@/lib/case-store";
 import { mapCaseStateToStage } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ export const CaseAlerts = () => {
 
   const load = useCallback(async () => {
     const all = await getAllCases();
-    const allCustomers = await getAllCustomers();
+    const [customers, confirmed] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
+    const allCustomers = [...customers, ...confirmed];
     const nameMap = allCustomers.reduce<Record<string, string>>((acc, c) => {
       acc[c.customerId] = c.name;
       return acc;
@@ -27,6 +28,7 @@ export const CaseAlerts = () => {
     setCustomersMap(nameMap);
 
     const now = Date.now();
+    // Only create deadline-based alerts for cases (overdue or due soon).
     const items = all.flatMap((c) => {
       // Skip alerts for confirmed/clients unless user is admin
       const custStatus = statusMap[c.customerId];
@@ -34,17 +36,11 @@ export const CaseAlerts = () => {
         if (user?.role !== 'admin') return [] as any[];
       }
 
-      const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
-      const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
       const out: any[] = [];
-      const stage = mapCaseStateToStage(c.state);
-      const isWaiting = stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
-      if (isWaiting && hours >= 48 && hours < 72) out.push({ id: `${c.caseId}-wait-48`, customerId: c.customerId, caseId: c.caseId, kind: 'follow', severity: 'warn' });
-      if (isWaiting && hours >= 72 && hours < 96) out.push({ id: `${c.caseId}-wait-72`, customerId: c.customerId, caseId: c.caseId, kind: 'follow', severity: 'critical' });
-      if (isWaiting && hours >= 96) out.push({ id: `${c.caseId}-wait-96`, customerId: c.customerId, caseId: c.caseId, kind: 'follow', severity: 'critical' });
-      if (stage === 'WAITING_CUSTOMER' && hours >= 12) out.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, caseId: c.caseId, message: `Respond: ${c.caseId}`, kind: 'respond', severity: 'warn' });
-
-      if (c.deadline && mapCaseStateToStage(c.state) !== 'FINALIZED') {
+      if (c.deadline) {
+        // Ignore finalized cases
+        const stage = mapCaseStateToStage(c.state);
+        if (stage === 'FINALIZED') return out;
         const deadlineTime = new Date(c.deadline).getTime();
         const hoursUntil = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
         if (deadlineTime < now) out.push({ id: `${c.caseId}-overdue`, customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: 'deadline', severity: 'critical' });
