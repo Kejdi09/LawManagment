@@ -333,8 +333,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       const saved = await updateCase(targetId, updatePayload);
       // Use server response to update local state immediately (avoid extra fetch)
       if (saved) setCaseData(saved as Case);
-      onStateChanged();
+      // Refresh from server to avoid occasional races where parent reloads stale data
+      try { await loadCaseData(caseId); } catch (e) { /* ignore */ }
       try { window.dispatchEvent(new Event('app:data-updated')); } catch (e) { /* ignore */ }
+      // Notify parent after we've refreshed local data
+      onStateChanged();
       toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
