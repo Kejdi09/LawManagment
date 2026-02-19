@@ -8,6 +8,10 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Simple in-memory endpoint cooldowns to avoid repeated 404/network spam
+const _endpointCooldowns: Record<string, number> = {};
+const COOLDOWN_MS = 60_000; // 60s
+
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(options?.headers || {}) },
@@ -69,7 +73,15 @@ export async function deleteCase(caseId: string): Promise<void> {
 
 // ── Customers ──
 export async function getAllCustomers(): Promise<Customer[]> {
-  return api<Customer[]>("/api/customers");
+  const key = "/api/customers";
+  if (_endpointCooldowns[key] && _endpointCooldowns[key] > Date.now()) return [];
+  try {
+    return await api<Customer[]>(key);
+  } catch (err) {
+    console.warn(`getAllCustomers failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    _endpointCooldowns[key] = Date.now() + COOLDOWN_MS;
+    return [];
+  }
 }
 
 export async function getConfirmedClients(): Promise<Customer[]> {
@@ -105,9 +117,13 @@ export async function deleteCustomer(customerId: string): Promise<void> {
 }
 
 export async function getCustomerNotifications(): Promise<CustomerNotification[]> {
+  const key = "/api/customers/notifications";
+  if (_endpointCooldowns[key] && _endpointCooldowns[key] > Date.now()) return [] as CustomerNotification[];
   try {
-    return await api<CustomerNotification[]>("/api/customers/notifications");
+    return await api<CustomerNotification[]>(key);
   } catch (err) {
+    console.warn(`getCustomerNotifications failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    _endpointCooldowns[key] = Date.now() + COOLDOWN_MS;
     // If notifications endpoint is unavailable or returns 404, treat as empty list
     return [] as CustomerNotification[];
   }

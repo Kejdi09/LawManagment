@@ -359,6 +359,7 @@ const Customers = () => {
         await updateCustomer(editingId.trim(), patched);
         try { await loadCustomerNotifications(); } catch (e) { /* ignore secondary load errors */ }
         toast({ title: "Updated", description: "Customer updated successfully" });
+        try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
         try { await loadCustomers(); } catch (e) { /* ignore reload errors */ }
         try { if (selectedId) await loadCustomerDetail(selectedId); } catch (e) { /* ignore */ }
         return;
@@ -370,6 +371,7 @@ const Customers = () => {
         await createCustomer(toCreate as Omit<Customer, "customerId">);
         try { await loadCustomerNotifications(); } catch (e) { /* ignore */ }
         toast({ title: "Created", description: "Customer created successfully" });
+        try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       }
       setShowForm(false);
       setSelectedId(null);
@@ -390,6 +392,7 @@ const Customers = () => {
     deleteCustomer(customerId).then(async () => {
       if (selectedId === customerId) setSelectedId(null);
       toast({ title: "Deleted successfully" });
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       setTick((t) => t + 1);
     }).catch((err: unknown) => {
@@ -412,6 +415,7 @@ const Customers = () => {
       if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
       await updateCustomer(customerId, { status });
       toast({ title: 'Status updated' });
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
@@ -437,6 +441,7 @@ const Customers = () => {
       toast({ title: 'Client confirmed', description: `Assigned to ${confirmAssignSelected}` });
       setShowConfirmAssign(false);
       setConfirmAssignCustomerId(null);
+      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
