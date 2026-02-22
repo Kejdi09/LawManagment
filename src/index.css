@@ -117,6 +117,46 @@
   }
 }
 
+@keyframes law-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes law-success-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.45);
+  }
+}
+
+@keyframes law-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer utilities {
   .law-float {
     animation: law-float 2.8s ease-in-out infinite;
@@ -124,5 +164,17 @@
 
   .law-wiggle {
     animation: law-wiggle 2.1s ease-in-out infinite;
+  }
+
+  .law-shake {
+    animation: law-shake 420ms ease-in-out;
+  }
+
+  .law-success-glow {
+    animation: law-success-glow 900ms ease-in-out;
+  }
+
+  .law-fade-in {
+    animation: law-fade-in 420ms ease-out;
   }
 }
