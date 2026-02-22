@@ -27,6 +27,8 @@ type SavedCaseView = {
 };
 
 const SAVED_CASE_VIEWS_KEY = "lm:saved-case-views";
+const CASE_COLUMNS_MODE_KEY = "lm:show-more-columns";
+const CASE_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 
 const Index = () => {
   const { user } = useAuth();
@@ -59,6 +61,7 @@ const Index = () => {
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
   const [newViewName, setNewViewName] = useState("");
+  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(false);
   const [listPage, setListPage] = useState(1);
   const listPageSize = 30;
   const { toast } = useToast();
@@ -74,6 +77,30 @@ const Index = () => {
     } catch {
       setSavedViews([]);
     }
+  }, []);
+
+  useEffect(() => {
+    try {
+      setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+    } catch {
+      setShowMoreCaseColumns(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+      } catch {
+        setShowMoreCaseColumns(false);
+      }
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener(CASE_COLUMNS_MODE_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(CASE_COLUMNS_MODE_EVENT, sync);
+    };
   }, []);
 
   const persistSavedViews = useCallback((views: SavedCaseView[]) => {
@@ -442,6 +469,7 @@ const Index = () => {
               state={state}
               cases={cases}
               customerNames={customerNames}
+              showMoreColumns={showMoreCaseColumns}
               onSelectCase={setSelectedCaseId}
             />
           );

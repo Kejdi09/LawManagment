@@ -1,5 +1,4 @@
 import { Case, PRIORITY_CONFIG, CaseStage, STAGE_LABELS } from "@/lib/types";
-import { mapCaseStateToStage } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,9 +13,10 @@ interface CaseTableProps {
   cases: Case[];
   onSelectCase: (caseId: string) => void;
   customerNames?: Record<string, string>;
+  showMoreColumns?: boolean;
 }
 
-export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: CaseTableProps) {
+export function CaseTable({ state, cases, onSelectCase, customerNames = {}, showMoreColumns = false }: CaseTableProps) {
   if (cases.length === 0) return null;
 
   return (
@@ -30,17 +30,15 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
       <CardContent className="p-0">
         {/* Desktop / tablet: full table */}
         <div className="hidden sm:block overflow-x-auto">
-          <Table className="min-w-[860px]">
+          <Table className={showMoreColumns ? "min-w-[860px]" : "min-w-[560px]"}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="w-[90px]">Priority</TableHead>
-                <TableHead className="w-[90px]">Docs</TableHead>
-                <TableHead className="w-[120px]">Deadline</TableHead>
-                <TableHead className="w-[100px]">Assigned</TableHead>
-                <TableHead className="w-[120px]">Last Change</TableHead>
+                {showMoreColumns && <TableHead>Category</TableHead>}
+                <TableHead className="w-[220px]">Due</TableHead>
+                {showMoreColumns && <TableHead className="w-[90px]">Docs</TableHead>}
+                {showMoreColumns && <TableHead className="w-[100px]">Assigned</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -54,31 +52,30 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                   <TableRow key={c.caseId} className={`cursor-pointer transition-colors hover:bg-muted/50 ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
                     <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                     <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>
-                        {pCfg.label}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">
-                        {c.documentState}
-                      </Badge>
-                    </TableCell>
+                    {showMoreColumns && <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>}
                     <TableCell className="text-xs">
-                      {c.deadline ? (
-                        <span className="text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {formatDate(c.deadline)}
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>
+                          {pCfg.label}
                         </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                        {c.deadline ? (
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatDate(c.deadline)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">No deadline</span>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatDate(c.lastStateChange, true)}
-                    </TableCell>
+                    {showMoreColumns && (
+                      <TableCell>
+                        <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">
+                          {c.documentState}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {showMoreColumns && <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>}
                   </TableRow>
                 );
               })}
@@ -100,7 +97,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                   <div className="font-mono text-xs font-medium">{c.caseId}</div>
                   <div className="flex-1">
                     <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
-                    <div className="text-muted-foreground text-xs truncate">{c.category} • {c.subcategory}</div>
+                    <div className="text-muted-foreground text-xs truncate">{c.category}</div>
                     <div className="mt-2 flex items-center gap-2">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span>
                       <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">{c.documentState}</Badge>

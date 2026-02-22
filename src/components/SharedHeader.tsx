@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useLocation } from "react-router-dom";
 import {
   Drawer,
   DrawerTrigger,
@@ -8,11 +9,37 @@ import Nav from "./Nav";
 import { DrawerContentLeft } from "./ui/drawer";
 import { Menu } from "lucide-react";
 import CaseAlerts from "./CaseAlerts";
+import { Button } from "@/components/ui/button";
+
+const GLOBAL_COLUMNS_MODE_KEY = "lm:show-more-columns";
+const GLOBAL_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const { user } = useAuth();
+  const location = useLocation();
   const canSeeAlerts = Boolean(user);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showMoreColumns, setShowMoreColumns] = useState(false);
+  const canToggleColumns = location.pathname === "/" || location.pathname.startsWith("/customers");
+
+  useEffect(() => {
+    try {
+      setShowMoreColumns(localStorage.getItem(GLOBAL_COLUMNS_MODE_KEY) === "1");
+    } catch {
+      setShowMoreColumns(false);
+    }
+  }, []);
+
+  const handleToggleColumns = () => {
+    const next = !showMoreColumns;
+    setShowMoreColumns(next);
+    try {
+      localStorage.setItem(GLOBAL_COLUMNS_MODE_KEY, next ? "1" : "0");
+      window.dispatchEvent(new Event(GLOBAL_COLUMNS_MODE_EVENT));
+    } catch {
+      // ignore storage/event errors
+    }
+  };
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -51,6 +78,11 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
           <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {canToggleColumns && (
+            <Button size="sm" variant="ghost" onClick={handleToggleColumns}>
+              {showMoreColumns ? "Show fewer columns" : "Show more columns"}
+            </Button>
+          )}
           {canSeeAlerts && <CaseAlerts />}
           {right}
         </div>

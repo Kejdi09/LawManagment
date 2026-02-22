@@ -64,6 +64,8 @@ function safeFormatDate(dateValue: string | Date | null | undefined) {
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
 const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
+const CUSTOMER_COLUMNS_MODE_KEY = "lm:show-more-columns";
+const CUSTOMER_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 
 function getCustomerCategory(customerType: string) {
   return CUSTOMER_TYPES.includes(customerType as (typeof CUSTOMER_TYPES)[number]) ? customerType : "Other";
@@ -117,6 +119,7 @@ const Customers = () => {
   const [tick, setTick] = useState(0);
   const [customerPage, setCustomerPage] = useState(1);
   const customerPageSize = 25;
+  const [showMoreCustomerColumns, setShowMoreCustomerColumns] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -154,6 +157,30 @@ const Customers = () => {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    try {
+      setShowMoreCustomerColumns(localStorage.getItem(CUSTOMER_COLUMNS_MODE_KEY) === "1");
+    } catch {
+      setShowMoreCustomerColumns(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setShowMoreCustomerColumns(localStorage.getItem(CUSTOMER_COLUMNS_MODE_KEY) === "1");
+      } catch {
+        setShowMoreCustomerColumns(false);
+      }
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener(CUSTOMER_COLUMNS_MODE_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(CUSTOMER_COLUMNS_MODE_EVENT, sync);
+    };
+  }, []);
 
   const loadCustomers = useCallback(async () => {
     const data = await getAllCustomers();
@@ -309,6 +336,8 @@ const Customers = () => {
     CONSULTATION_DONE: "bg-emerald-50 text-emerald-800",
     ON_HOLD: "bg-amber-50 text-amber-800",
   };
+
+  const customerTableColumns = showMoreCustomerColumns ? 7 : 5;
 
   const hasCustomerFilters = Boolean(search) || sectionView !== "main" || statusView !== "all" || selectedCategories.length !== CATEGORY_OPTIONS.length;
 
@@ -755,22 +784,22 @@ const Customers = () => {
         <Card>
           <CardContent className="p-0">
             <div className="hidden md:block overflow-x-auto">
-            <Table className="min-w-[920px]">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Email</TableHead>
+                  {showMoreCustomerColumns && <TableHead>Contact</TableHead>}
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Cases</TableHead>
+                  <TableHead className="text-right">Due</TableHead>
+                  {showMoreCustomerColumns && <TableHead className="text-right">Cases</TableHead>}
                   <TableHead className="w-[220px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {groupedCustomers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                    <TableCell colSpan={customerTableColumns} className="text-center text-sm text-muted-foreground py-6">
                       <div className="flex flex-col items-center gap-2">
                         <span>No customers match the selected categories/search.</span>
                         <Button variant="outline" size="sm" onClick={resetCustomerFilters}>Clear filters</Button>
@@ -780,7 +809,7 @@ const Customers = () => {
                 )}
                 {groupedCustomers.flatMap((group) => ([
                   <TableRow key={`group-${group.type}-header`} className="bg-muted/30">
-                    <TableCell colSpan={7} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableCell colSpan={customerTableColumns} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <button
                         type="button"
                         className="inline-flex items-center gap-1"
@@ -799,17 +828,25 @@ const Customers = () => {
                         <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
-                          <TableCell className="text-sm">{c.phone}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{c.email}</TableCell>
+                          {showMoreCustomerColumns && (
+                            <TableCell className="text-sm text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
+                          )}
                           <TableCell>
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
                               {LEAD_STATUS_LABELS[c.status]}
                             </span>
                           </TableCell>
                           <TableCell className="text-right flex items-center justify-end gap-2">
-                            {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
-                            <Badge variant="secondary">{caseCount}</Badge>
+                            <span className="text-xs text-muted-foreground">{c.followUpDate ? safeFormatDate(c.followUpDate) : "—"}</span>
                           </TableCell>
+                          {showMoreCustomerColumns && (
+                            <TableCell className="text-right">
+                              <div className="inline-flex items-center gap-2">
+                                {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
+                                <Badge variant="secondary">{caseCount}</Badge>
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>

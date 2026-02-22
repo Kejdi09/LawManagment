@@ -9,10 +9,10 @@ export const Sidebar = () => {
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-background">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center text-primary font-semibold">LM</div>
+            <img src="/download.jpg" alt="Dafku" className="h-9 w-9 rounded-md object-cover border" />
             <div>
-              <h1 className="text-lg font-semibold leading-tight">LawMan</h1>
-              <div className="text-xs text-muted-foreground">Manage cases & customers</div>
+              <h1 className="text-sm font-semibold leading-tight">Dafku Management System</h1>
+              <div className="text-xs text-muted-foreground">Dafku Law Firm</div>
             </div>
           </div>
           <div className="mt-4 pt-2 border-t">

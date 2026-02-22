@@ -56,7 +56,11 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-80">
-        <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <img src="/download.jpg" alt="Dafku" className="h-12 w-12 rounded-md object-cover border" />
+          <h2 className="text-xl font-bold">Dafku Management System</h2>
+          <div className="text-xs text-muted-foreground">Dafku Law Firm</div>
+        </div>
         <input
           className="w-full p-2 mb-4 border rounded"
           type="text"
