@@ -60,6 +60,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   const [isTaskBusy, setIsTaskBusy] = useState(false);
   const [isNoteBusy, setIsNoteBusy] = useState(false);
   const previousCaseIdRef = useRef<string | null>(null);
+  const lastRequestedCaseIdRef = useRef<string | null>(null);
   const [editForm, setEditForm] = useState({
     category: "",
     subcategory: "",
@@ -106,10 +107,6 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setCaseHistory(nextHistory);
       setCaseNotes(nextNotes);
       setCaseTasks(nextTasks);
-      // Only exit edit mode if we're actually editing AND the ID is different (fresh load)
-      if (editModeRef.current && previousCaseIdRef.current !== id) {
-        setEditMode(false);
-      }
       // Do not overwrite in-progress edits for the same case.
       if (!editModeRef.current || previousCaseIdRef.current !== id) {
         setEditForm({
@@ -192,6 +189,20 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!open) {
+      setEditMode(false);
+      previousCaseIdRef.current = null;
+      lastRequestedCaseIdRef.current = null;
+      return;
+    }
+    if (caseId && caseId !== lastRequestedCaseIdRef.current) {
+      setEditMode(false);
+      previousCaseIdRef.current = null;
+      lastRequestedCaseIdRef.current = caseId;
+    }
+  }, [open, caseId]);
 
   useEffect(() => {
     if (!caseId) {

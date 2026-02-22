@@ -20,7 +20,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
   if (cases.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
           <CardTitle className="text-lg">{STAGE_LABELS[state]}</CardTitle>
@@ -29,8 +29,8 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
       </CardHeader>
       <CardContent className="p-0">
         {/* Desktop / tablet: full table */}
-        <div className="hidden sm:block">
-          <Table>
+        <div className="hidden sm:block overflow-x-auto">
+          <Table className="min-w-[860px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
@@ -51,7 +51,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {} }: Ca
                 const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
                 const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70 dark:bg-yellow-900/20" : "";
                 return (
-                  <TableRow key={c.caseId} className={`cursor-pointer ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
+                  <TableRow key={c.caseId} className={`cursor-pointer transition-colors hover:bg-muted/50 ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
                     <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                     <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>

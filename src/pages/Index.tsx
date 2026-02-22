@@ -8,6 +8,7 @@ import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Scale, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -202,31 +203,35 @@ const Index = () => {
   
   return (
     <MainLayout
-      title="Case Management"
-      right={<Button className="ml-2" size="sm" onClick={openCreateCase}>New Case</Button>}
+      title="Cases"
+      right={<Button size="sm" onClick={openCreateCase}>New Case</Button>}
     >
       <div className="space-y-6">
         <DashboardKPIs key={tick} />
 
-        <SearchFilterBar
-          query={query}
-          onQueryChange={setQuery}
-          priorityFilter={priorityFilter}
-          onPriorityChange={setPriorityFilter}
-          docFilter={docFilter}
-          onDocFilterChange={setDocFilter}
-        />
-        <div className="mt-3">
-          <div className="flex items-center gap-2">
-            <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as any)}>
-              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All stages</SelectItem>
-                {ALL_STAGES.map((s) => (<SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="space-y-3">
+              <SearchFilterBar
+                query={query}
+                onQueryChange={setQuery}
+                priorityFilter={priorityFilter}
+                onPriorityChange={setPriorityFilter}
+                docFilter={docFilter}
+                onDocFilterChange={setDocFilter}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as any)}>
+                  <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All stages</SelectItem>
+                    {ALL_STAGES.map((s) => (<SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {filteredByState.map(({ state, cases }) => {
           if (stageFilter !== "all" && state !== stageFilter) return null;

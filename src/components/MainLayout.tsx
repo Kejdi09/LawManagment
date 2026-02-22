@@ -8,7 +8,7 @@ export const MainLayout = ({ title, right, children }: { title?: string; right?:
       <Sidebar />
       <div className="md:pl-64">
         <SharedHeader title={title} right={right} />
-        <main className="container py-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

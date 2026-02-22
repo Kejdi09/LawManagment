@@ -26,8 +26,8 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-      <div className="container flex h-14 items-center">
-        <div className="flex items-center gap-3">
+      <div className="mx-auto flex min-h-14 w-full max-w-[1400px] items-center gap-2 px-4 py-2 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
           <Drawer direction="left" shouldScaleBackground={false} open={drawerOpen} onOpenChange={setDrawerOpen}>
             <DrawerTrigger
               className="inline-flex items-center gap-2 border rounded-md px-2 py-1 md:hidden"
@@ -48,7 +48,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
               </div>
             </DrawerContentLeft>
           </Drawer>
-          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+          <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {canSeeAlerts && <CaseAlerts />}

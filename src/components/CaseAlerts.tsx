@@ -198,13 +198,13 @@ export const CaseAlerts = () => {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] max-w-[92vw] max-h-[70vh] overflow-y-auto p-1">
         {alerts.length === 0 && <DropdownMenuItem disabled>No alerts</DropdownMenuItem>}
         {alerts.map((a) => (
-          <DropdownMenuItem key={a.id} onSelect={(e) => e.preventDefault()} className={a.severity === 'critical' ? 'text-destructive' : ''}>
+          <DropdownMenuItem key={a.id} onSelect={(e) => e.preventDefault()} className={`items-start py-2 ${a.severity === 'critical' ? 'text-destructive' : ''}`}>
             <div className="flex w-full items-start justify-between gap-2">
-              <div className="flex flex-col">
-                <span>{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
+              <div className="flex min-w-0 flex-col">
+                <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
                 <span className="text-xs text-muted-foreground">{customersMap[a.customerId] ? `${customersMap[a.customerId]} (${a.customerId})` : a.customerId}</span>
               </div>
               {a.type === "customer" && (user?.role === "admin" || user?.role === "intake") && (
