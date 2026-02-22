@@ -1266,7 +1266,7 @@ const Customers = () => {
                     )}
 
                     <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Cases ({selectedCases.length})</CardTitle></CardHeader>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Related Cases</CardTitle></CardHeader>
                       <CardContent className="p-0">
                         <Table>
                           <TableHeader>
