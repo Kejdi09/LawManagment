@@ -75,6 +75,9 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   useEffect(() => {
     editModeRef.current = editMode;
   }, [editMode]);
+  const updateEditForm = useCallback((patch: Partial<typeof editForm>) => {
+    setEditForm((prev) => ({ ...prev, ...patch }));
+  }, []);
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -93,26 +96,34 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         return;
       }
       setCaseData(data);
-      setCustomer(await getCustomerById(data.customerId));
-      setCaseHistory(await getHistoryByCaseId(id));
-      setCaseNotes(await getNotesByCaseId(id));
-      setCaseTasks(await getTasksByCaseId(id));
+      const [nextCustomer, nextHistory, nextNotes, nextTasks] = await Promise.all([
+        getCustomerById(data.customerId),
+        getHistoryByCaseId(id),
+        getNotesByCaseId(id),
+        getTasksByCaseId(id),
+      ]);
+      setCustomer(nextCustomer);
+      setCaseHistory(nextHistory);
+      setCaseNotes(nextNotes);
+      setCaseTasks(nextTasks);
       // Only exit edit mode if we're actually editing AND the ID is different (fresh load)
       if (editModeRef.current && previousCaseIdRef.current !== id) {
         setEditMode(false);
       }
-      setEditForm({
-        category: data.category,
-        subcategory: data.subcategory,
-        // represent case state as UI stage
-        state: mapCaseStateToStage(data.state),
-        documentState: data.documentState,
-        communicationMethod: data.communicationMethod,
-        generalNote: data.generalNote ?? "",
-        priority: data.priority,
-        deadline: data.deadline ? data.deadline.slice(0, 10) : "",
-        assignedTo: data.assignedTo,
-      });
+      // Do not overwrite in-progress edits for the same case.
+      if (!editModeRef.current || previousCaseIdRef.current !== id) {
+        setEditForm({
+          category: data.category,
+          subcategory: data.subcategory,
+          state: mapCaseStateToStage(data.state),
+          documentState: data.documentState,
+          communicationMethod: data.communicationMethod,
+          generalNote: data.generalNote ?? "",
+          priority: data.priority,
+          deadline: data.deadline ? data.deadline.slice(0, 10) : "",
+          assignedTo: data.assignedTo,
+        });
+      }
       try {
         const docs = await getDocuments('case', id);
         setDocuments(docs);
@@ -336,11 +347,23 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       };
       const saved = await updateCase(targetId, updatePayload);
       // Use server response to update local state immediately (avoid extra fetch)
-      if (saved) setCaseData(saved as Case);
-      // Refresh from server to avoid occasional races where parent reloads stale data
-      try { await loadCaseData(caseId); } catch (e) { /* ignore */ }
+      if (saved) {
+        const savedCase = saved as Case;
+        setCaseData(savedCase);
+        setEditForm({
+          category: savedCase.category,
+          subcategory: savedCase.subcategory,
+          state: mapCaseStateToStage(savedCase.state),
+          documentState: savedCase.documentState,
+          communicationMethod: savedCase.communicationMethod,
+          generalNote: savedCase.generalNote ?? "",
+          priority: savedCase.priority,
+          deadline: savedCase.deadline ? savedCase.deadline.slice(0, 10) : "",
+          assignedTo: savedCase.assignedTo,
+        });
+      }
       try { window.dispatchEvent(new Event('app:data-updated')); } catch (e) { /* ignore */ }
-      // Notify parent after we've refreshed local data
+      // Notify parent after local state is committed
       onStateChanged();
       toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: unknown) {
@@ -430,15 +453,15 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Category</span>
-                        <Input value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
+                        <Input value={editForm.category} onChange={(e) => updateEditForm({ category: e.target.value })} />
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Subcategory</span>
-                        <Input value={editForm.subcategory} onChange={(e) => setEditForm({ ...editForm, subcategory: e.target.value })} />
+                        <Input value={editForm.subcategory} onChange={(e) => updateEditForm({ subcategory: e.target.value })} />
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">State</span>
-                        <Select value={editForm.state} onValueChange={(v) => setEditForm({ ...editForm, state: v as CaseStage })}>
+                        <Select value={editForm.state} onValueChange={(v) => updateEditForm({ state: v as CaseStage })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {ALL_STAGES.map((stage) => (
@@ -449,7 +472,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Priority</span>
-                        <Select value={editForm.priority} onValueChange={(v) => setEditForm({ ...editForm, priority: v as Priority })}>
+                        <Select value={editForm.priority} onValueChange={(v) => updateEditForm({ priority: v as Priority })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="urgent">Urgent</SelectItem>
@@ -461,7 +484,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Documents</span>
-                        <Select value={editForm.documentState} onValueChange={(v) => setEditForm({ ...editForm, documentState: v as "ok" | "missing" })}>
+                        <Select value={editForm.documentState} onValueChange={(v) => updateEditForm({ documentState: v as "ok" | "missing" })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ok">OK</SelectItem>
@@ -471,12 +494,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Communication</span>
-                        <Input value={editForm.communicationMethod} onChange={(e) => setEditForm({ ...editForm, communicationMethod: e.target.value })} />
+                        <Input value={editForm.communicationMethod} onChange={(e) => updateEditForm({ communicationMethod: e.target.value })} />
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Assigned Consultant</span>
                         {isAdmin ? (
-                          <Select value={editForm.assignedTo} onValueChange={(v) => setEditForm({ ...editForm, assignedTo: v })}>
+                          <Select value={editForm.assignedTo} onValueChange={(v) => updateEditForm({ assignedTo: v })}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
@@ -488,12 +511,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Deadline</span>
-                        <Input type="date" value={editForm.deadline} onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })} />
+                        <Input type="date" value={editForm.deadline} onChange={(e) => updateEditForm({ deadline: e.target.value })} />
                       </div>
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground">General Note</span>
-                      <Textarea value={editForm.generalNote} onChange={(e) => setEditForm({ ...editForm, generalNote: e.target.value })} className="min-h-[80px]" />
+                      <Textarea value={editForm.generalNote} onChange={(e) => updateEditForm({ generalNote: e.target.value })} className="min-h-[80px]" />
                     </div>
                   </div>
                 )}

@@ -48,7 +48,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, X } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -115,6 +115,7 @@ const Customers = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
+  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [dismissingNotificationIds, setDismissingNotificationIds] = useState<Set<string>>(new Set());
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -125,6 +126,11 @@ const Customers = () => {
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
+  const selectedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const loadCustomers = useCallback(async () => {
     const data = await getAllCustomers();
@@ -150,20 +156,14 @@ const Customers = () => {
 
   const loadCustomerNotifications = useCallback(async () => {
     const notifications = await getCustomerNotifications();
-    // Filter out notifications for already-confirmed/clients and those the current user shouldn't see
     const visible = notifications.filter((n) => {
       const cust = customers.find((c) => c.customerId === n.customerId);
       if (!cust) return false;
-      // Don't surface notifications for confirmed clients
-      if (cust.status === 'CLIENT' || cust.status === 'CONFIRMED') return false;
-      // Admins and intake users see all
-      if (user?.role === 'admin' || user?.role === 'intake') return true;
-      // If assignedTo matches current user (by consultantName, lawyerName or username) allow
+      if (cust.status === "CLIENT" || cust.status === "CONFIRMED") return false;
+      if (user?.role === "admin" || user?.role === "intake") return true;
       const viewerNames = new Set([user?.consultantName, user?.lawyerName, user?.username].filter(Boolean) as string[]);
-      const assigned = cust.assignedTo || assignedMap[cust.customerId] || '';
-      if (assigned && viewerNames.has(assigned)) return true;
-      // Otherwise hide
-      return false;
+      const assigned = cust.assignedTo || assignedMap[cust.customerId] || "";
+      return Boolean(assigned && viewerNames.has(assigned));
     });
     setCustomerAlerts(visible);
   }, [customers, user, assignedMap]);
@@ -197,8 +197,7 @@ const Customers = () => {
       setCustomerStatusLog([]);
       return;
     }
-    const customerList = await getAllCustomers();
-    const customer = customerList.find((c) => c.customerId === id) || null;
+    const customer = customers.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
     const [cases, history] = await Promise.all([
       getCasesByCustomer(id),
@@ -212,13 +211,16 @@ const Customers = () => {
     } catch (e) {
       setCustomerDocuments([]);
     }
-  }, []);
+  }, [customers]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
   useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
 
-  // Customer alerts are filtered server-side; we've applied client-side visibility rules in loader
+  const unreadAlertCount = useMemo(
+    () => customerAlerts.filter((a) => !seenAlertIds.has(a.notificationId)).length,
+    [customerAlerts, seenAlertIds],
+  );
 
   const filteredCustomers = useMemo(() => {
     if (!search) return customers;
@@ -390,7 +392,6 @@ const Customers = () => {
         await updateCustomer(editingId.trim(), patched);
         try { await loadCustomerNotifications(); } catch (e) { /* ignore secondary load errors */ }
         toast({ title: "Updated", description: "Customer updated successfully" });
-        try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
         try { await loadCustomers(); } catch (e) { /* ignore reload errors */ }
         try { if (selectedId) await loadCustomerDetail(selectedId); } catch (e) { /* ignore */ }
         return;
@@ -402,7 +403,6 @@ const Customers = () => {
         await createCustomer(toCreate as Omit<Customer, "customerId">);
         try { await loadCustomerNotifications(); } catch (e) { /* ignore */ }
         toast({ title: "Created", description: "Customer created successfully" });
-        try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       }
       setShowForm(false);
       setSelectedId(null);
@@ -423,7 +423,6 @@ const Customers = () => {
     deleteCustomer(customerId).then(async () => {
       if (selectedId === customerId) setSelectedId(null);
       toast({ title: "Deleted successfully" });
-      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       setTick((t) => t + 1);
     }).catch((err: unknown) => {
@@ -446,7 +445,6 @@ const Customers = () => {
       if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
       await updateCustomer(customerId, { status });
       toast({ title: 'Status updated' });
-      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
@@ -472,7 +470,6 @@ const Customers = () => {
       toast({ title: 'Client confirmed', description: `Assigned to ${confirmAssignSelected}` });
       setShowConfirmAssign(false);
       setConfirmAssignCustomerId(null);
-      try { window.dispatchEvent(new Event('app:data-updated')); } catch {}
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
@@ -481,7 +478,7 @@ const Customers = () => {
   };
 
   const isAdmin = user?.role === "admin";
-  const canManageCustomerNotifications = isAdmin || user?.role === 'intake';
+  const canManageCustomerNotifications = isAdmin || user?.role === "intake";
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -534,7 +531,46 @@ const Customers = () => {
     }
   };
   return (
-    <MainLayout title="Customers">
+    <MainLayout
+      title="Customers"
+      right={
+        <>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) {
+                setSeenAlertIds((prev) => {
+                  const next = new Set(prev);
+                  customerAlerts.forEach((a) => next.add(a.notificationId));
+                  return next;
+                });
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="relative">
+                <Bell className="h-4 w-4" />
+                {unreadAlertCount > 0 && (
+                  <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
+                    {unreadAlertCount}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
+              {customerAlerts.map((a) => (
+                <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
+                  <div className="flex flex-col">
+                    <span>{a.message}</span>
+                    <span className="text-xs text-muted-foreground">{a.customerId}</span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      }
+    >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -1070,10 +1106,13 @@ const Customers = () => {
         caseId={selectedCaseId}
         open={!!selectedCaseId}
         onClose={() => setSelectedCaseId(null)}
-        onStateChanged={() => {
-          setSelectedCaseId(null);
-          loadCustomerDetail(selectedId);
-          loadCustomers();
+        onStateChanged={async () => {
+          const activeCustomerId = selectedIdRef.current;
+          await loadCustomers();
+          if (activeCustomerId) {
+            await loadCustomerDetail(activeCustomerId);
+          }
+          await loadCustomerNotifications();
         }}
       />
     </MainLayout>

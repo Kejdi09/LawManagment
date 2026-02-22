@@ -236,7 +236,6 @@ async function syncCustomerNotifications() {
           followupCount: 0,
           lastFollowupAt: null,
           lastRespondAt: null,
-          followupSuppressed: false,
           onHoldFollowupNotifiedFor: null,
         }
         : {
@@ -245,7 +244,6 @@ async function syncCustomerNotifications() {
           followupCount: Number(prevTracker.followupCount || 0),
           lastFollowupAt: prevTracker.lastFollowupAt || null,
           lastRespondAt: prevTracker.lastRespondAt || null,
-          followupSuppressed: Boolean(prevTracker.followupSuppressed),
           onHoldFollowupNotifiedFor: prevTracker.onHoldFollowupNotifiedFor || null,
         };
 
@@ -274,28 +272,19 @@ async function syncCustomerNotifications() {
 
       const elapsedFromStatusChange = hoursBetween(lastStatusChangeAt, nowMs);
 
-      if ((FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) && !tracker.followupSuppressed) {
+      if (FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) {
         const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
         const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
 
-        if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval) {
-          if (tracker.followupCount >= 3) {
-            tracker.followupSuppressed = true;
-            await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
-          } else {
-            await insertCustomerNotification({
-              customerId: customer.customerId,
-              message: `Follow up ${customer.name}`,
-              kind: "follow",
-              severity: followupInterval === 72 ? "critical" : "warn",
-            });
-            tracker.followupCount += 1;
-            tracker.lastFollowupAt = new Date(nowMs).toISOString();
-            if (tracker.followupCount >= 3) {
-              tracker.followupSuppressed = true;
-              await customerNotificationsCol.deleteMany({ customerId: customer.customerId, kind: "follow" });
-            }
-          }
+        if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval && tracker.followupCount < 3) {
+          await insertCustomerNotification({
+            customerId: customer.customerId,
+            message: `Follow up ${customer.name}`,
+            kind: "follow",
+            severity: followupInterval === 72 ? "critical" : "warn",
+          });
+          tracker.followupCount += 1;
+          tracker.lastFollowupAt = new Date(nowMs).toISOString();
         }
       }
 
