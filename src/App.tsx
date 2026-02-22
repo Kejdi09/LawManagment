@@ -27,6 +27,16 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+function RequireCustomersAccess({ children }: { children: JSX.Element }) {
+  const { user, isAuthLoading } = useAuth();
+  if (isAuthLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
+  }
+  const canAccessCustomers = user?.role === "intake" || user?.role === "admin";
+  if (!canAccessCustomers) return <Navigate to="/" replace />;
+  return children;
+}
+
 function LoginRoute() {
   const { isAuthenticated, isAuthLoading, user } = useAuth();
   const location = useLocation();
@@ -53,7 +63,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
-            <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
+            <Route path="/customers" element={<RequireAuth><RequireCustomersAccess><Customers /></RequireCustomersAccess></RequireAuth>} />
             <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
             <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
             <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />

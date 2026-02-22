@@ -13,6 +13,20 @@ interface AuthContextType {
 const AUTH_FLAG_KEY = 'auth';
 const AUTH_TOKEN_KEY = 'auth_token';
 
+function stripProfessionalTitle(value?: string | null) {
+  if (!value) return value ?? null;
+  return value.replace(/^\s*(dr|mag)\.?\s+/i, '').trim();
+}
+
+function normalizeUserPayload(user: { username: string; role: string; consultantName?: string | null; lawyerName?: string | null } | null) {
+  if (!user) return null;
+  return {
+    ...user,
+    consultantName: stripProfessionalTitle(user.consultantName),
+    lawyerName: stripProfessionalTitle(user.lawyerName),
+  };
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -40,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (data?.authenticated) {
             setIsAuthenticated(true);
-            setUser(data?.user ?? null);
+            setUser(normalizeUserPayload(data?.user ?? null));
             localStorage.setItem(AUTH_FLAG_KEY, 'true');
             return true;
           }

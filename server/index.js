@@ -158,9 +158,20 @@ function isAdminUser(user) {
   return user?.role === "admin";
 }
 
+function stripProfessionalTitle(value) {
+  return String(value || "").replace(/^\s*(dr|mag)\.?\s+/i, "").trim();
+}
+
+function buildAssignedToMatcher(rawName) {
+  const clean = stripProfessionalTitle(rawName);
+  if (!clean) return null;
+  const escaped = escapeRegex(clean);
+  return new RegExp(`^\\s*(?:dr|mag)\\.?\\s*${escaped}\\s*$`, "i");
+}
+
 function getUserLawyerName(user) {
   if (!user) return "";
-  return user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || "";
+  return stripProfessionalTitle(user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || "");
 }
 
 function buildCaseScopeFilter(user) {
@@ -169,7 +180,8 @@ function buildCaseScopeFilter(user) {
   if (user?.role === "intake") return { _id: { $exists: false } };
   const lawyerName = getUserLawyerName(user);
   if (!lawyerName) return { _id: { $exists: false } };
-  return { assignedTo: lawyerName };
+  const matcher = buildAssignedToMatcher(lawyerName);
+  return matcher ? { assignedTo: matcher } : { assignedTo: lawyerName };
 }
 
 function buildCustomerScopeFilter(user) {
@@ -178,7 +190,10 @@ function buildCustomerScopeFilter(user) {
   // Allow creators to see their own customers. Intake users may not have a lawyerName,
   // so include a createdBy clause so they can see customers they created.
   const clauses = [];
-  if (lawyerName) clauses.push({ assignedTo: lawyerName });
+  if (lawyerName) {
+    const matcher = buildAssignedToMatcher(lawyerName);
+    clauses.push(matcher ? { assignedTo: matcher } : { assignedTo: lawyerName });
+  }
   if (user?.username) clauses.push({ createdBy: user.username });
   if (clauses.length === 0) return { _id: { $exists: false } };
   return { $or: clauses };
@@ -188,14 +203,14 @@ function userCanAccessCustomer(user, customer) {
   if (!customer) return false;
   if (isAdminUser(user)) return true;
   const lawyerName = getUserLawyerName(user);
-  return Boolean(lawyerName) && customer.assignedTo === lawyerName;
+  return Boolean(lawyerName) && stripProfessionalTitle(customer.assignedTo) === lawyerName;
 }
 
 function userCanAccessCase(user, doc) {
   if (!doc) return false;
   if (isAdminUser(user)) return true;
   const lawyerName = getUserLawyerName(user);
-  return Boolean(lawyerName) && doc.assignedTo === lawyerName;
+  return Boolean(lawyerName) && stripProfessionalTitle(doc.assignedTo) === lawyerName;
 }
 
 function getLastStatusChangeAt(customer) {
@@ -666,6 +681,7 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
   if (req.user?.role !== 'intake' && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null, version: 1 };
+  if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
   // Require assignedTo for confirmed clients regardless of role
   if (payload.status === "CLIENT" && !payload.assignedTo) {
     return res.status(400).json({ error: 'must_assign_confirmed_client' });
@@ -699,6 +715,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   debugLog(req, 'PUT /api/customers/:id');
   const { id } = req.params;
   const update = { ...req.body };
+  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   const expectedVersionRaw = update.expectedVersion;
   const expectedVersion = Number(expectedVersionRaw);
   delete update.expectedVersion;
@@ -839,6 +856,7 @@ app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   delete update._id;
   delete update.customerId;
   const scope = buildCustomerScopeFilter(req.user);
@@ -897,6 +915,7 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
+  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   delete update._id;
   delete update.customerId;
   const scope = buildCustomerScopeFilter(req.user);
@@ -1098,6 +1117,7 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   }
 
   const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1 };
+  if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
   if (!isAdminUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
   }
@@ -1111,6 +1131,7 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   const targetId = (req.params.id || "").trim();
   const idPattern = new RegExp(`^${escapeRegex(targetId)}\\s*$`, "i");
   const update = { ...req.body };
+  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   const expectedVersionRaw = update.expectedVersion;
   const expectedVersion = Number(expectedVersionRaw);
   delete update.expectedVersion;
