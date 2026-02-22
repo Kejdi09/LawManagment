@@ -376,6 +376,7 @@ const Customers = () => {
       if (editingId) {
         const original = customers.find((x) => x.customerId === editingId);
         const patched: Partial<Customer> = { ...(rest as Partial<Customer>) };
+        patched.expectedVersion = original?.version ?? 1;
         // If status changed, append to statusHistory with current date
         if (original && original.status !== (form.status as LeadStatus)) {
           const prevHistory = Array.isArray(original.statusHistory) ? original.statusHistory.slice() : [];
@@ -414,7 +415,11 @@ const Customers = () => {
       await loadCustomers();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unable to save customer";
-      toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
+      if (/conflict/i.test(errorMessage)) {
+        toast({ title: "Save conflict", description: "This customer was changed by another user. Reloaded latest data.", variant: "destructive" });
+      } else {
+        toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
+      }
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     }
@@ -443,16 +448,21 @@ const Customers = () => {
         return;
       }
 
+      const current = customers.find((c) => c.customerId === customerId);
       // optimistic update
       setCustomers((prev) => prev.map((c) => (c.customerId === customerId ? { ...c, status } : c)));
       if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
-      await updateCustomer(customerId, { status });
+      await updateCustomer(customerId, { status, expectedVersion: current?.version ?? 1 });
       toast({ title: 'Status updated' });
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unable to update status';
-      toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
+      if (/conflict/i.test(errorMessage)) {
+        toast({ title: 'Update conflict', description: 'This customer was changed by another user. Reloaded latest data.', variant: 'destructive' });
+      } else {
+        toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
+      }
       await loadCustomers();
     }
   };
@@ -478,14 +488,25 @@ const Customers = () => {
       return;
     }
     try {
-      await updateCustomer(confirmAssignCustomerId, { status: 'CLIENT', assignedTo: confirmAssignSelected });
+      const current = customers.find((c) => c.customerId === confirmAssignCustomerId);
+      await updateCustomer(confirmAssignCustomerId, {
+        status: 'CLIENT',
+        assignedTo: confirmAssignSelected,
+        expectedVersion: current?.version ?? 1,
+      });
       toast({ title: 'Client confirmed', description: `Assigned to ${confirmAssignSelected}` });
       setShowConfirmAssign(false);
       setConfirmAssignCustomerId(null);
       await loadCustomers();
       if (selectedId) await loadCustomerDetail(selectedId);
     } catch (err: unknown) {
-      toast({ title: 'Confirm failed', description: String(err), variant: 'destructive' });
+      const message = err instanceof Error ? err.message : String(err);
+      if (/conflict/i.test(message)) {
+        toast({ title: 'Confirm conflict', description: 'This customer was changed by another user. Reloaded latest data.', variant: 'destructive' });
+        await loadCustomers();
+      } else {
+        toast({ title: 'Confirm failed', description: message, variant: 'destructive' });
+      }
     }
   };
 

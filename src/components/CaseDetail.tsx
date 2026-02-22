@@ -352,6 +352,8 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       // Send update to backend
       const updatePayload: Partial<Case> = {
         ...editForm,
+        version: caseData?.version,
+        expectedVersion: caseData?.version ?? 1,
         assignedTo: isAdmin ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
@@ -378,7 +380,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       onStateChanged();
       toast({ title: "Case updated", description: "Changes saved successfully" });
     } catch (err: unknown) {
-      toast({ title: "Error", description: getErrorMessage(err, "Failed"), variant: "destructive" });
+      const message = getErrorMessage(err, "Failed");
+      if (/conflict/i.test(message)) {
+        toast({ title: "Update conflict", description: "This case was changed by another user. Reloaded latest data.", variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: message, variant: "destructive" });
+      }
       // Reload on error to restore correct state
       await loadCaseData(c.caseId);
     } finally {

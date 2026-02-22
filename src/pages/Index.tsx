@@ -6,7 +6,7 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
-import { AlertTriangle, CalendarClock, KanbanSquare } from "lucide-react";
+import { CalendarClock, KanbanSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import { useToast } from "@/hooks/use-toast";
+
+type SavedCaseView = {
+  name: string;
+  query: string;
+  priorityFilter: Priority | "all";
+  docFilter: "all" | "ok" | "missing";
+  stageFilter: "all" | CaseStage;
+};
+
+const SAVED_CASE_VIEWS_KEY = "lm:saved-case-views";
 
 const Index = () => {
   const { user } = useAuth();
@@ -47,7 +57,51 @@ const Index = () => {
   const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
+  const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
+  const [newViewName, setNewViewName] = useState("");
   const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_CASE_VIEWS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSavedViews(parsed.filter((x) => x && typeof x.name === "string"));
+      }
+    } catch {
+      setSavedViews([]);
+    }
+  }, []);
+
+  const persistSavedViews = useCallback((views: SavedCaseView[]) => {
+    setSavedViews(views);
+    localStorage.setItem(SAVED_CASE_VIEWS_KEY, JSON.stringify(views));
+  }, []);
+
+  const handleSaveView = useCallback(() => {
+    const name = newViewName.trim();
+    if (!name) {
+      toast({ title: "Name required", description: "Enter a name for this view", variant: "destructive" });
+      return;
+    }
+    const nextView: SavedCaseView = { name, query, priorityFilter, docFilter, stageFilter };
+    const withoutSameName = savedViews.filter((v) => v.name.toLowerCase() !== name.toLowerCase());
+    persistSavedViews([nextView, ...withoutSameName].slice(0, 8));
+    setNewViewName("");
+    toast({ title: "View saved" });
+  }, [newViewName, query, priorityFilter, docFilter, stageFilter, savedViews, persistSavedViews, toast]);
+
+  const applySavedView = useCallback((view: SavedCaseView) => {
+    setQuery(view.query);
+    setPriorityFilter(view.priorityFilter);
+    setDocFilter(view.docFilter);
+    setStageFilter(view.stageFilter);
+  }, []);
+
+  const deleteSavedView = useCallback((name: string) => {
+    persistSavedViews(savedViews.filter((v) => v.name !== name));
+  }, [savedViews, persistSavedViews]);
 
   const loadCases = useCallback(async () => {
     const all = await getAllCases();
@@ -99,7 +153,6 @@ const Index = () => {
   const todaysQueue = useMemo(() => {
     const now = Date.now();
     const in24h = now + 24 * 60 * 60 * 1000;
-    const overdue = caseList.filter((c) => c.deadline && new Date(c.deadline).getTime() < now);
     const dueToday = caseList.filter((c) => {
       if (!c.deadline) return false;
       const ts = new Date(c.deadline).getTime();
@@ -109,17 +162,57 @@ const Index = () => {
       const stage = mapCaseStateToStage(c.state);
       return stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
     });
-    const topItems = [...overdue, ...dueToday, ...waiting]
+    const topItems = [...dueToday, ...waiting]
       .filter((item, idx, arr) => arr.findIndex((x) => x.caseId === item.caseId) === idx)
       .slice(0, 5);
 
     return {
-      overdue,
       dueToday,
       waiting,
       topItems,
     };
   }, [caseList]);
+
+  const myWorkSummary = useMemo(() => {
+    const assignee = currentLawyer;
+    const mine = assignee ? caseList.filter((c) => c.assignedTo === assignee) : [];
+    const waitingMine = mine.filter((c) => {
+      const stage = mapCaseStateToStage(c.state);
+      return stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
+    });
+    const highPriorityMine = mine.filter((c) => c.priority === "high");
+
+    if (user?.role === "admin") {
+      return {
+        title: "Admin Focus",
+        cards: [
+          { label: "Total Cases", value: caseList.length },
+          { label: "Waiting Cases", value: todaysQueue.waiting.length },
+          { label: "High Priority", value: caseList.filter((c) => c.priority === "high").length },
+        ],
+      };
+    }
+
+    if (user?.role === "intake") {
+      return {
+        title: "Intake Focus",
+        cards: [
+          { label: "New Cases", value: caseList.filter((c) => mapCaseStateToStage(c.state) === "NEW").length },
+          { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
+          { label: "Due in 24h", value: todaysQueue.dueToday.length },
+        ],
+      };
+    }
+
+    return {
+      title: "My Work Today",
+      cards: [
+        { label: "Assigned to Me", value: mine.length },
+        { label: "My Waiting", value: waitingMine.length },
+        { label: "My High Priority", value: highPriorityMine.length },
+      ],
+    };
+  }, [caseList, todaysQueue, currentLawyer, user?.role]);
 
   const openCreateCase = () => {
     setCaseForm({
@@ -219,11 +312,7 @@ const Index = () => {
               <CalendarClock className="h-4 w-4" />
               Today's Queue
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Overdue Deadlines</div>
-                <div className="text-xl font-semibold text-destructive">{todaysQueue.overdue.length}</div>
-              </div>
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-md border p-3">
                 <div className="text-xs text-muted-foreground">Due in 24h</div>
                 <div className="text-xl font-semibold">{todaysQueue.dueToday.length}</div>
@@ -247,15 +336,26 @@ const Index = () => {
                       <div className="text-xs text-muted-foreground">{customerNames[item.customerId] ?? item.customerId} • {item.category}</div>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
-                      {item.deadline && new Date(item.deadline).getTime() < Date.now() && (
-                        <span className="inline-flex items-center gap-1 text-destructive"><AlertTriangle className="h-3 w-3" />Overdue</span>
-                      )}
                       <Badge variant="outline">{STAGE_LABELS[mapCaseStateToStage(item.state)]}</Badge>
                     </div>
                   </button>
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 text-sm font-semibold">{myWorkSummary.title}</div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {myWorkSummary.cards.map((card) => (
+                <div key={card.label} className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">{card.label}</div>
+                  <div className="text-xl font-semibold">{card.value}</div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -269,6 +369,40 @@ const Index = () => {
               docFilter={docFilter}
               onDocFilterChange={setDocFilter}
             />
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={newViewName}
+                  onChange={(e) => setNewViewName(e.target.value)}
+                  placeholder="Save current filters as..."
+                  className="sm:max-w-xs"
+                />
+                <Button size="sm" variant="outline" onClick={handleSaveView}>Save View</Button>
+              </div>
+              {savedViews.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {savedViews.map((view) => (
+                    <div key={view.name} className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => applySavedView(view)}
+                        className="text-xs font-medium hover:underline"
+                      >
+                        {view.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteSavedView(view.name)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        aria-label={`Delete view ${view.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

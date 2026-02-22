@@ -15,6 +15,7 @@ export type Priority = "urgent" | "high" | "medium" | "low";
 
 export interface Case {
   caseId: string;
+  version?: number;
   customerId: string;
   category: string;
   subcategory: string;
@@ -33,6 +34,7 @@ export interface Case {
 
 export interface Customer {
   customerId: string;
+  version?: number;
   name: string;
   customerType: string;
   contact: string;
@@ -47,7 +49,9 @@ export interface Customer {
   followUpDate?: string | null;
   status: LeadStatus;
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
+  expectedVersion?: number;
   notes?: string;
+  expectedVersion?: number;
 }
 
 export interface HistoryRecord {

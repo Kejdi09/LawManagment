@@ -626,7 +626,7 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users can create new (non-confirmed) customers
   if (req.user?.role !== 'intake' && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = await genCustomerId();
-  const payload = { ...req.body, customerId, createdBy: req.user?.username || null };
+  const payload = { ...req.body, customerId, createdBy: req.user?.username || null, version: 1 };
   // Require assignedTo for confirmed clients regardless of role
   if (payload.status === "CLIENT" && !payload.assignedTo) {
     return res.status(400).json({ error: 'must_assign_confirmed_client' });
@@ -660,6 +660,9 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   debugLog(req, 'PUT /api/customers/:id');
   const { id } = req.params;
   const update = { ...req.body };
+  const expectedVersionRaw = update.expectedVersion;
+  const expectedVersion = Number(expectedVersionRaw);
+  delete update.expectedVersion;
   delete update._id;
   delete update.customerId;
 
@@ -667,6 +670,11 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
   const current = await customersCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: 'Not found' });
+
+  const currentVersion = Number(current.version || 1);
+  if (Number.isFinite(expectedVersion) && expectedVersion !== currentVersion) {
+    return res.status(409).json({ error: 'conflict', latest: current });
+  }
 
   // If status is being changed to CLIENT, require assignedTo
   if (update.status === 'CLIENT' && !update.assignedTo) {
@@ -702,6 +710,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       ...current,
       ...update,
       customerId: id,
+      version: currentVersion + 1,
       sourceCustomerId: id,
       confirmedAt: new Date().toISOString(),
     };
@@ -713,6 +722,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   }
 
   // Regular customer update (stay non-confirmed)
+  update.version = currentVersion + 1;
   await customersCol.updateOne({ customerId: id, ...customerScope }, { $set: update });
   const updated = await customersCol.findOne({ customerId: id });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
@@ -1015,7 +1025,7 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
     return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
   }
 
-  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now };
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1 };
   if (!isAdminUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
   }
@@ -1029,8 +1039,16 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   const targetId = (req.params.id || "").trim();
   const idPattern = new RegExp(`^${escapeRegex(targetId)}\\s*$`, "i");
   const update = { ...req.body };
+  const expectedVersionRaw = update.expectedVersion;
+  const expectedVersion = Number(expectedVersionRaw);
+  delete update.expectedVersion;
   const current = await casesCol.findOne({ caseId: idPattern, ...buildCaseScopeFilter(req.user) });
   if (!current) return res.status(404).json({ error: "Not found" });
+
+  const currentVersion = Number(current.version || 1);
+  if (Number.isFinite(expectedVersion) && expectedVersion !== currentVersion) {
+    return res.status(409).json({ error: 'conflict', latest: current });
+  }
 
   if (!isAdminUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
@@ -1043,6 +1061,7 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
   }
   // Guarantee caseId stays consistent and create if missing to avoid 404 edits
   update.caseId = targetId;
+  update.version = currentVersion + 1;
   const result = await casesCol.findOneAndUpdate(
     { caseId: idPattern, ...buildCaseScopeFilter(req.user) },
     { $set: update },
