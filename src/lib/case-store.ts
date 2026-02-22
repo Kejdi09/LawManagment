@@ -11,6 +11,27 @@ function getAuthHeaders() {
 // Simple in-memory endpoint cooldowns to avoid repeated 404/network spam
 const _endpointCooldowns: Record<string, number> = {};
 const COOLDOWN_MS = 60_000; // 60s
+const LONG_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
+const NOTIFICATION_COOLDOWN_KEY = "customer_notifications_cooldown_until";
+
+function readNotificationCooldown(): number {
+  try {
+    const raw = localStorage.getItem(NOTIFICATION_COOLDOWN_KEY);
+    if (!raw) return 0;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeNotificationCooldown(until: number) {
+  try {
+    localStorage.setItem(NOTIFICATION_COOLDOWN_KEY, String(until));
+  } catch {
+    // ignore localStorage write errors
+  }
+}
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -123,16 +144,20 @@ export async function deleteCustomer(customerId: string): Promise<void> {
 
 export async function getCustomerNotifications(): Promise<CustomerNotification[]> {
   const key = "/api/customers/notifications";
-  if (_endpointCooldowns[key] && _endpointCooldowns[key] > Date.now()) return [] as CustomerNotification[];
+  const now = Date.now();
+  const persistedCooldownUntil = readNotificationCooldown();
+  if (persistedCooldownUntil > now) return [] as CustomerNotification[];
+  if (_endpointCooldowns[key] && _endpointCooldowns[key] > now) return [] as CustomerNotification[];
   try {
     return await api<CustomerNotification[]>(key);
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
-    const expectedMissing = /not found|404/i.test(message);
-    if (!expectedMissing) {
-      console.warn(`getCustomerNotifications failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    const isNotFound = /not found|404/i.test(message);
+    const cooldownUntil = Date.now() + (isNotFound ? LONG_COOLDOWN_MS : COOLDOWN_MS);
+    _endpointCooldowns[key] = cooldownUntil;
+    if (isNotFound) {
+      writeNotificationCooldown(cooldownUntil);
     }
-    _endpointCooldowns[key] = Date.now() + COOLDOWN_MS;
     // If notifications endpoint is unavailable or returns 404, treat as empty list
     return [] as CustomerNotification[];
   }

@@ -44,7 +44,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
 // --- Simple user store for demo (replace with DB in production) ---
@@ -132,6 +132,17 @@ async function cleanupStaleCases() {
 
 const pad3 = (n) => String(n).padStart(3, "0");
 const escapeRegex = (str = "") => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 8;
+const loginAttempts = new Map();
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const STUCK_STATES = ["WAITING_RESPONSE_P", "WAITING_RESPONSE_C", "WAITING_APPROVAL", "WAITING_ACCEPTANCE", "SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE", "SEND_DOCUMENTS"];
 const MAX_STALE_HOURS = 120;
 const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
@@ -350,6 +361,23 @@ function buildCaseFilters(query) {
   return filters;
 }
 
+function cleanLoginField(value, maxLen = 100) {
+  return String(value || "").trim().slice(0, maxLen);
+}
+
+function getLoginThrottleState(req, username) {
+  const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+  const key = `${String(ip)}::${username.toLowerCase()}`;
+  const now = Date.now();
+  const current = loginAttempts.get(key);
+  if (!current || now - current.firstAttempt > LOGIN_WINDOW_MS) {
+    const fresh = { firstAttempt: now, count: 0 };
+    loginAttempts.set(key, fresh);
+    return { key, state: fresh };
+  }
+  return { key, state: current };
+}
+
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 // Auth helpers
@@ -537,12 +565,27 @@ app.post("/api/_debug/seed-user", async (req, res) => {
 // Login using users collection and bcrypt, issue httpOnly JWT cookie
 app.post("/api/login", async (req, res) => {
   try {
-    const { username, password } = req.body || {};
+    const username = cleanLoginField(req.body?.username, 80);
+    const password = cleanLoginField(req.body?.password, 200);
     if (!username || !password) return res.status(400).json({ success: false, message: "Missing credentials" });
+    const { key, state } = getLoginThrottleState(req, username);
+    if (state.count >= LOGIN_MAX_ATTEMPTS) {
+      const retryAfterSec = Math.ceil((state.firstAttempt + LOGIN_WINDOW_MS - Date.now()) / 1000);
+      return res.status(429).json({ success: false, message: "Too many attempts. Try again later.", retryAfter: Math.max(1, retryAfterSec) });
+    }
     const user = await usersCol.findOne({ username });
-    if (!user) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (!user) {
+      state.count += 1;
+      loginAttempts.set(key, state);
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (!ok) {
+      state.count += 1;
+      loginAttempts.set(key, state);
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }
+    loginAttempts.delete(key);
     const consultantName = user.consultantName || user.lawyerName || null;
     const token = jwt.sign({ username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
@@ -920,7 +963,8 @@ app.post("/api/customers/:id/history", verifyAuth, async (req, res) => {
 
 // Cases
 app.get("/api/cases", verifyAuth, async (req, res) => {
-  const search = req.query.q ? new RegExp(req.query.q, "i") : null;
+  const rawQuery = String(req.query.q || "").trim().slice(0, 80);
+  const search = rawQuery ? new RegExp(escapeRegex(rawQuery), "i") : null;
   const filters = { ...buildCaseFilters(req.query), ...buildCaseScopeFilter(req.user) };
 
   // If searching, include customer name via lookup while preserving other filters
@@ -1183,14 +1227,32 @@ const storage = multer.diskStorage({
     cb(null, `${ts}-${safe}`);
   },
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error("invalid_file_type"));
+    }
+    return cb(null, true);
+  },
+});
+
+function isValidOwnerType(value) {
+  return value === "case" || value === "customer";
+}
+
+function isValidOwnerId(value) {
+  return /^[A-Za-z0-9\-]{2,40}$/.test(String(value || ""));
+}
 
 app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req, res) => {
   try {
     debugLog(req, 'POST /api/documents/upload', { filename: req.file?.originalname });
-    const ownerType = req.body.ownerType; // 'case' or 'customer'
-    const ownerId = req.body.ownerId;
+    const ownerType = String(req.body.ownerType || "").trim(); // 'case' or 'customer'
+    const ownerId = String(req.body.ownerId || "").trim();
     if (!req.file || !ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
+    if (!isValidOwnerType(ownerType) || !isValidOwnerId(ownerId)) return res.status(400).json({ error: 'invalid_owner' });
     const doc = {
       docId: `D${Date.now()}`,
       ownerType,
@@ -1208,15 +1270,23 @@ app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req,
     debugLog(req, 'POST /api/documents/upload - saved', { docId: doc.docId });
     return res.json(doc);
   } catch (err) {
+    if (err?.message === "invalid_file_type") {
+      return res.status(400).json({ error: "invalid_file_type" });
+    }
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "file_too_large" });
+    }
     console.error('/api/documents/upload error', err);
     return res.status(500).json({ error: 'upload_failed' });
   }
 });
 
 app.get('/api/documents', verifyAuth, async (req, res) => {
-  const { ownerType, ownerId } = req.query;
+  const ownerType = String(req.query.ownerType || "").trim();
+  const ownerId = String(req.query.ownerId || "").trim();
   if (!ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
-  const docs = await documentsCol.find({ ownerType: String(ownerType), ownerId: String(ownerId) }).sort({ uploadedAt: -1 }).toArray();
+  if (!isValidOwnerType(ownerType) || !isValidOwnerId(ownerId)) return res.status(400).json({ error: 'invalid_owner' });
+  const docs = await documentsCol.find({ ownerType, ownerId }).sort({ uploadedAt: -1 }).toArray();
   res.json(docs);
 });
 

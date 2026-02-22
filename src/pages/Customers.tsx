@@ -13,8 +13,6 @@ import {
   fetchDocumentBlob,
   StoredDocument,
   getCustomerHistory,
-  getCustomerNotifications,
-  deleteCustomerNotification,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -26,7 +24,6 @@ import {
   Customer,
   Case,
   CustomerHistoryRecord,
-  CustomerNotification,
   ContactChannel,
   LeadStatus,
   ServiceType,
@@ -48,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, X } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -85,73 +82,6 @@ const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
   "CONSULTATION_SCHEDULED",
 ];
 
-function getLastStatusChangeIso(customer: Customer) {
-  const history = Array.isArray(customer.statusHistory) ? customer.statusHistory : [];
-  const last = history.length > 0 ? history[history.length - 1] : null;
-  return last?.date || customer.registeredAt || new Date().toISOString();
-}
-
-function buildFallbackNotifications(customers: Customer[]): CustomerNotification[] {
-  const nowMs = Date.now();
-  return customers.flatMap((customer) => {
-    if (customer.status === "CLIENT" || customer.status === "CONFIRMED") return [];
-    const lastStatusIso = getLastStatusChangeIso(customer);
-    const lastStatusMs = new Date(lastStatusIso).getTime();
-    const elapsedHours = Number.isFinite(lastStatusMs) ? (nowMs - lastStatusMs) / (1000 * 60 * 60) : 0;
-
-    const notifications: CustomerNotification[] = [];
-
-    if (customer.status === "INTAKE" && elapsedHours >= 24) {
-      notifications.push({
-        notificationId: `local-follow-${customer.customerId}`,
-        customerId: customer.customerId,
-        message: `Follow up ${customer.name}`,
-        kind: "follow",
-        severity: "warn",
-        createdAt: lastStatusIso,
-      });
-    }
-
-    if ((customer.status === "WAITING_APPROVAL" || customer.status === "WAITING_ACCEPTANCE") && elapsedHours >= 72) {
-      notifications.push({
-        notificationId: `local-follow72-${customer.customerId}`,
-        customerId: customer.customerId,
-        message: `Follow up ${customer.name}`,
-        kind: "follow",
-        severity: "critical",
-        createdAt: lastStatusIso,
-      });
-    }
-
-    if ((customer.status === "SEND_PROPOSAL" || customer.status === "SEND_CONTRACT" || customer.status === "SEND_RESPONSE") && elapsedHours >= 24) {
-      notifications.push({
-        notificationId: `local-respond-${customer.customerId}`,
-        customerId: customer.customerId,
-        message: `Respond to ${customer.name}`,
-        kind: "respond",
-        severity: "warn",
-        createdAt: lastStatusIso,
-      });
-    }
-
-    if (customer.status === "ON_HOLD" && customer.followUpDate) {
-      const followUpMs = new Date(customer.followUpDate).getTime();
-      if (Number.isFinite(followUpMs) && followUpMs <= nowMs) {
-        notifications.push({
-          notificationId: `local-onhold-${customer.customerId}`,
-          customerId: customer.customerId,
-          message: `Follow up ${customer.name}`,
-          kind: "follow",
-          severity: "warn",
-          createdAt: customer.followUpDate,
-        });
-      }
-    }
-
-    return notifications;
-  });
-}
-
 const Customers = () => {
   const [search, setSearch] = useState("");
   const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
@@ -181,8 +111,6 @@ const Customers = () => {
   const [assignedMap, setAssignedMap] = useState<Record<string, string>>({});
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
-  const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
-  const [dismissingNotificationIds, setDismissingNotificationIds] = useState<Set<string>>(new Set());
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -220,48 +148,6 @@ const Customers = () => {
     setAssignedMap(flattened);
   }, []);
 
-  const loadCustomerNotifications = useCallback(async () => {
-    const notifications = await getCustomerNotifications();
-    const source = notifications.length > 0 ? notifications : buildFallbackNotifications(customers);
-    const visible = source.filter((n) => {
-      const cust = customers.find((c) => c.customerId === n.customerId);
-      if (!cust) return false;
-      if (cust.status === "CLIENT" || cust.status === "CONFIRMED") return false;
-      if (user?.role === "admin" || user?.role === "intake") return true;
-      const viewerNames = new Set([user?.consultantName, user?.lawyerName, user?.username].filter(Boolean) as string[]);
-      const assigned = cust.assignedTo || assignedMap[cust.customerId] || "";
-      return Boolean(assigned && viewerNames.has(assigned));
-    });
-    setCustomerAlerts(visible);
-  }, [customers, user, assignedMap]);
-
-  const handleDismissNotification = useCallback(async (notificationId: string) => {
-    if (notificationId.startsWith("local-")) {
-      setCustomerAlerts((prev) => prev.filter((n) => n.notificationId !== notificationId));
-      toast({ title: "Notification removed" });
-      return;
-    }
-    setDismissingNotificationIds((prev) => {
-      const next = new Set(prev);
-      next.add(notificationId);
-      return next;
-    });
-    try {
-      await deleteCustomerNotification(notificationId);
-      await loadCustomerNotifications();
-      toast({ title: "Notification removed" });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unable to remove notification";
-      toast({ title: "Dismiss failed", description: message, variant: "destructive" });
-    } finally {
-      setDismissingNotificationIds((prev) => {
-        const next = new Set(prev);
-        next.delete(notificationId);
-        return next;
-      });
-    }
-  }, [loadCustomerNotifications, toast]);
-
   const loadCustomerDetail = useCallback(async (id: string | null) => {
     if (!id) {
       setSelectedCustomer(null);
@@ -286,7 +172,6 @@ const Customers = () => {
   }, [customers]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
-  useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
 
   const filteredCustomers = useMemo(() => {
@@ -457,7 +342,6 @@ const Customers = () => {
         setShowForm(false);
         resetForm();
         await updateCustomer(editingId.trim(), patched);
-        try { await loadCustomerNotifications(); } catch (e) { /* ignore secondary load errors */ }
         toast({ title: "Updated", description: "Customer updated successfully" });
         try { await loadCustomers(); } catch (e) { /* ignore reload errors */ }
         try { if (selectedId) await loadCustomerDetail(selectedId); } catch (e) { /* ignore */ }
@@ -468,14 +352,12 @@ const Customers = () => {
         toCreate.status = form.status as LeadStatus;
         toCreate.statusHistory = [{ status: form.status as LeadStatus, date: new Date().toISOString() }];
         await createCustomer(toCreate as Omit<Customer, "customerId">);
-        try { await loadCustomerNotifications(); } catch (e) { /* ignore */ }
         toast({ title: "Created", description: "Customer created successfully" });
       }
       setShowForm(false);
       setSelectedId(null);
       resetForm();
       await loadCustomers();
-      await loadCustomerNotifications();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unable to save customer";
       toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
@@ -545,7 +427,6 @@ const Customers = () => {
   };
 
   const isAdmin = user?.role === "admin";
-  const canManageCustomerNotifications = isAdmin || user?.role === "intake";
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -658,48 +539,6 @@ const Customers = () => {
             </Button>
           )}
         </div>
-
-        {canManageCustomerNotifications && customerAlerts.length > 0 && (
-          <Card>
-            <CardHeader className="flex items-center justify-between gap-2">
-              <CardTitle className="text-sm font-semibold">Customer Alerts</CardTitle>
-              <span className="text-xs text-muted-foreground">{customerAlerts.length} pending</span>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {customerAlerts.map((alert) => {
-                const cust = customerById[alert.customerId];
-                const badgeVariant = alert.severity === "critical" ? "destructive" : "secondary";
-                const isDismissing = dismissingNotificationIds.has(alert.notificationId);
-                return (
-                  <div key={alert.notificationId} className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
-                    <div className="flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={badgeVariant} className="text-[10px] uppercase tracking-[0.2em]">
-                          {alert.kind === "follow" ? "Follow up" : "Respond"}
-                        </Badge>
-                        <p className="text-sm font-semibold leading-tight">{alert.message}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span>{cust ? `${cust.name} (${cust.customerId})` : alert.customerId}</span>
-                        {cust && <span>• {LEAD_STATUS_LABELS[cust.status] || cust.status}</span>}
-                        <span>• {safeFormatDate(alert.createdAt)}</span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Dismiss notification"
-                      onClick={() => handleDismissNotification(alert.notificationId)}
-                      disabled={isDismissing}
-                    >
-                      <X className={`h-4 w-4 ${isDismissing ? "animate-spin" : ""}`} />
-                    </Button>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardContent className="p-0">
@@ -1143,7 +982,6 @@ const Customers = () => {
           if (activeCustomerId) {
             await loadCustomerDetail(activeCustomerId);
           }
-          await loadCustomerNotifications();
         }}
       />
     </MainLayout>

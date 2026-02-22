@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   Drawer,
@@ -11,8 +11,19 @@ import CaseAlerts from "./CaseAlerts";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canSeeAlerts = user?.role === "admin" || user?.role === "intake";
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    try {
+      const active = document.activeElement as HTMLElement | null;
+      active?.blur();
+    } catch {
+      // ignore
+    }
+  }, [drawerOpen]);
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
       <div className="container flex h-14 items-center">
@@ -40,7 +51,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
           <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {isAdmin && <CaseAlerts />}
+          {canSeeAlerts && <CaseAlerts />}
           {right}
         </div>
       </div>
