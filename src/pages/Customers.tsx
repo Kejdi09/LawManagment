@@ -115,6 +115,8 @@ const Customers = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [customerPage, setCustomerPage] = useState(1);
+  const customerPageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -219,22 +221,32 @@ const Customers = () => {
     return filteredCustomers.filter((customer) => selectedCategories.includes(getCustomerCategory(customer.customerType)));
   }, [filteredCustomers, selectedCategories]);
 
-  const groupedCustomers = useMemo(() => {
+  const statusFilteredCustomers = useMemo(() => {
     const sectionFiltered = categoryFilteredCustomers.filter((customer) => {
       if (sectionView === "on_hold") return customer.status === "ON_HOLD";
       if (sectionView === "archived") return customer.status === "ARCHIVED";
       return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
     });
-    const statusFiltered = statusView === "all"
+    return statusView === "all"
       ? sectionFiltered
       : sectionFiltered.filter((customer) => customer.status === statusView);
+  }, [categoryFilteredCustomers, sectionView, statusView]);
+
+  const customerTotalPages = Math.max(1, Math.ceil(statusFilteredCustomers.length / customerPageSize));
+
+  const pagedCustomers = useMemo(() => {
+    const start = (customerPage - 1) * customerPageSize;
+    return statusFilteredCustomers.slice(start, start + customerPageSize);
+  }, [statusFilteredCustomers, customerPage]);
+
+  const groupedCustomers = useMemo(() => {
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: statusFiltered.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: pagedCustomers.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [categoryFilteredCustomers, sectionView, statusView]);
+  }, [pagedCustomers]);
 
   const sectionFilteredCustomers = useMemo(() => {
     return categoryFilteredCustomers.filter((customer) => {
@@ -243,6 +255,10 @@ const Customers = () => {
       return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
     });
   }, [categoryFilteredCustomers, sectionView]);
+
+  useEffect(() => {
+    setCustomerPage(1);
+  }, [search, sectionView, statusView, selectedCategories]);
 
   const workflowCounts = useMemo(() => {
     return WORKFLOW_STEPS.reduce<Record<string, number>>((acc, step) => {
@@ -280,18 +296,27 @@ const Customers = () => {
   };
 
   const statusAccent: Record<string, string> = {
-    INTAKE: "bg-slate-100 text-slate-800",
-    SEND_PROPOSAL: "bg-blue-100 text-blue-800",
-    WAITING_APPROVAL: "bg-amber-100 text-amber-800",
-    SEND_CONTRACT: "bg-indigo-100 text-indigo-800",
-    WAITING_ACCEPTANCE: "bg-orange-100 text-orange-800",
-    SEND_RESPONSE: "bg-emerald-100 text-emerald-800",
-    CONFIRMED: "bg-green-100 text-green-800",
-    CLIENT: "bg-emerald-100 text-emerald-800",
-    ARCHIVED: "bg-gray-100 text-gray-600",
+    INTAKE: "bg-muted text-foreground",
+    SEND_PROPOSAL: "bg-blue-50 text-blue-800",
+    WAITING_APPROVAL: "bg-amber-50 text-amber-800",
+    SEND_CONTRACT: "bg-violet-50 text-violet-800",
+    WAITING_ACCEPTANCE: "bg-orange-50 text-orange-800",
+    SEND_RESPONSE: "bg-cyan-50 text-cyan-800",
+    CONFIRMED: "bg-emerald-50 text-emerald-800",
+    CLIENT: "bg-emerald-50 text-emerald-800",
+    ARCHIVED: "bg-muted text-muted-foreground",
     CONSULTATION_SCHEDULED: "bg-blue-50 text-blue-800",
     CONSULTATION_DONE: "bg-emerald-50 text-emerald-800",
-    ON_HOLD: "bg-gray-100 text-gray-800",
+    ON_HOLD: "bg-amber-50 text-amber-800",
+  };
+
+  const hasCustomerFilters = Boolean(search) || sectionView !== "main" || statusView !== "all" || selectedCategories.length !== CATEGORY_OPTIONS.length;
+
+  const resetCustomerFilters = () => {
+    setSearch("");
+    setSectionView("main");
+    setStatusView("all");
+    setSelectedCategories([...CATEGORY_OPTIONS]);
   };
 
   const serviceEntries = Object.entries(SERVICE_LABELS);
@@ -695,6 +720,35 @@ const Customers = () => {
                 </Button>
               )}
             </div>
+            {hasCustomerFilters && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {search && (
+                  <button type="button" onClick={() => setSearch("")} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-xs hover:bg-muted">
+                    Search: {search}
+                    <Plus className="h-3 w-3 rotate-45" />
+                  </button>
+                )}
+                {sectionView !== "main" && (
+                  <button type="button" onClick={() => setSectionView("main")} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-xs hover:bg-muted">
+                    Section: {sectionView === "on_hold" ? "On Hold" : "Archived"}
+                    <Plus className="h-3 w-3 rotate-45" />
+                  </button>
+                )}
+                {statusView !== "all" && (
+                  <button type="button" onClick={() => setStatusView("all")} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-xs hover:bg-muted">
+                    Status: {LEAD_STATUS_LABELS[statusView]}
+                    <Plus className="h-3 w-3 rotate-45" />
+                  </button>
+                )}
+                {selectedCategories.length !== CATEGORY_OPTIONS.length && (
+                  <button type="button" onClick={() => setSelectedCategories([...CATEGORY_OPTIONS])} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-xs hover:bg-muted">
+                    Categories: {selectedCategories.length}
+                    <Plus className="h-3 w-3 rotate-45" />
+                  </button>
+                )}
+                <Button variant="ghost" size="sm" onClick={resetCustomerFilters}>Clear all</Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -717,7 +771,10 @@ const Customers = () => {
                 {groupedCustomers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
-                      No customers match the selected categories/search.
+                      <div className="flex flex-col items-center gap-2">
+                        <span>No customers match the selected categories/search.</span>
+                        <Button variant="outline" size="sm" onClick={resetCustomerFilters}>Clear filters</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
@@ -845,7 +902,10 @@ const Customers = () => {
             <div className="md:hidden space-y-2 p-3">
               {groupedCustomers.length === 0 && (
                 <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
-                  No customers match the selected categories/search.
+                  <div className="flex flex-col items-center gap-2">
+                    <span>No customers match the selected categories/search.</span>
+                    <Button variant="outline" size="sm" onClick={resetCustomerFilters}>Clear filters</Button>
+                  </div>
                 </div>
               )}
               {groupedCustomers.flatMap((group) => (
@@ -895,6 +955,24 @@ const Customers = () => {
             </div>
           </CardContent>
         </Card>
+
+        {statusFilteredCustomers.length > 0 && (
+          <Card>
+            <CardContent className="flex items-center justify-between p-3">
+              <div className="text-xs text-muted-foreground">
+                Showing page {customerPage} of {customerTotalPages} ({statusFilteredCustomers.length} filtered customers)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled={customerPage <= 1} onClick={() => setCustomerPage((p) => Math.max(1, p - 1))}>
+                  Previous
+                </Button>
+                <Button size="sm" variant="outline" disabled={customerPage >= customerTotalPages} onClick={() => setCustomerPage((p) => Math.min(customerTotalPages, p + 1))}>
+                  Next
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       </div>
 

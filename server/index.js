@@ -361,6 +361,23 @@ function buildCaseFilters(query) {
   return filters;
 }
 
+function parsePagingQuery(query) {
+  const pageRaw = Number(query.page || 0);
+  const pageSizeRaw = Number(query.pageSize || 0);
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+  const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(100, Math.floor(pageSizeRaw)) : 25;
+  const requested = Boolean(query.page || query.pageSize);
+  return { page, pageSize, skip: (page - 1) * pageSize, requested };
+}
+
+function parseSortQuery(query, allowed, fallbackField) {
+  const rawSortBy = String(query.sortBy || fallbackField);
+  const sortBy = allowed.includes(rawSortBy) ? rawSortBy : fallbackField;
+  const sortDirRaw = String(query.sortDir || "asc").toLowerCase();
+  const sortDir = sortDirRaw === "desc" ? -1 : 1;
+  return { sortBy, sortDir };
+}
+
 function cleanLoginField(value, maxLen = 100) {
   return String(value || "").trim().slice(0, maxLen);
 }
@@ -599,10 +616,32 @@ app.post("/api/login", async (req, res) => {
 // Customers
 app.get("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users and admin should see non-confirmed customers
-  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) return res.json([]);
+  const paging = parsePagingQuery(req.query || {});
+  const { sortBy, sortDir } = parseSortQuery(req.query || {}, ["customerId", "name", "registeredAt", "status"], "customerId");
+  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) {
+    if (paging.requested) {
+      return res.json({ items: [], total: 0, page: paging.page, pageSize: paging.pageSize, totalPages: 0 });
+    }
+    return res.json([]);
+  }
   // Intake/admin should be able to view all non-confirmed customers (no assignedTo restriction)
-  const docs = await customersCol.find({ status: { $ne: "CLIENT" } }).sort({ customerId: 1 }).toArray();
-  res.json(docs);
+  const baseFilter = { status: { $ne: "CLIENT" } };
+  if (!paging.requested) {
+    const docs = await customersCol.find(baseFilter).sort({ [sortBy]: sortDir }).toArray();
+    return res.json(docs);
+  }
+
+  const [items, total] = await Promise.all([
+    customersCol.find(baseFilter).sort({ [sortBy]: sortDir }).skip(paging.skip).limit(paging.pageSize).toArray(),
+    customersCol.countDocuments(baseFilter),
+  ]);
+  res.json({
+    items,
+    total,
+    page: paging.page,
+    pageSize: paging.pageSize,
+    totalPages: Math.ceil(total / paging.pageSize),
+  });
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
@@ -976,12 +1015,13 @@ app.get("/api/cases", verifyAuth, async (req, res) => {
   const rawQuery = String(req.query.q || "").trim().slice(0, 80);
   const search = rawQuery ? new RegExp(escapeRegex(rawQuery), "i") : null;
   const filters = { ...buildCaseFilters(req.query), ...buildCaseScopeFilter(req.user) };
+  const paging = parsePagingQuery(req.query || {});
+  const { sortBy, sortDir } = parseSortQuery(req.query || {}, ["caseId", "priority", "lastStateChange", "deadline", "assignedTo"], "caseId");
 
   // If searching, include customer name via lookup while preserving other filters
   if (search) {
     const nonSearchFilters = { ...buildCaseFilters({ ...req.query, q: undefined }), ...buildCaseScopeFilter(req.user) };
-    const docs = await casesCol
-      .aggregate([
+    const pipeline = [
         { $match: nonSearchFilters },
         { $lookup: { from: "customers", localField: "customerId", foreignField: "customerId", as: "customer" } },
         { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
@@ -997,15 +1037,47 @@ app.get("/api/cases", verifyAuth, async (req, res) => {
             ],
           },
         },
-        { $sort: { caseId: 1 } },
+        { $sort: { [sortBy]: sortDir } },
         { $project: { customer: 0 } },
-      ])
-      .toArray();
+      ];
+
+    if (!paging.requested) {
+      const docs = await casesCol.aggregate(pipeline).toArray();
+      return res.json(docs);
+    }
+
+    const totalPipeline = [...pipeline, { $count: "count" }];
+    const pagePipeline = [...pipeline, { $skip: paging.skip }, { $limit: paging.pageSize }];
+    const [items, totalRows] = await Promise.all([
+      casesCol.aggregate(pagePipeline).toArray(),
+      casesCol.aggregate(totalPipeline).toArray(),
+    ]);
+    const total = totalRows?.[0]?.count || 0;
+    return res.json({
+      items,
+      total,
+      page: paging.page,
+      pageSize: paging.pageSize,
+      totalPages: Math.ceil(total / paging.pageSize),
+    });
+  }
+
+  if (!paging.requested) {
+    const docs = await casesCol.find(filters).sort({ [sortBy]: sortDir }).toArray();
     return res.json(docs);
   }
 
-  const docs = await casesCol.find(filters).sort({ caseId: 1 }).toArray();
-  res.json(docs);
+  const [items, total] = await Promise.all([
+    casesCol.find(filters).sort({ [sortBy]: sortDir }).skip(paging.skip).limit(paging.pageSize).toArray(),
+    casesCol.countDocuments(filters),
+  ]);
+  res.json({
+    items,
+    total,
+    page: paging.page,
+    pageSize: paging.pageSize,
+    totalPages: Math.ceil(total / paging.pageSize),
+  });
 });
 
 app.get("/api/cases/:id", verifyAuth, async (req, res) => {

@@ -1,6 +1,5 @@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -22,6 +21,11 @@ export function SearchFilterBar({
 }: SearchFilterBarProps) {
   const hasFilters = query || priorityFilter !== "all" || docFilter !== "all";
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const activeFilters = [
+    query ? { key: "query", label: `Search: ${query}`, onClear: () => onQueryChange("") } : null,
+    priorityFilter !== "all" ? { key: "priority", label: `Priority: ${priorityFilter}`, onClear: () => onPriorityChange("all") } : null,
+    docFilter !== "all" ? { key: "docs", label: `Docs: ${docFilter}`, onClear: () => onDocFilterChange("all") } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; onClear: () => void }>;
 
   return (
     <div className="w-full">
@@ -92,6 +96,22 @@ export function SearchFilterBar({
           )}
         </div>
       </div>
+
+      {activeFilters.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {activeFilters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={filter.onClear}
+              className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-xs hover:bg-muted"
+            >
+              {filter.label}
+              <X className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

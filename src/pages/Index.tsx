@@ -59,6 +59,8 @@ const Index = () => {
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
   const [newViewName, setNewViewName] = useState("");
+  const [listPage, setListPage] = useState(1);
+  const listPageSize = 30;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -136,6 +138,41 @@ const Index = () => {
     })),
     [caseList]
   );
+
+  const totalVisibleCases = useMemo(() => {
+    return filteredByState.reduce((sum, group) => {
+      if (stageFilter !== "all" && group.state !== stageFilter) return sum;
+      return sum + group.cases.length;
+    }, 0);
+  }, [filteredByState, stageFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(totalVisibleCases / listPageSize));
+
+  const pagedByState = useMemo(() => {
+    let remainingStart = (listPage - 1) * listPageSize;
+    let remainingTake = listPageSize;
+
+    return filteredByState.map((group) => {
+      if (stageFilter !== "all" && group.state !== stageFilter) {
+        return { ...group, cases: [] as typeof group.cases };
+      }
+
+      if (remainingTake <= 0) return { ...group, cases: [] as typeof group.cases };
+
+      if (remainingStart >= group.cases.length) {
+        remainingStart -= group.cases.length;
+        return { ...group, cases: [] as typeof group.cases };
+      }
+
+      const start = remainingStart;
+      const take = Math.min(remainingTake, group.cases.length - start);
+      const sliced = group.cases.slice(start, start + take);
+      remainingStart = 0;
+      remainingTake -= take;
+
+      return { ...group, cases: sliced };
+    });
+  }, [filteredByState, stageFilter, listPage]);
   const categoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.category))).sort(), [caseList]);
   const subcategoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.subcategory))).sort(), [caseList]);
   const customerOptions = useMemo(
@@ -150,6 +187,10 @@ const Index = () => {
     }));
   }, [caseList]);
 
+  useEffect(() => {
+    setListPage(1);
+  }, [query, priorityFilter, docFilter, stageFilter]);
+
   const todaysQueue = useMemo(() => {
     const now = Date.now();
     const in24h = now + 24 * 60 * 60 * 1000;
@@ -158,17 +199,12 @@ const Index = () => {
       const ts = new Date(c.deadline).getTime();
       return ts >= now && ts <= in24h;
     });
-    const waiting = caseList.filter((c) => {
-      const stage = mapCaseStateToStage(c.state);
-      return stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
-    });
-    const topItems = [...dueToday, ...waiting]
+    const topItems = [...dueToday]
       .filter((item, idx, arr) => arr.findIndex((x) => x.caseId === item.caseId) === idx)
       .slice(0, 5);
 
     return {
       dueToday,
-      waiting,
       topItems,
     };
   }, [caseList]);
@@ -176,10 +212,6 @@ const Index = () => {
   const myWorkSummary = useMemo(() => {
     const assignee = currentLawyer;
     const mine = assignee ? caseList.filter((c) => c.assignedTo === assignee) : [];
-    const waitingMine = mine.filter((c) => {
-      const stage = mapCaseStateToStage(c.state);
-      return stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
-    });
     const highPriorityMine = mine.filter((c) => c.priority === "high");
 
     if (user?.role === "admin") {
@@ -187,7 +219,7 @@ const Index = () => {
         title: "Admin Focus",
         cards: [
           { label: "Total Cases", value: caseList.length },
-          { label: "Waiting Cases", value: todaysQueue.waiting.length },
+          { label: "Due in 24h", value: todaysQueue.dueToday.length },
           { label: "High Priority", value: caseList.filter((c) => c.priority === "high").length },
         ],
       };
@@ -208,7 +240,7 @@ const Index = () => {
       title: "My Work Today",
       cards: [
         { label: "Assigned to Me", value: mine.length },
-        { label: "My Waiting", value: waitingMine.length },
+        { label: "Due in 24h", value: todaysQueue.dueToday.length },
         { label: "My High Priority", value: highPriorityMine.length },
       ],
     };
@@ -317,10 +349,6 @@ const Index = () => {
                 <div className="text-xs text-muted-foreground">Due in 24h</div>
                 <div className="text-xl font-semibold">{todaysQueue.dueToday.length}</div>
               </div>
-              <div className="rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Waiting on Response</div>
-                <div className="text-xl font-semibold">{todaysQueue.waiting.length}</div>
-              </div>
             </div>
             {todaysQueue.topItems.length > 0 && (
               <div className="mt-3 space-y-2">
@@ -406,7 +434,7 @@ const Index = () => {
           </CardContent>
         </Card>
 
-        {filteredByState.map(({ state, cases }) => {
+        {pagedByState.map(({ state, cases }) => {
           if (stageFilter !== "all" && state !== stageFilter) return null;
           return (
             <CaseTable
@@ -419,10 +447,33 @@ const Index = () => {
           );
         })}
 
-        {filteredByState.every(({ cases }) => cases.length === 0) && (
-          <div className="text-center py-12 text-muted-foreground">
-            No cases match your filters.
+        {totalVisibleCases === 0 && (
+          <div className="py-12 text-center text-muted-foreground">
+            <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+              <p>No cases match your filters.</p>
+              <Button variant="outline" size="sm" onClick={() => { setQuery(""); setPriorityFilter("all"); setDocFilter("all"); setStageFilter("all"); }}>
+                Clear filters
+              </Button>
+            </div>
           </div>
+        )}
+
+        {totalVisibleCases > 0 && (
+          <Card>
+            <CardContent className="flex items-center justify-between p-3">
+              <div className="text-xs text-muted-foreground">
+                Showing page {listPage} of {totalPages} ({totalVisibleCases} total cases)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled={listPage <= 1} onClick={() => setListPage((p) => Math.max(1, p - 1))}>
+                  Previous
+                </Button>
+                <Button size="sm" variant="outline" disabled={listPage >= totalPages} onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}>
+                  Next
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 

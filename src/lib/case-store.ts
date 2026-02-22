@@ -1,5 +1,13 @@
 import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
 
+export type PagedResult<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
 // When VITE_API_URL is not set, use a relative base so the Vite dev proxy can forward `/api` calls.
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -59,6 +67,16 @@ export async function getAllCases(): Promise<Case[]> {
   return api<Case[]>("/api/cases");
 }
 
+export async function getCasesPage(page: number, pageSize: number, sortBy = "caseId", sortDir: "asc" | "desc" = "asc"): Promise<PagedResult<Case>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    sortBy,
+    sortDir,
+  });
+  return api<PagedResult<Case>>(`/api/cases?${params.toString()}`);
+}
+
 export async function getCasesByState(state: CaseState): Promise<Case[]> {
   return api<Case[]>(`/api/cases?state=${state}`);
 }
@@ -102,6 +120,20 @@ export async function getAllCustomers(): Promise<Customer[]> {
     console.warn(`getAllCustomers failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
     _endpointCooldowns[key] = Date.now() + COOLDOWN_MS;
     return [];
+  }
+}
+
+export async function getCustomersPage(page: number, pageSize: number, sortBy = "customerId", sortDir: "asc" | "desc" = "asc"): Promise<PagedResult<Customer>> {
+  const key = `/api/customers?page=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}&sortBy=${encodeURIComponent(sortBy)}&sortDir=${encodeURIComponent(sortDir)}`;
+  if (_endpointCooldowns["/api/customers"] && _endpointCooldowns["/api/customers"] > Date.now()) {
+    return { items: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+  try {
+    return await api<PagedResult<Customer>>(key);
+  } catch (err) {
+    console.warn(`getCustomersPage failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    _endpointCooldowns["/api/customers"] = Date.now() + COOLDOWN_MS;
+    return { items: [], total: 0, page, pageSize, totalPages: 0 };
   }
 }
 

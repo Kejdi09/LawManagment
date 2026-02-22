@@ -168,10 +168,10 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
 };
 
 export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string }> = {
-  urgent: { label: "Urgent", color: "bg-red-600 text-white" },
-  high: { label: "High", color: "bg-orange-500 text-white" },
-  medium: { label: "Medium", color: "bg-yellow-500 text-black" },
-  low: { label: "Low", color: "bg-green-600 text-white" },
+  urgent: { label: "Urgent", color: "bg-red-100 text-red-800" },
+  high: { label: "High", color: "bg-orange-100 text-orange-800" },
+  medium: { label: "Medium", color: "bg-amber-100 text-amber-800" },
+  low: { label: "Low", color: "bg-emerald-100 text-emerald-800" },
 };
 
 export const STATE_LABELS: Record<CaseState, string> = {
