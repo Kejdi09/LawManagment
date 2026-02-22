@@ -17,8 +17,17 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
       <div className="container flex h-14 items-center">
         <div className="flex items-center gap-3">
-          <Drawer shouldScaleBackground={false} open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <DrawerTrigger className="inline-flex items-center gap-2 border rounded-md px-2 py-1 md:hidden">
+          <Drawer direction="left" shouldScaleBackground={false} open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DrawerTrigger
+              className="inline-flex items-center gap-2 border rounded-md px-2 py-1 md:hidden"
+              onClick={(e) => {
+                try {
+                  (e.currentTarget as HTMLElement).blur();
+                } catch {
+                  // ignore
+                }
+              }}
+            >
               <Menu className="h-4 w-4" />
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Menu</span>
             </DrawerTrigger>

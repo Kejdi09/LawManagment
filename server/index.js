@@ -567,7 +567,10 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
   // Intake may view any non-confirmed customer. Other users (consultants/admin)
   // may view customers that are in their scope (assignedTo or createdBy).
   const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
-  const doc = await customersCol.findOne({ customerId: req.params.id, ...customerScope });
+  let doc = await customersCol.findOne({ customerId: req.params.id, ...customerScope });
+  if (!doc && req.user?.role !== 'intake') {
+    doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...customerScope });
+  }
   if (!doc) {
     debugLog(req, 'GET /api/customers/:id - not found');
     return res.status(404).json({ error: "Not found" });

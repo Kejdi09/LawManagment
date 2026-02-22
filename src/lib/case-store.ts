@@ -127,7 +127,11 @@ export async function getCustomerNotifications(): Promise<CustomerNotification[]
   try {
     return await api<CustomerNotification[]>(key);
   } catch (err) {
-    console.warn(`getCustomerNotifications failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    const message = err instanceof Error ? err.message : "";
+    const expectedMissing = /not found|404/i.test(message);
+    if (!expectedMissing) {
+      console.warn(`getCustomerNotifications failed; backing off for ${COOLDOWN_MS / 1000}s`, err);
+    }
     _endpointCooldowns[key] = Date.now() + COOLDOWN_MS;
     // If notifications endpoint is unavailable or returns 404, treat as empty list
     return [] as CustomerNotification[];

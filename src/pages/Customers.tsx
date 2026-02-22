@@ -48,7 +48,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Bell, Archive, X } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -85,6 +85,73 @@ const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
   "CONSULTATION_SCHEDULED",
 ];
 
+function getLastStatusChangeIso(customer: Customer) {
+  const history = Array.isArray(customer.statusHistory) ? customer.statusHistory : [];
+  const last = history.length > 0 ? history[history.length - 1] : null;
+  return last?.date || customer.registeredAt || new Date().toISOString();
+}
+
+function buildFallbackNotifications(customers: Customer[]): CustomerNotification[] {
+  const nowMs = Date.now();
+  return customers.flatMap((customer) => {
+    if (customer.status === "CLIENT" || customer.status === "CONFIRMED") return [];
+    const lastStatusIso = getLastStatusChangeIso(customer);
+    const lastStatusMs = new Date(lastStatusIso).getTime();
+    const elapsedHours = Number.isFinite(lastStatusMs) ? (nowMs - lastStatusMs) / (1000 * 60 * 60) : 0;
+
+    const notifications: CustomerNotification[] = [];
+
+    if (customer.status === "INTAKE" && elapsedHours >= 24) {
+      notifications.push({
+        notificationId: `local-follow-${customer.customerId}`,
+        customerId: customer.customerId,
+        message: `Follow up ${customer.name}`,
+        kind: "follow",
+        severity: "warn",
+        createdAt: lastStatusIso,
+      });
+    }
+
+    if ((customer.status === "WAITING_APPROVAL" || customer.status === "WAITING_ACCEPTANCE") && elapsedHours >= 72) {
+      notifications.push({
+        notificationId: `local-follow72-${customer.customerId}`,
+        customerId: customer.customerId,
+        message: `Follow up ${customer.name}`,
+        kind: "follow",
+        severity: "critical",
+        createdAt: lastStatusIso,
+      });
+    }
+
+    if ((customer.status === "SEND_PROPOSAL" || customer.status === "SEND_CONTRACT" || customer.status === "SEND_RESPONSE") && elapsedHours >= 24) {
+      notifications.push({
+        notificationId: `local-respond-${customer.customerId}`,
+        customerId: customer.customerId,
+        message: `Respond to ${customer.name}`,
+        kind: "respond",
+        severity: "warn",
+        createdAt: lastStatusIso,
+      });
+    }
+
+    if (customer.status === "ON_HOLD" && customer.followUpDate) {
+      const followUpMs = new Date(customer.followUpDate).getTime();
+      if (Number.isFinite(followUpMs) && followUpMs <= nowMs) {
+        notifications.push({
+          notificationId: `local-onhold-${customer.customerId}`,
+          customerId: customer.customerId,
+          message: `Follow up ${customer.name}`,
+          kind: "follow",
+          severity: "warn",
+          createdAt: customer.followUpDate,
+        });
+      }
+    }
+
+    return notifications;
+  });
+}
+
 const Customers = () => {
   const [search, setSearch] = useState("");
   const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
@@ -115,7 +182,6 @@ const Customers = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
-  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [dismissingNotificationIds, setDismissingNotificationIds] = useState<Set<string>>(new Set());
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -156,7 +222,8 @@ const Customers = () => {
 
   const loadCustomerNotifications = useCallback(async () => {
     const notifications = await getCustomerNotifications();
-    const visible = notifications.filter((n) => {
+    const source = notifications.length > 0 ? notifications : buildFallbackNotifications(customers);
+    const visible = source.filter((n) => {
       const cust = customers.find((c) => c.customerId === n.customerId);
       if (!cust) return false;
       if (cust.status === "CLIENT" || cust.status === "CONFIRMED") return false;
@@ -169,6 +236,11 @@ const Customers = () => {
   }, [customers, user, assignedMap]);
 
   const handleDismissNotification = useCallback(async (notificationId: string) => {
+    if (notificationId.startsWith("local-")) {
+      setCustomerAlerts((prev) => prev.filter((n) => n.notificationId !== notificationId));
+      toast({ title: "Notification removed" });
+      return;
+    }
     setDismissingNotificationIds((prev) => {
       const next = new Set(prev);
       next.add(notificationId);
@@ -216,11 +288,6 @@ const Customers = () => {
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
   useEffect(() => { loadCustomerNotifications(); }, [loadCustomerNotifications, tick]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
-
-  const unreadAlertCount = useMemo(
-    () => customerAlerts.filter((a) => !seenAlertIds.has(a.notificationId)).length,
-    [customerAlerts, seenAlertIds],
-  );
 
   const filteredCustomers = useMemo(() => {
     if (!search) return customers;
@@ -531,46 +598,7 @@ const Customers = () => {
     }
   };
   return (
-    <MainLayout
-      title="Customers"
-      right={
-        <>
-          <DropdownMenu
-            onOpenChange={(open) => {
-              if (open) {
-                setSeenAlertIds((prev) => {
-                  const next = new Set(prev);
-                  customerAlerts.forEach((a) => next.add(a.notificationId));
-                  return next;
-                });
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-4 w-4" />
-                {unreadAlertCount > 0 && (
-                  <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 text-[10px]">
-                    {unreadAlertCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              {customerAlerts.length === 0 && <DropdownMenuItem disabled>No customer alerts</DropdownMenuItem>}
-              {customerAlerts.map((a) => (
-                <DropdownMenuItem key={a.notificationId} className={a.severity === "critical" ? "text-destructive" : ""}>
-                  <div className="flex flex-col">
-                    <span>{a.message}</span>
-                    <span className="text-xs text-muted-foreground">{a.customerId}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
-      }
-    >
+    <MainLayout title="Customers">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -806,6 +834,9 @@ const Customers = () => {
         <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Customer" : "New Customer"}</DialogTitle>
+            <DialogDescription>
+              {editingId ? "Update customer details and save changes." : "Create a new customer record."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
