@@ -13,6 +13,8 @@ import {
   fetchDocumentBlob,
   StoredDocument,
   getCustomerHistory,
+  getCustomerNotifications,
+  deleteCustomerNotification,
 } from "@/lib/case-store";
 import {
   STAGE_LABELS,
@@ -46,14 +48,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
-import { getCustomerNotifications } from "@/lib/case-store";
 
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined) {
@@ -114,6 +115,7 @@ const Customers = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerAlerts, setCustomerAlerts] = useState<CustomerNotification[]>([]);
+  const [dismissingNotificationIds, setDismissingNotificationIds] = useState<Set<string>>(new Set());
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -154,8 +156,8 @@ const Customers = () => {
       if (!cust) return false;
       // Don't surface notifications for confirmed clients
       if (cust.status === 'CLIENT' || cust.status === 'CONFIRMED') return false;
-      // Admins see all
-      if (user?.role === 'admin') return true;
+      // Admins and intake users see all
+      if (user?.role === 'admin' || user?.role === 'intake') return true;
       // If assignedTo matches current user (by consultantName, lawyerName or username) allow
       const viewerNames = new Set([user?.consultantName, user?.lawyerName, user?.username].filter(Boolean) as string[]);
       const assigned = cust.assignedTo || assignedMap[cust.customerId] || '';
@@ -165,6 +167,28 @@ const Customers = () => {
     });
     setCustomerAlerts(visible);
   }, [customers, user, assignedMap]);
+
+  const handleDismissNotification = useCallback(async (notificationId: string) => {
+    setDismissingNotificationIds((prev) => {
+      const next = new Set(prev);
+      next.add(notificationId);
+      return next;
+    });
+    try {
+      await deleteCustomerNotification(notificationId);
+      await loadCustomerNotifications();
+      toast({ title: "Notification removed" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to remove notification";
+      toast({ title: "Dismiss failed", description: message, variant: "destructive" });
+    } finally {
+      setDismissingNotificationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
+    }
+  }, [loadCustomerNotifications, toast]);
 
   const loadCustomerDetail = useCallback(async (id: string | null) => {
     if (!id) {
@@ -227,6 +251,13 @@ const Customers = () => {
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
   }, [categoryFilteredCustomers, sectionView]);
+
+  const customerById = useMemo(() => {
+    return customers.reduce<Record<string, Customer>>((acc, cust) => {
+      acc[cust.customerId] = cust;
+      return acc;
+    }, {});
+  }, [customers]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -450,6 +481,7 @@ const Customers = () => {
   };
 
   const isAdmin = user?.role === "admin";
+  const canManageCustomerNotifications = isAdmin || user?.role === 'intake';
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -562,6 +594,48 @@ const Customers = () => {
             </Button>
           )}
         </div>
+
+        {canManageCustomerNotifications && customerAlerts.length > 0 && (
+          <Card>
+            <CardHeader className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm font-semibold">Customer Alerts</CardTitle>
+              <span className="text-xs text-muted-foreground">{customerAlerts.length} pending</span>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {customerAlerts.map((alert) => {
+                const cust = customerById[alert.customerId];
+                const badgeVariant = alert.severity === "critical" ? "destructive" : "secondary";
+                const isDismissing = dismissingNotificationIds.has(alert.notificationId);
+                return (
+                  <div key={alert.notificationId} className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={badgeVariant} className="text-[10px] uppercase tracking-[0.2em]">
+                          {alert.kind === "follow" ? "Follow up" : "Respond"}
+                        </Badge>
+                        <p className="text-sm font-semibold leading-tight">{alert.message}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{cust ? `${cust.name} (${cust.customerId})` : alert.customerId}</span>
+                        {cust && <span>• {LEAD_STATUS_LABELS[cust.status] || cust.status}</span>}
+                        <span>• {safeFormatDate(alert.createdAt)}</span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Dismiss notification"
+                      onClick={() => handleDismissNotification(alert.notificationId)}
+                      disabled={isDismissing}
+                    >
+                      <X className={`h-4 w-4 ${isDismissing ? "animate-spin" : ""}`} />
+                    </Button>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-0">

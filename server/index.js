@@ -249,6 +249,25 @@ async function syncCustomerNotifications() {
           onHoldFollowupNotifiedFor: prevTracker.onHoldFollowupNotifiedFor || null,
         };
 
+      const hoursSinceLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : 0;
+      const readyToDeleteAfterFollowups = tracker.followupCount >= 3 && hoursSinceLastFollowup >= 24;
+      if (readyToDeleteAfterFollowups) {
+        await Promise.all([
+          customerNotificationsCol.deleteMany({ customerId: customer.customerId }),
+          customerHistoryCol.deleteMany({ customerId: customer.customerId }),
+          customersCol.deleteOne({ customerId: customer.customerId }),
+        ]);
+        await logAudit({
+          username: "system",
+          role: "system",
+          action: "auto-delete",
+          resource: "customer",
+          resourceId: customer.customerId,
+          details: { reason: "followup_limit" },
+        });
+        continue;
+      }
+
       if (statusChanged) {
         await customerNotificationsCol.deleteMany({ customerId: customer.customerId });
       }
@@ -709,6 +728,28 @@ app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
   res.json(allowed.slice(0, 50));
 });
 
+
+
+app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user) && req.user?.role !== 'intake') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const { id } = req.params;
+  const notification = await customerNotificationsCol.findOne({ notificationId: id });
+  if (!notification) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  await customerNotificationsCol.deleteOne({ notificationId: id });
+  await logAudit({
+    username: req.user?.username || null,
+    role: req.user?.role || null,
+    action: 'delete',
+    resource: 'customerNotification',
+    resourceId: id,
+    details: { customerId: notification.customerId },
+  });
+  res.json({ ok: true });
+});
 
 
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {

@@ -71,6 +71,10 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     deadline: "",
     assignedTo: "",
   });
+  const editModeRef = useRef(editMode);
+  useEffect(() => {
+    editModeRef.current = editMode;
+  }, [editMode]);
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -94,7 +98,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
       setCaseNotes(await getNotesByCaseId(id));
       setCaseTasks(await getTasksByCaseId(id));
       // Only exit edit mode if we're actually editing AND the ID is different (fresh load)
-      if (editMode && previousCaseIdRef.current !== id) {
+      if (editModeRef.current && previousCaseIdRef.current !== id) {
         setEditMode(false);
       }
       setEditForm({
@@ -119,7 +123,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
     } catch (err: unknown) {
       toast({ title: "Error", description: getErrorMessage(err, "Failed to load case"), variant: "destructive" });
     }
-  }, [toast, editMode]);
+  }, [toast]);
 
   const handleUploadDocument = async (file?: File) => {
     if (!file || !caseId) return;

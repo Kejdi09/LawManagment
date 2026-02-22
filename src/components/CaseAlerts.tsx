@@ -9,11 +9,13 @@ import { useAuth } from "@/lib/auth-context";
 
 export const CaseAlerts = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [alerts, setAlerts] = useState<any[]>([]);
   const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
+    if (!isAdmin) return;
     const all = await getAllCases();
     const [customers, confirmed] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
     const allCustomers = [...customers, ...confirmed];
@@ -33,7 +35,7 @@ export const CaseAlerts = () => {
       // Skip alerts for confirmed/clients unless user is admin
       const custStatus = statusMap[c.customerId];
       if (custStatus === 'CLIENT' || custStatus === 'CONFIRMED') {
-        if (user?.role !== 'admin') return [] as any[];
+        if (!isAdmin) return [] as any[];
       }
 
       const out: any[] = [];
@@ -49,19 +51,25 @@ export const CaseAlerts = () => {
       return out;
     });
     setAlerts(items);
-  }, [user]);
-
-  useEffect(() => { load().catch(() => {}); }, [load]);
+  }, [isAdmin]);
 
   useEffect(() => {
+    if (!isAdmin) return;
+    load().catch(() => {});
+  }, [load, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     const onUpdate = () => { load().catch(() => {}); };
     window.addEventListener('app:data-updated', onUpdate);
     return () => { window.removeEventListener('app:data-updated', onUpdate); };
-  }, [load]);
+  }, [load, isAdmin]);
 
   const criticalCount = useMemo(() => alerts.filter((a) => a.severity === 'critical').length, [alerts]);
   const warnCount = useMemo(() => alerts.filter((a) => a.severity === 'warn').length, [alerts]);
   const unreadCount = useMemo(() => alerts.filter((a) => !seenAlertIds.has(a.id)).length, [alerts, seenAlertIds]);
+
+  if (!isAdmin) return null;
 
   return (
     <DropdownMenu onOpenChange={(open) => {

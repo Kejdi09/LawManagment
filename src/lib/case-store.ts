@@ -97,10 +97,15 @@ export async function deleteConfirmedClient(customerId: string): Promise<void> {
 }
 
 export async function getCustomerById(customerId: string): Promise<Customer | null> {
+  // Try non-confirmed customers first, then fall back to confirmed-clients
   try {
     return await api<Customer>(`/api/customers/${customerId}`);
-  } catch {
-    return null;
+  } catch (err) {
+    try {
+      return await api<Customer>(`/api/confirmed-clients/${customerId}`);
+    } catch (err2) {
+      return null;
+    }
   }
 }
 
@@ -127,6 +132,10 @@ export async function getCustomerNotifications(): Promise<CustomerNotification[]
     // If notifications endpoint is unavailable or returns 404, treat as empty list
     return [] as CustomerNotification[];
   }
+}
+
+export async function deleteCustomerNotification(notificationId: string): Promise<void> {
+  await api(`/api/customers/notifications/${notificationId}`, { method: "DELETE" });
 }
 
 // ── History ──
