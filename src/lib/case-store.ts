@@ -277,6 +277,28 @@ export async function checkAutomaticRules() {
   return { deletedCustomers: [], deletedCases: [], inactivityReminders: [], sendReminders: [] };
 }
 
-export async function getAuditLogs(): Promise<AuditLogRecord[]> {
-  return api<AuditLogRecord[]>("/api/audit/logs");
+export async function getAuditLogs(options?: {
+  q?: string;
+  action?: string;
+  resource?: string;
+  role?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AuditLogRecord[]> {
+  const params = new URLSearchParams();
+  if (options?.q) params.set("q", options.q);
+  if (options?.action) params.set("action", options.action);
+  if (options?.resource) params.set("resource", options.resource);
+  if (options?.role) params.set("role", options.role);
+  if (options?.from) params.set("from", options.from);
+  if (options?.to) params.set("to", options.to);
+  if (typeof options?.page === "number") params.set("page", String(options.page));
+  if (typeof options?.pageSize === "number") params.set("pageSize", String(options.pageSize));
+
+  const path = params.toString() ? `/api/audit/logs?${params.toString()}` : "/api/audit/logs";
+  const result = await api<AuditLogRecord[] | { items?: AuditLogRecord[] }>(path);
+  if (Array.isArray(result)) return result;
+  return Array.isArray(result?.items) ? result.items : [];
 }

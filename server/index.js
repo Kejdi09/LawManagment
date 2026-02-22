@@ -1316,8 +1316,56 @@ app.delete('/api/documents/:docId', verifyAuth, async (req, res) => {
 // Admin audit log endpoint
 app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) => {
   try {
-    const logs = await auditLogsCol.find({}).sort({ at: -1 }).limit(200).toArray();
-    res.json(logs);
+    const pageRaw = Number(req.query.page || 1);
+    const sizeRaw = Number(req.query.pageSize || req.query.limit || 200);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+    const pageSize = Math.min(500, Math.max(1, Number.isFinite(sizeRaw) ? Math.floor(sizeRaw) : 200));
+    const skip = (page - 1) * pageSize;
+
+    const q = String(req.query.q || "").trim().slice(0, 120);
+    const action = String(req.query.action || "").trim().slice(0, 60);
+    const resource = String(req.query.resource || "").trim().slice(0, 60);
+    const role = String(req.query.role || "").trim().slice(0, 60);
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
+
+    const query = {};
+    if (action) query.action = action;
+    if (resource) query.resource = resource;
+    if (role) query.role = role;
+
+    if (from || to) {
+      query.at = {};
+      if (from) {
+        const fromDate = new Date(from);
+        if (!Number.isNaN(fromDate.getTime())) query.at.$gte = fromDate.toISOString();
+      }
+      if (to) {
+        const toDate = new Date(to);
+        if (!Number.isNaN(toDate.getTime())) query.at.$lte = toDate.toISOString();
+      }
+      if (!query.at.$gte && !query.at.$lte) {
+        delete query.at;
+      }
+    }
+
+    if (q) {
+      const safeQ = new RegExp(escapeRegex(q), "i");
+      query.$or = [
+        { username: safeQ },
+        { consultantName: safeQ },
+        { action: safeQ },
+        { resource: safeQ },
+        { resourceId: safeQ },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      auditLogsCol.find(query).sort({ at: -1 }).skip(skip).limit(pageSize).toArray(),
+      auditLogsCol.countDocuments(query),
+    ]);
+
+    res.json({ items, total, page, pageSize });
   } catch (err) {
     res.status(500).json({ error: 'failed' });
   }

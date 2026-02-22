@@ -206,6 +206,30 @@ const Customers = () => {
     return buckets.filter((bucket) => bucket.items.length > 0);
   }, [categoryFilteredCustomers, sectionView]);
 
+  const sectionFilteredCustomers = useMemo(() => {
+    return categoryFilteredCustomers.filter((customer) => {
+      if (sectionView === "on_hold") return customer.status === "ON_HOLD";
+      if (sectionView === "archived") return customer.status === "ARCHIVED";
+      return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
+    });
+  }, [categoryFilteredCustomers, sectionView]);
+
+  const crmKPIs = useMemo(() => {
+    const now = Date.now();
+    const visible = sectionFilteredCustomers;
+    const activePipeline = visible.filter((c) => c.status !== "ARCHIVED" && c.status !== "CLIENT").length;
+    const onHoldDue = visible.filter((c) => c.status === "ON_HOLD" && c.followUpDate && new Date(c.followUpDate).getTime() <= now).length;
+    const assignedClients = visible.filter((c) => c.status === "CLIENT" && !!(assignedMap[c.customerId] || c.assignedTo)).length;
+    const withCases = visible.filter((c) => (caseCounts[c.customerId] || 0) > 0).length;
+    return {
+      totalVisible: visible.length,
+      activePipeline,
+      onHoldDue,
+      assignedClients,
+      withCases,
+    };
+  }, [sectionFilteredCustomers, assignedMap, caseCounts]);
+
   const customerById = useMemo(() => {
     return customers.reduce<Record<string, Customer>>((acc, cust) => {
       acc[cust.customerId] = cust;
@@ -481,6 +505,39 @@ const Customers = () => {
   return (
     <MainLayout title="Customers">
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">Visible Customers</div>
+              <div className="text-xl font-semibold">{crmKPIs.totalVisible}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">Active Pipeline</div>
+              <div className="text-xl font-semibold">{crmKPIs.activePipeline}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">On-Hold Due</div>
+              <div className="text-xl font-semibold">{crmKPIs.onHoldDue}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">Assigned Clients</div>
+              <div className="text-xl font-semibold">{crmKPIs.assignedClients}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">Customers with Cases</div>
+              <div className="text-xl font-semibold">{crmKPIs.withCases}</div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -542,7 +599,8 @@ const Customers = () => {
 
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="hidden md:block overflow-x-auto">
+            <Table className="min-w-[920px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">ID</TableHead>
@@ -663,6 +721,51 @@ const Customers = () => {
                 ]))}
               </TableBody>
             </Table>
+            </div>
+
+            <div className="md:hidden space-y-2 p-3">
+              {groupedCustomers.length === 0 && (
+                <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                  No customers match the selected categories/search.
+                </div>
+              )}
+              {groupedCustomers.flatMap((group) => (
+                collapsedCategories.includes(group.type)
+                  ? []
+                  : group.items.map((c) => {
+                    const caseCount = caseCounts[c.customerId] || 0;
+                    const assignedTo = assignedMap[c.customerId] || c.assignedTo || "Unassigned";
+                    return (
+                      <div
+                        key={`mobile-${group.type}-${c.customerId}`}
+                        onClick={() => setSelectedId(c.customerId)}
+                        className="w-full rounded-md border p-3 text-left cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-medium">{c.name}</div>
+                            <div className="text-xs text-muted-foreground">{c.customerId} • {group.type}</div>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
+                            {LEAD_STATUS_LABELS[c.status]}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                          <div>{c.phone} • {c.email}</div>
+                          <div>Assigned: {assignedTo}</div>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <Badge variant="secondary">{caseCount} case{caseCount === 1 ? "" : "s"}</Badge>
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button variant="outline" size="sm" onClick={() => openEdit(c.customerId)}>Edit</Button>
+                            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(c.customerId)}>Delete</Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              ))}
+            </div>
           </CardContent>
         </Card>
 
