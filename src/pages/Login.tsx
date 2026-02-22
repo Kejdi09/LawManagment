@@ -1,11 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useLocation, useNavigate } from 'react-router-dom';
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 
 export default function Login({ onLogin }: { onLogin?: () => void }) {
+  const mascots = ['🐶⚖️', '🐱📁', '🦉📚'];
+  const [mascotIndex, setMascotIndex] = useState(0);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,6 +17,14 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
   const returnTo = from ? `${from.pathname || '/'}${from.search || ''}${from.hash || ''}` : '/';
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setMascotIndex((prev) => (prev + 1) % mascots.length);
+    }, 2200);
+
+    return () => window.clearInterval(timer);
+  }, [mascots.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,22 +64,26 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-80">
+    <div className="flex items-center justify-center min-h-screen bg-background text-foreground px-4">
+      <form onSubmit={handleSubmit} className="bg-card text-card-foreground p-8 rounded-lg border border-border shadow-md w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <img src="/download.jpg" alt="Dafku" className="h-12 w-12 rounded-md object-cover border" />
+          <div className="law-float law-wiggle rounded-full border border-border bg-secondary px-3 py-1 text-xl" aria-hidden="true">
+            {mascots[mascotIndex]}
+          </div>
+          <div className="text-[11px] text-muted-foreground">Your law buddy is on duty</div>
+          <img src="/download.jpg" alt="Dafku" className="h-12 w-12 rounded-md object-cover border border-border" />
           <h2 className="text-xl font-bold">Dafku Management System</h2>
           <div className="text-xs text-muted-foreground">Dafku Law Firm</div>
         </div>
         <input
-          className="w-full p-2 mb-4 border rounded"
+          className="w-full p-2 mb-4 rounded border border-input bg-background text-foreground placeholder:text-muted-foreground"
           type="text"
           placeholder="Username"
           value={username}
           onChange={e => setUsername(e.target.value)}
         />
         <input
-          className="w-full p-2 mb-4 border rounded"
+          className="w-full p-2 mb-4 rounded border border-input bg-background text-foreground placeholder:text-muted-foreground"
           type="password"
           placeholder="Password"
           value={password}
@@ -77,7 +91,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
         />
         {error && <div className="text-red-500 mb-4">{error}</div>}
         <button
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-primary text-primary-foreground py-2 rounded hover:opacity-90 disabled:opacity-50"
           type="submit"
           disabled={loading}
         >
