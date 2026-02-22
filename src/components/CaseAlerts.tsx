@@ -124,6 +124,7 @@ export const CaseAlerts = () => {
   const { user } = useAuth();
   const canSeeCustomerAlerts = user?.role === "admin" || user?.role === "intake";
   const isAdmin = user?.role === "admin";
+  const canSeeCaseAlerts = Boolean(user) && user?.role !== "intake";
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
@@ -160,13 +161,10 @@ export const CaseAlerts = () => {
     setCustomersMap(nameMap);
 
     let caseAlerts: AlertItem[] = [];
-    if (isAdmin) {
+    if (canSeeCaseAlerts) {
       const all = await getAllCases();
       const now = Date.now();
       caseAlerts = all.flatMap((c) => {
-        const custStatus = statusMap[c.customerId];
-        if ((custStatus === "CLIENT" || custStatus === "CONFIRMED") && !isAdmin) return [];
-
         const out: AlertItem[] = [];
         if (c.deadline) {
           const stage = mapCaseStateToStage(c.state);
@@ -196,7 +194,7 @@ export const CaseAlerts = () => {
 
     const combined = [...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
     setAlerts(combined);
-  }, [isAdmin, canSeeCustomerAlerts, dismissedAlertMap]);
+  }, [canSeeCaseAlerts, canSeeCustomerAlerts, dismissedAlertMap]);
 
   const dismissCustomerAlert = useCallback(async (alertId: string) => {
     if (!alertId) return;
@@ -225,21 +223,21 @@ export const CaseAlerts = () => {
   }, [load, markAlertDismissed]);
 
   useEffect(() => {
-    if (!isAdmin && !canSeeCustomerAlerts) return;
+    if (!canSeeCaseAlerts && !canSeeCustomerAlerts) return;
     load().catch(() => {});
-  }, [load, isAdmin, canSeeCustomerAlerts]);
+  }, [load, canSeeCaseAlerts, canSeeCustomerAlerts]);
 
   useEffect(() => {
-    if (!isAdmin && !canSeeCustomerAlerts) return;
+    if (!canSeeCaseAlerts && !canSeeCustomerAlerts) return;
     const onUpdate = () => { load().catch(() => {}); };
     window.addEventListener('app:data-updated', onUpdate);
     return () => { window.removeEventListener('app:data-updated', onUpdate); };
-  }, [load, isAdmin, canSeeCustomerAlerts]);
+  }, [load, canSeeCaseAlerts, canSeeCustomerAlerts]);
 
   const criticalCount = useMemo(() => alerts.filter((a) => a.severity === 'critical').length, [alerts]);
   const unreadCount = useMemo(() => alerts.filter((a) => !seenAlertIds.has(a.id)).length, [alerts, seenAlertIds]);
 
-  if (!isAdmin && !canSeeCustomerAlerts) return null;
+  if (!canSeeCaseAlerts && !canSeeCustomerAlerts) return null;
 
   return (
     <DropdownMenu onOpenChange={(open) => {

@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, SlidersHorizontal } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -541,36 +541,36 @@ const Customers = () => {
   };
   return (
     <MainLayout title="Customers">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Visible Customers</div>
-              <div className="text-xl font-semibold">{crmKPIs.totalVisible}</div>
+              <div className="text-lg font-semibold">{crmKPIs.totalVisible}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Active Pipeline</div>
-              <div className="text-xl font-semibold">{crmKPIs.activePipeline}</div>
+              <div className="text-lg font-semibold">{crmKPIs.activePipeline}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">On-Hold Due</div>
-              <div className="text-xl font-semibold">{crmKPIs.onHoldDue}</div>
+              <div className="text-lg font-semibold">{crmKPIs.onHoldDue}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Assigned Clients</div>
-              <div className="text-xl font-semibold">{crmKPIs.assignedClients}</div>
+              <div className="text-lg font-semibold">{crmKPIs.assignedClients}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Customers with Cases</div>
-              <div className="text-xl font-semibold">{crmKPIs.withCases}</div>
+              <div className="text-lg font-semibold">{crmKPIs.withCases}</div>
             </CardContent>
           </Card>
         </div>
@@ -581,16 +581,17 @@ const Customers = () => {
               <Workflow className="h-4 w-4" /> Client Workflow
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2">
             <div className="overflow-x-auto">
               <div className="flex min-w-max gap-2">
-                <Button
-                  variant={statusView === "all" ? "default" : "outline"}
-                  size="sm"
+                <button
+                  type="button"
                   onClick={() => setStatusView("all")}
+                  className={`rounded-md border px-3 py-2 text-left transition-colors ${statusView === "all" ? "bg-muted border-primary/30" : "bg-card hover:bg-muted"}`}
                 >
-                  All ({sectionFilteredCustomers.length})
-                </Button>
+                  <div className="text-xs font-semibold">All</div>
+                  <div className="mt-0.5 text-sm font-semibold">{sectionFilteredCustomers.length}</div>
+                </button>
                 {WORKFLOW_STEPS.map((step) => {
                   const active = statusView === step.status;
                   return (
@@ -598,10 +599,10 @@ const Customers = () => {
                       key={step.status}
                       type="button"
                       onClick={() => setStatusView(step.status)}
-                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-muted border-primary/30" : "bg-card hover:bg-muted"}`}
                     >
                       <div className="text-xs font-semibold">{step.title}</div>
-                      <div className={`text-[11px] ${active ? "text-primary-foreground/90" : "text-muted-foreground"}`}>{step.subtitle}</div>
+                      <div className="text-[11px] text-muted-foreground">{step.subtitle}</div>
                       <div className="mt-1 text-sm font-semibold">{workflowCounts[step.status] || 0}</div>
                     </button>
                   );
@@ -616,10 +617,6 @@ const Customers = () => {
 
         <Card>
           <CardContent className="p-3 sm:p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <SlidersHorizontal className="h-4 w-4" />
-              Customer Command Bar
-            </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[220px] max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -11,7 +11,7 @@ import CaseAlerts from "./CaseAlerts";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const { user } = useAuth();
-  const canSeeAlerts = user?.role === "admin" || user?.role === "intake";
+  const canSeeAlerts = Boolean(user);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {

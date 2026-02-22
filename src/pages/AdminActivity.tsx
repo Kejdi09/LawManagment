@@ -11,7 +11,6 @@ import { getAuditLogs } from "@/lib/case-store";
 import { AuditLogRecord } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { SlidersHorizontal } from "lucide-react";
 
 const AdminActivity = () => {
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
@@ -85,40 +84,36 @@ const AdminActivity = () => {
 
   return (
     <MainLayout title="Admin Activity">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Visible Events</div>
-              <div className="text-xl font-semibold">{total}</div>
+              <div className="text-lg font-semibold">{total}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Last 24 Hours</div>
-              <div className="text-xl font-semibold">{last24h}</div>
+              <div className="text-lg font-semibold">{last24h}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Unique Actors</div>
-              <div className="text-xl font-semibold">{uniqueActors}</div>
+              <div className="text-lg font-semibold">{uniqueActors}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               <div className="text-xs text-muted-foreground">Delete Actions</div>
-              <div className="text-xl font-semibold">{destructiveChanges}</div>
+              <div className="text-lg font-semibold">{destructiveChanges}</div>
             </CardContent>
           </Card>
         </div>
 
         <Card>
           <CardContent className="p-3 sm:p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <SlidersHorizontal className="h-4 w-4" />
-              Activity Command Bar
-            </div>
             <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search activity" className="lg:col-span-2" />
               <Select value={actionFilter} onValueChange={setActionFilter}>

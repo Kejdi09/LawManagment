@@ -173,7 +173,7 @@ const Index = () => {
       title="Cases"
       right={<Button size="sm" onClick={openCreateCase}>New Case</Button>}
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         <DashboardKPIs key={tick} />
 
         <Card>
@@ -187,10 +187,10 @@ const Index = () => {
                 <button
                   type="button"
                   onClick={() => setStageFilter("all")}
-                  className={`rounded-md border px-3 py-2 text-left transition-colors ${stageFilter === "all" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                  className={`rounded-md border px-3 py-2 text-left transition-colors ${stageFilter === "all" ? "bg-muted border-primary/30" : "bg-card hover:bg-muted"}`}
                 >
                   <div className="text-xs font-semibold">All Stages</div>
-                  <div className={`text-[11px] ${stageFilter === "all" ? "text-primary-foreground/90" : "text-muted-foreground"}`}>full pipeline</div>
+                  <div className="text-[11px] text-muted-foreground">full pipeline</div>
                   <div className="mt-1 text-sm font-semibold">{caseList.length}</div>
                 </button>
                 {workflowStageSummary.map((entry) => {
@@ -200,10 +200,10 @@ const Index = () => {
                       key={entry.stage}
                       type="button"
                       onClick={() => setStageFilter(entry.stage)}
-                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-muted border-primary/30" : "bg-card hover:bg-muted"}`}
                     >
                       <div className="text-xs font-semibold">{STAGE_LABELS[entry.stage]}</div>
-                      <div className={`text-[11px] ${active ? "text-primary-foreground/90" : "text-muted-foreground"}`}>workflow lane</div>
+                      <div className="text-[11px] text-muted-foreground">workflow lane</div>
                       <div className="mt-1 text-sm font-semibold">{entry.count}</div>
                     </button>
                   );
@@ -261,10 +261,6 @@ const Index = () => {
 
         <Card>
           <CardContent className="p-3 sm:p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <KanbanSquare className="h-4 w-4" />
-              Case Command Bar
-            </div>
             <SearchFilterBar
               query={query}
               onQueryChange={setQuery}
