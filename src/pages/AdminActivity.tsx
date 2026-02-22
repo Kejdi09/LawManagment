@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAuditLogs } from "@/lib/case-store";
 import { AuditLogRecord } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -18,6 +20,7 @@ const AdminActivity = () => {
   const [roleFilter, setRoleFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -62,6 +65,14 @@ const AdminActivity = () => {
   const last24h = filtered.filter((log) => Date.now() - new Date(log.at).getTime() <= 24 * 60 * 60 * 1000).length;
   const uniqueActors = new Set(filtered.map((log) => log.consultantName || log.username || "System")).size;
   const destructiveChanges = filtered.filter((log) => log.action === "delete").length;
+
+  const formatDetailsPreview = (details?: Record<string, unknown>) => {
+    if (!details || Object.keys(details).length === 0) return "-";
+    const entries = Object.entries(details)
+      .slice(0, 3)
+      .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+    return entries.join(" • ");
+  };
 
   if (user?.role !== "admin") {
     return (
@@ -177,8 +188,13 @@ const AdminActivity = () => {
                       <TableCell className="text-sm">{log.action}</TableCell>
                       <TableCell className="text-sm">{log.resource}</TableCell>
                       <TableCell className="font-mono text-xs">{log.resourceId || "-"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate" title={JSON.stringify(log.details || {})}>
-                        {Object.keys(log.details || {}).length ? JSON.stringify(log.details) : "-"}
+                      <TableCell className="max-w-[360px] text-xs text-muted-foreground">
+                        <div className="line-clamp-2 break-words">{formatDetailsPreview(log.details)}</div>
+                        {Object.keys(log.details || {}).length > 0 && (
+                          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setSelectedLog(log)}>
+                            View details
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -187,6 +203,23 @@ const AdminActivity = () => {
             </Table>
           </CardContent>
         </Card>
+
+        <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Activity Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 text-sm">
+              <div><span className="text-muted-foreground">When:</span> {selectedLog ? formatDate(selectedLog.at, true) : "-"}</div>
+              <div><span className="text-muted-foreground">Actor:</span> {selectedLog?.consultantName || selectedLog?.username || "System"}</div>
+              <div><span className="text-muted-foreground">Action:</span> {selectedLog?.action || "-"}</div>
+              <div><span className="text-muted-foreground">Resource:</span> {selectedLog?.resource || "-"}</div>
+              <pre className="max-h-[45vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
+                {selectedLog?.details ? JSON.stringify(selectedLog.details, null, 2) : "No details"}
+              </pre>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

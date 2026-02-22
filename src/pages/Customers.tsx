@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -82,9 +82,20 @@ const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
   "CONSULTATION_SCHEDULED",
 ];
 
+const WORKFLOW_STEPS: Array<{ status: LeadStatus; title: string; subtitle: string }> = [
+  { status: "INTAKE", title: "1. Intake", subtitle: "new lead" },
+  { status: "SEND_PROPOSAL", title: "2. Proposal", subtitle: "offer sent" },
+  { status: "WAITING_APPROVAL", title: "3. Approval", subtitle: "awaiting decision" },
+  { status: "SEND_CONTRACT", title: "4. Contract", subtitle: "contract sent" },
+  { status: "WAITING_ACCEPTANCE", title: "5. Acceptance", subtitle: "waiting signature" },
+  { status: "SEND_RESPONSE", title: "6. Response", subtitle: "final response" },
+  { status: "CLIENT", title: "7. Client", subtitle: "converted" },
+];
+
 const Customers = () => {
   const [search, setSearch] = useState("");
   const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
+  const [statusView, setStatusView] = useState<"all" | LeadStatus>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -198,13 +209,16 @@ const Customers = () => {
       if (sectionView === "archived") return customer.status === "ARCHIVED";
       return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
     });
+    const statusFiltered = statusView === "all"
+      ? sectionFiltered
+      : sectionFiltered.filter((customer) => customer.status === statusView);
     const order = ["Individual", "Family", "Company", "Other"];
     const buckets = order.map((type) => ({
       type,
-      items: sectionFiltered.filter((customer) => getCustomerCategory(customer.customerType) === type),
+      items: statusFiltered.filter((customer) => getCustomerCategory(customer.customerType) === type),
     }));
     return buckets.filter((bucket) => bucket.items.length > 0);
-  }, [categoryFilteredCustomers, sectionView]);
+  }, [categoryFilteredCustomers, sectionView, statusView]);
 
   const sectionFilteredCustomers = useMemo(() => {
     return categoryFilteredCustomers.filter((customer) => {
@@ -213,6 +227,13 @@ const Customers = () => {
       return customer.status !== "ON_HOLD" && customer.status !== "ARCHIVED";
     });
   }, [categoryFilteredCustomers, sectionView]);
+
+  const workflowCounts = useMemo(() => {
+    return WORKFLOW_STEPS.reduce<Record<string, number>>((acc, step) => {
+      acc[step.status] = sectionFilteredCustomers.filter((customer) => customer.status === step.status).length;
+      return acc;
+    }, {});
+  }, [sectionFilteredCustomers]);
 
   const crmKPIs = useMemo(() => {
     const now = Date.now();
@@ -538,6 +559,45 @@ const Customers = () => {
           </Card>
         </div>
 
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Workflow className="h-4 w-4" /> Client Workflow
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="overflow-x-auto">
+              <div className="flex min-w-max gap-2">
+                <Button
+                  variant={statusView === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setStatusView("all")}
+                >
+                  All ({sectionFilteredCustomers.length})
+                </Button>
+                {WORKFLOW_STEPS.map((step) => {
+                  const active = statusView === step.status;
+                  return (
+                    <button
+                      key={step.status}
+                      type="button"
+                      onClick={() => setStatusView(step.status)}
+                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                    >
+                      <div className="text-xs font-semibold">{step.title}</div>
+                      <div className={`text-[11px] ${active ? "text-primary-foreground/90" : "text-muted-foreground"}`}>{step.subtitle}</div>
+                      <div className="mt-1 text-sm font-semibold">{workflowCounts[step.status] || 0}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Workflow path: Intake → Proposal → Approval → Contract → Acceptance → Response → Client.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -589,6 +649,9 @@ const Customers = () => {
             <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
             <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
           </div>
+          {statusView !== "all" && (
+            <Button variant="ghost" size="sm" onClick={() => setStatusView("all")}>Clear Stage Filter</Button>
+          )}
           {/* Removed global Expand/Collapse - category headers are collapsible individually */}
           {(user?.role === 'intake' || user?.role === 'admin') && (
             <Button onClick={openCreate} className="flex items-center gap-2" size="sm">

@@ -8,6 +8,42 @@ import { Bell, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Customer, CustomerNotification } from "@/lib/types";
 
+const DISMISSED_ALERTS_KEY = "dismissed_customer_alerts";
+const DISMISSED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getVersionTag(dateValue: string) {
+  const ts = new Date(dateValue).getTime();
+  if (!Number.isFinite(ts)) return "na";
+  return Math.floor(ts / (60 * 60 * 1000)).toString();
+}
+
+function readDismissedAlerts(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_ALERTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+function writeDismissedAlerts(payload: Record<string, number>) {
+  try {
+    localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function pruneDismissedAlerts(payload: Record<string, number>) {
+  const now = Date.now();
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, dismissedAt]) => Number.isFinite(dismissedAt) && now - dismissedAt <= DISMISSED_TTL_MS)
+  );
+}
+
 function getLastStatusChangeIso(customer: Customer) {
   const history = Array.isArray(customer.statusHistory) ? customer.statusHistory : [];
   const last = history.length > 0 ? history[history.length - 1] : null;
@@ -25,7 +61,7 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
 
     if (customer.status === "INTAKE" && elapsedHours >= 24) {
       notifications.push({
-        notificationId: `local-follow-${customer.customerId}`,
+        notificationId: `local-follow-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
         customerId: customer.customerId,
         message: `Follow up ${customer.name}`,
         kind: "follow",
@@ -36,7 +72,7 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
 
     if ((customer.status === "WAITING_APPROVAL" || customer.status === "WAITING_ACCEPTANCE") && elapsedHours >= 72) {
       notifications.push({
-        notificationId: `local-follow72-${customer.customerId}`,
+        notificationId: `local-follow72-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
         customerId: customer.customerId,
         message: `Follow up ${customer.name}`,
         kind: "follow",
@@ -47,7 +83,7 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
 
     if ((customer.status === "SEND_PROPOSAL" || customer.status === "SEND_CONTRACT" || customer.status === "SEND_RESPONSE") && elapsedHours >= 24) {
       notifications.push({
-        notificationId: `local-respond-${customer.customerId}`,
+        notificationId: `local-respond-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
         customerId: customer.customerId,
         message: `Respond to ${customer.name}`,
         kind: "respond",
@@ -60,7 +96,7 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
       const followUpMs = new Date(customer.followUpDate).getTime();
       if (Number.isFinite(followUpMs) && followUpMs <= nowMs) {
         notifications.push({
-          notificationId: `local-onhold-${customer.customerId}`,
+          notificationId: `local-onhold-${customer.customerId}-${getVersionTag(customer.followUpDate)}`,
           customerId: customer.customerId,
           message: `Follow up ${customer.name}`,
           kind: "follow",
@@ -92,6 +128,23 @@ export const CaseAlerts = () => {
   const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
+  const [dismissedAlertMap, setDismissedAlertMap] = useState<Record<string, number>>(() => pruneDismissedAlerts(readDismissedAlerts()));
+
+  useEffect(() => {
+    const pruned = pruneDismissedAlerts(dismissedAlertMap);
+    if (Object.keys(pruned).length !== Object.keys(dismissedAlertMap).length) {
+      setDismissedAlertMap(pruned);
+      writeDismissedAlerts(pruned);
+    }
+  }, [dismissedAlertMap]);
+
+  const markAlertDismissed = useCallback((alertId: string) => {
+    setDismissedAlertMap((prev) => {
+      const next = pruneDismissedAlerts({ ...prev, [alertId]: Date.now() });
+      writeDismissedAlerts(next);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     const [customers, confirmed] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
@@ -141,13 +194,15 @@ export const CaseAlerts = () => {
       }));
     }
 
-    setAlerts([...caseAlerts, ...customerAlerts]);
-  }, [isAdmin, canSeeCustomerAlerts]);
+    const combined = [...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
+    setAlerts(combined);
+  }, [isAdmin, canSeeCustomerAlerts, dismissedAlertMap]);
 
   const dismissCustomerAlert = useCallback(async (alertId: string) => {
     if (!alertId) return;
+    markAlertDismissed(alertId);
+    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
     if (alertId.startsWith("local-")) {
-      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       return;
     }
     setDismissingIds((prev) => {
@@ -158,6 +213,8 @@ export const CaseAlerts = () => {
     try {
       await deleteCustomerNotification(alertId);
       await load();
+    } catch {
+      // keep locally dismissed even if backend delete is unavailable
     } finally {
       setDismissingIds((prev) => {
         const next = new Set(prev);
@@ -165,7 +222,7 @@ export const CaseAlerts = () => {
         return next;
       });
     }
-  }, [load]);
+  }, [load, markAlertDismissed]);
 
   useEffect(() => {
     if (!isAdmin && !canSeeCustomerAlerts) return;
