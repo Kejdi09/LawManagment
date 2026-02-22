@@ -45,15 +45,19 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                 const customerName = customerNames[c.customerId];
                 const overdue = c.deadline && isPast(new Date(c.deadline));
                 const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
-                const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70 dark:bg-yellow-900/20" : "";
+                const rowClassName = overdue
+                  ? "bg-destructive/10 border-l-4 border-l-destructive"
+                  : dueSoon
+                    ? "bg-amber-100/70 border-l-4 border-l-amber-500"
+                    : "";
                 return (
                   <TableRow key={c.caseId} className={`cursor-pointer transition-colors hover:bg-muted/50 ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
                     <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                     <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
                     {showMoreColumns && <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>}
-                    <TableCell className="text-xs">
+                    <TableCell className={`text-xs ${overdue ? "text-destructive font-semibold" : dueSoon ? "text-amber-700 font-medium" : ""}`}>
                       {c.deadline ? (
-                        <span className="text-muted-foreground flex items-center gap-1">
+                        <span className={`flex items-center gap-1 ${overdue ? "text-destructive" : dueSoon ? "text-amber-700" : "text-muted-foreground"}`}>
                           <Clock className="h-3 w-3" />
                           {formatDate(c.deadline)}
                         </span>
@@ -75,7 +79,11 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
             const customerName = customerNames[c.customerId];
             const overdue = c.deadline && isPast(new Date(c.deadline));
             const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
-            const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70" : "";
+            const rowClassName = overdue
+              ? "bg-destructive/10 border-l-4 border-l-destructive"
+              : dueSoon
+                ? "bg-amber-100/70 border-l-4 border-l-amber-500"
+                : "";
             return (
               <button key={c.caseId} onClick={() => onSelectCase(c.caseId)} className={`w-full text-left rounded-md p-3 border ${rowClassName}`}>
                 <div className="flex items-start gap-3">

@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { formatDate } from "@/lib/utils";
 import {
   getAllCustomers,
-  getAllCases,
-  getCasesByCustomer,
   createCustomer,
   updateCustomer,
   deleteCustomer,
@@ -15,20 +13,16 @@ import {
   getCustomerHistory,
 } from "@/lib/case-store";
 import {
-  STAGE_LABELS,
-  PRIORITY_CONFIG,
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
   LAWYERS,
   Customer,
-  Case,
   CustomerHistoryRecord,
   ContactChannel,
   LeadStatus,
   ServiceType,
 } from "@/lib/types";
-import { mapCaseStateToStage } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,7 +44,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
-import { CaseDetail } from "@/components/CaseDetail";
 import { useToast } from "@/hooks/use-toast";
 
 // Reusable safe date formatter
@@ -140,9 +133,7 @@ const Customers = () => {
   });
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [assignedMap, setAssignedMap] = useState<Record<string, string>>({});
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [selectedCases, setSelectedCases] = useState<Case[]>([]);
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -184,34 +175,17 @@ const Customers = () => {
   const loadCustomers = useCallback(async () => {
     const data = await getAllCustomers();
     setCustomers(data);
-    const allCases = await getAllCases();
-    // compute assigned consultant per customer (most recent case assignedTo)
-    const map: Record<string, { assignedTo: string; lastChange: number }> = {};
-    for (const c of allCases) {
-      const last = new Date(c.lastStateChange || 0).getTime();
-      if (!map[c.customerId] || last > map[c.customerId].lastChange) {
-        map[c.customerId] = { assignedTo: c.assignedTo || "", lastChange: last };
-      }
-    }
-    const flattened: Record<string, string> = {};
-    for (const k of Object.keys(map)) flattened[k] = map[k].assignedTo || "";
-    setAssignedMap(flattened);
   }, []);
 
   const loadCustomerDetail = useCallback(async (id: string | null) => {
     if (!id) {
       setSelectedCustomer(null);
-      setSelectedCases([]);
       setCustomerStatusLog([]);
       return;
     }
     const customer = customers.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
-    const [cases, history] = await Promise.all([
-      getCasesByCustomer(id),
-      getCustomerHistory(id).catch(() => []),
-    ]);
-    setSelectedCases(cases);
+    const history = await getCustomerHistory(id).catch(() => []);
     setCustomerStatusLog(history);
     try {
       const docs = await getDocuments('customer', id);
@@ -291,15 +265,15 @@ const Customers = () => {
   const crmKPIs = useMemo(() => {
     const visible = sectionFilteredCustomers;
     const activePipeline = visible.filter((c) => c.status !== "ARCHIVED" && c.status !== "CLIENT").length;
-    const assignedClients = visible.filter((c) => c.status === "CLIENT" && !!(assignedMap[c.customerId] || c.assignedTo)).length;
+    const clientCount = visible.filter((c) => c.status === "CLIENT").length;
     return {
       totalVisible: visible.length,
       activePipeline,
-      assignedClients,
+      clientCount,
       onHold: visible.filter((c) => c.status === "ON_HOLD").length,
       archived: visible.filter((c) => c.status === "ARCHIVED").length,
     };
-  }, [sectionFilteredCustomers, assignedMap]);
+  }, [sectionFilteredCustomers]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -629,8 +603,8 @@ const Customers = () => {
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Assigned Clients</div>
-              <div className="text-lg font-semibold">{crmKPIs.assignedClients}</div>
+              <div className="text-xs text-muted-foreground">Clients</div>
+              <div className="text-lg font-semibold">{crmKPIs.clientCount}</div>
             </CardContent>
           </Card>
           <Card>
@@ -781,7 +755,6 @@ const Customers = () => {
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   {showMoreCustomerColumns && <TableHead>Contact</TableHead>}
-                  {showMoreCustomerColumns && <TableHead>Assigned</TableHead>}
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[220px] text-right">Actions</TableHead>
                 </TableRow>
@@ -813,16 +786,12 @@ const Customers = () => {
                   ...(collapsedCategories.includes(group.type)
                     ? []
                     : group.items.map((c) => {
-                      const assignedTo = assignedMap[c.customerId] || c.assignedTo || "Unassigned";
                       return (
                         <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
                           {showMoreCustomerColumns && (
                             <TableCell className="text-sm text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
-                          )}
-                          {showMoreCustomerColumns && (
-                            <TableCell className="text-sm text-muted-foreground">{assignedTo}</TableCell>
                           )}
                           <TableCell>
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
@@ -931,7 +900,6 @@ const Customers = () => {
                 collapsedCategories.includes(group.type)
                   ? []
                   : group.items.map((c) => {
-                    const assignedTo = assignedMap[c.customerId] || c.assignedTo || "Unassigned";
                     return (
                       <div
                         key={`mobile-${group.type}-${c.customerId}`}
@@ -949,7 +917,6 @@ const Customers = () => {
                         </div>
                         <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                           <div>{c.phone} • {c.email}</div>
-                          <div>Assigned: {assignedTo}</div>
                         </div>
                         <div className="mt-2 flex items-center justify-between">
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1265,54 +1232,12 @@ const Customers = () => {
                       </Card>
                     )}
 
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Related Cases</CardTitle></CardHeader>
-                      <CardContent className="p-0">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Case ID</TableHead>
-                              <TableHead>Category</TableHead>
-                              <TableHead>State</TableHead>
-                              <TableHead>Priority</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {selectedCases.map((sc) => {
-                              const pCfg = PRIORITY_CONFIG[sc.priority];
-                              return (
-                                <TableRow key={sc.caseId} className="cursor-pointer" onClick={() => setSelectedCaseId(sc.caseId)}>
-                                  <TableCell className="font-mono text-xs">{sc.caseId}</TableCell>
-                                  <TableCell className="text-sm">{sc.category} / {sc.subcategory}</TableCell>
-                                  <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(sc.state)]}</Badge></TableCell>
-                                  <TableCell>
-                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                </Card>
+                    
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
-
-      <CaseDetail
-        caseId={selectedCaseId}
-        open={!!selectedCaseId}
-        onClose={() => setSelectedCaseId(null)}
-        onStateChanged={async () => {
-          const activeCustomerId = selectedIdRef.current;
-          await loadCustomers();
-          if (activeCustomerId) {
-            await loadCustomerDetail(activeCustomerId);
-          }
-        }}
-      />
     </MainLayout>
   );
 };
