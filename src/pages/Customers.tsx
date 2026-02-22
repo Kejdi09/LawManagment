@@ -671,9 +671,6 @@ const Customers = () => {
                 <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
                 <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
               </div>
-              {statusView !== "all" && (
-                <Button variant="ghost" size="sm" onClick={() => setStatusView("all")}>Clear Stage Filter</Button>
-              )}
               {(user?.role === 'intake' || user?.role === 'admin') && (
                 <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
                   <Plus className="h-4 w-4" /> New Customer

@@ -265,25 +265,14 @@ const Index = () => {
               <KanbanSquare className="h-4 w-4" />
               Case Command Bar
             </div>
-            <div className="space-y-3">
-              <SearchFilterBar
-                query={query}
-                onQueryChange={setQuery}
-                priorityFilter={priorityFilter}
-                onPriorityChange={setPriorityFilter}
-                docFilter={docFilter}
-                onDocFilterChange={setDocFilter}
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as any)}>
-                  <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All stages</SelectItem>
-                    {ALL_STAGES.map((s) => (<SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <SearchFilterBar
+              query={query}
+              onQueryChange={setQuery}
+              priorityFilter={priorityFilter}
+              onPriorityChange={setPriorityFilter}
+              docFilter={docFilter}
+              onDocFilterChange={setDocFilter}
+            />
           </CardContent>
         </Card>
 
