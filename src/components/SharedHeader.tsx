@@ -52,7 +52,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
   }, [drawerOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-primary/20 bg-background/95 backdrop-blur">
       <div className="mx-auto flex min-h-14 w-full max-w-[1400px] items-center gap-2 px-4 py-2 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           <Drawer direction="left" shouldScaleBackground={false} open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -71,10 +71,18 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
             </DrawerTrigger>
             <DrawerContentLeft>
               <div className="flex flex-col p-2 gap-2">
+                <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-muted/30 px-2 py-2">
+                  <img src="/download.jpg" alt="Dafku" className="h-8 w-8 rounded-md object-cover border border-primary/20" />
+                  <div>
+                    <div className="text-sm font-semibold leading-tight">Dafku Management System</div>
+                    <div className="text-[11px] text-muted-foreground">Dafku Law Firm</div>
+                  </div>
+                </div>
                 <Nav onSelect={() => setDrawerOpen(false)} />
               </div>
             </DrawerContentLeft>
           </Drawer>
+          <img src="/download.jpg" alt="Dafku" className="h-7 w-7 rounded-md object-cover border border-primary/20 md:hidden" />
           <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">

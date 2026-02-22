@@ -3,7 +3,7 @@ import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -269,10 +269,15 @@ const ClientsPage = () => {
 
         <Dialog open={!!selectedClient} onOpenChange={(o) => !o && setSelectedClient(null)}>
           <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Client Details</DialogTitle>
+              <DialogDescription>Detailed information, documents, and related cases for the selected client.</DialogDescription>
+            </DialogHeader>
             {selectedClient && (
               <>
                 <DialogHeader>
                   <DialogTitle>{selectedClient.name}</DialogTitle>
+                  <DialogDescription>Confirmed client overview, service details, and case activity.</DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4">
@@ -406,6 +411,7 @@ const ClientsPage = () => {
           <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Confirmed Client</DialogTitle>
+              <DialogDescription>Update confirmed client profile fields and workflow status.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">

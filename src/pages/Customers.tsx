@@ -148,7 +148,6 @@ const Customers = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
-  const [caseCounts, setCaseCounts] = useState<Record<string, number>>({});
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -186,11 +185,6 @@ const Customers = () => {
     const data = await getAllCustomers();
     setCustomers(data);
     const allCases = await getAllCases();
-    const counts = allCases.reduce<Record<string, number>>((acc, c) => {
-      acc[c.customerId] = (acc[c.customerId] || 0) + 1;
-      return acc;
-    }, {});
-    setCaseCounts(counts);
     // compute assigned consultant per customer (most recent case assignedTo)
     const map: Record<string, { assignedTo: string; lastChange: number }> = {};
     for (const c of allCases) {
@@ -295,20 +289,17 @@ const Customers = () => {
   }, [sectionFilteredCustomers]);
 
   const crmKPIs = useMemo(() => {
-    const now = Date.now();
     const visible = sectionFilteredCustomers;
     const activePipeline = visible.filter((c) => c.status !== "ARCHIVED" && c.status !== "CLIENT").length;
-    const onHoldDue = visible.filter((c) => c.status === "ON_HOLD" && c.followUpDate && new Date(c.followUpDate).getTime() <= now).length;
     const assignedClients = visible.filter((c) => c.status === "CLIENT" && !!(assignedMap[c.customerId] || c.assignedTo)).length;
-    const withCases = visible.filter((c) => (caseCounts[c.customerId] || 0) > 0).length;
     return {
       totalVisible: visible.length,
       activePipeline,
-      onHoldDue,
       assignedClients,
-      withCases,
+      onHold: visible.filter((c) => c.status === "ON_HOLD").length,
+      archived: visible.filter((c) => c.status === "ARCHIVED").length,
     };
-  }, [sectionFilteredCustomers, assignedMap, caseCounts]);
+  }, [sectionFilteredCustomers, assignedMap]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -337,7 +328,7 @@ const Customers = () => {
     ON_HOLD: "bg-amber-50 text-amber-800",
   };
 
-  const customerTableColumns = showMoreCustomerColumns ? 7 : 5;
+  const customerTableColumns = showMoreCustomerColumns ? 6 : 4;
 
   const hasCustomerFilters = Boolean(search) || sectionView !== "main" || statusView !== "all" || selectedCategories.length !== CATEGORY_OPTIONS.length;
 
@@ -632,8 +623,8 @@ const Customers = () => {
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">On-Hold Due</div>
-              <div className="text-lg font-semibold">{crmKPIs.onHoldDue}</div>
+              <div className="text-xs text-muted-foreground">On Hold</div>
+              <div className="text-lg font-semibold">{crmKPIs.onHold}</div>
             </CardContent>
           </Card>
           <Card>
@@ -644,8 +635,8 @@ const Customers = () => {
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Customers with Cases</div>
-              <div className="text-lg font-semibold">{crmKPIs.withCases}</div>
+              <div className="text-xs text-muted-foreground">Archived</div>
+              <div className="text-lg font-semibold">{crmKPIs.archived}</div>
             </CardContent>
           </Card>
         </div>
@@ -790,9 +781,8 @@ const Customers = () => {
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   {showMoreCustomerColumns && <TableHead>Contact</TableHead>}
+                  {showMoreCustomerColumns && <TableHead>Assigned</TableHead>}
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Due</TableHead>
-                  {showMoreCustomerColumns && <TableHead className="text-right">Cases</TableHead>}
                   <TableHead className="w-[220px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -823,7 +813,7 @@ const Customers = () => {
                   ...(collapsedCategories.includes(group.type)
                     ? []
                     : group.items.map((c) => {
-                      const caseCount = caseCounts[c.customerId] || 0;
+                      const assignedTo = assignedMap[c.customerId] || c.assignedTo || "Unassigned";
                       return (
                         <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
@@ -831,22 +821,14 @@ const Customers = () => {
                           {showMoreCustomerColumns && (
                             <TableCell className="text-sm text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
                           )}
+                          {showMoreCustomerColumns && (
+                            <TableCell className="text-sm text-muted-foreground">{assignedTo}</TableCell>
+                          )}
                           <TableCell>
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[c.status]}`}>
                               {LEAD_STATUS_LABELS[c.status]}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right flex items-center justify-end gap-2">
-                            <span className="text-xs text-muted-foreground">{c.followUpDate ? safeFormatDate(c.followUpDate) : "—"}</span>
-                          </TableCell>
-                          {showMoreCustomerColumns && (
-                            <TableCell className="text-right">
-                              <div className="inline-flex items-center gap-2">
-                                {c.notes && <StickyNote className="h-4 w-4 text-muted-foreground" />}
-                                <Badge variant="secondary">{caseCount}</Badge>
-                              </div>
-                            </TableCell>
-                          )}
                           <TableCell className="text-right">
                             <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>
@@ -949,7 +931,6 @@ const Customers = () => {
                 collapsedCategories.includes(group.type)
                   ? []
                   : group.items.map((c) => {
-                    const caseCount = caseCounts[c.customerId] || 0;
                     const assignedTo = assignedMap[c.customerId] || c.assignedTo || "Unassigned";
                     return (
                       <div
@@ -971,7 +952,6 @@ const Customers = () => {
                           <div>Assigned: {assignedTo}</div>
                         </div>
                         <div className="mt-2 flex items-center justify-between">
-                          <Badge variant="secondary">{caseCount} case{caseCount === 1 ? "" : "s"}</Badge>
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <Button
                               variant="secondary"
@@ -1179,12 +1159,16 @@ const Customers = () => {
       {/* Customer detail dialog */}
       <Dialog open={!!selectedCustomer} onOpenChange={(o) => !o && setSelectedId(null)}>
         <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Customer Details</DialogTitle>
+            <DialogDescription>Detailed customer information, services, documents, and related case history.</DialogDescription>
+          </DialogHeader>
           {selectedCustomer && (
             <>
               <DialogHeader>
                   <DialogTitle>{selectedCustomer.name}</DialogTitle>
                   <DialogDescription>
-                    Registered on {safeFormatDate(selectedCustomer.registeredAt)}
+                    Registered on {safeFormatDate(selectedCustomer.registeredAt)}. Includes services, notes, and document timeline.
                   </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">

@@ -5,11 +5,11 @@ import { useAuth } from "@/lib/auth-context";
 export const Sidebar = () => {
   const { user, logout } = useAuth();
   return (
-    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:bg-background md:shadow-sm">
+    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:border-primary/20 md:bg-card md:shadow-sm">
       <div className="flex flex-col h-full">
-        <div className="p-4 border-b bg-background">
+        <div className="p-4 border-b border-primary/20 bg-muted/20">
           <div className="flex items-center gap-3">
-            <img src="/download.jpg" alt="Dafku" className="h-9 w-9 rounded-md object-cover border" />
+            <img src="/download.jpg" alt="Dafku" className="h-9 w-9 rounded-md object-cover border border-primary/20" />
             <div>
               <h1 className="text-sm font-semibold leading-tight">Dafku Management System</h1>
               <div className="text-xs text-muted-foreground">Dafku Law Firm</div>

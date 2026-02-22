@@ -1,4 +1,4 @@
-import { Case, PRIORITY_CONFIG, CaseStage, STAGE_LABELS } from "@/lib/types";
+import { Case, CaseStage, STAGE_LABELS } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -37,14 +37,12 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                 <TableHead>Customer</TableHead>
                 {showMoreColumns && <TableHead>Category</TableHead>}
                 <TableHead className="w-[220px]">Due</TableHead>
-                {showMoreColumns && <TableHead className="w-[90px]">Docs</TableHead>}
                 {showMoreColumns && <TableHead className="w-[100px]">Assigned</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {cases.map((c) => {
                 const customerName = customerNames[c.customerId];
-                const pCfg = PRIORITY_CONFIG[c.priority];
                 const overdue = c.deadline && isPast(new Date(c.deadline));
                 const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
                 const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70 dark:bg-yellow-900/20" : "";
@@ -54,27 +52,15 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                     <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
                     {showMoreColumns && <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>}
                     <TableCell className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>
-                          {pCfg.label}
+                      {c.deadline ? (
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDate(c.deadline)}
                         </span>
-                        {c.deadline ? (
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDate(c.deadline)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">No deadline</span>
-                        )}
-                      </div>
+                      ) : (
+                        <span className="text-muted-foreground">No deadline</span>
+                      )}
                     </TableCell>
-                    {showMoreColumns && (
-                      <TableCell>
-                        <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">
-                          {c.documentState}
-                        </Badge>
-                      </TableCell>
-                    )}
                     {showMoreColumns && <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>}
                   </TableRow>
                 );
@@ -87,7 +73,6 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
         <div className="sm:hidden space-y-2 p-2">
           {cases.map((c) => {
             const customerName = customerNames[c.customerId];
-            const pCfg = PRIORITY_CONFIG[c.priority];
             const overdue = c.deadline && isPast(new Date(c.deadline));
             const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
             const rowClassName = overdue ? "bg-destructive/5" : dueSoon ? "bg-yellow-50/70" : "";
@@ -97,12 +82,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                   <div className="font-mono text-xs font-medium">{c.caseId}</div>
                   <div className="flex-1">
                     <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
-                    <div className="text-muted-foreground text-xs truncate">{c.category}</div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span>
-                      <Badge variant={c.documentState === "ok" ? "default" : "destructive"} className="text-xs">{c.documentState}</Badge>
-                      <span className="text-xs text-muted-foreground ml-auto">{c.deadline ? formatDate(c.deadline) : '—'}</span>
-                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground ml-auto">{c.deadline ? formatDate(c.deadline) : 'No deadline'}</div>
                   </div>
                 </div>
               </button>

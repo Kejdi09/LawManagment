@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAuditLogs } from "@/lib/case-store";
 import { AuditLogRecord } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -212,6 +212,7 @@ const AdminActivity = () => {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Activity Details</DialogTitle>
+              <DialogDescription>Detailed audit log information for the selected activity record.</DialogDescription>
             </DialogHeader>
             <div className="space-y-2 text-sm">
               <div><span className="text-muted-foreground">When:</span> {selectedLog ? formatDate(selectedLog.at, true) : "-"}</div>
