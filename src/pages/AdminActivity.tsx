@@ -11,6 +11,7 @@ import { getAuditLogs } from "@/lib/case-store";
 import { AuditLogRecord } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { SlidersHorizontal } from "lucide-react";
 
 const AdminActivity = () => {
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
@@ -112,52 +113,60 @@ const AdminActivity = () => {
           </Card>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search activity" className="lg:col-span-2" />
-          <Select value={actionFilter} onValueChange={setActionFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Action" />
-            </SelectTrigger>
-            <SelectContent>
-              {actionOptions.map((action) => (
-                <SelectItem key={action} value={action}>
-                  {action === "all" ? "All actions" : action}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={resourceFilter} onValueChange={setResourceFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Resource" />
-            </SelectTrigger>
-            <SelectContent>
-              {resourceOptions.map((resource) => (
-                <SelectItem key={resource} value={resource}>
-                  {resource === "all" ? "All resources" : resource}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Role" />
-            </SelectTrigger>
-            <SelectContent>
-              {roleOptions.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {role === "all" ? "All roles" : role}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="grid grid-cols-2 gap-2 lg:col-span-2">
-            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <SlidersHorizontal className="h-4 w-4" />
+              Activity Command Bar
+            </div>
+            <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search activity" className="lg:col-span-2" />
+              <Select value={actionFilter} onValueChange={setActionFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  {actionOptions.map((action) => (
+                    <SelectItem key={action} value={action}>
+                      {action === "all" ? "All actions" : action}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={resourceFilter} onValueChange={setResourceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Resource" />
+                </SelectTrigger>
+                <SelectContent>
+                  {resourceOptions.map((resource) => (
+                    <SelectItem key={resource} value={resource}>
+                      {resource === "all" ? "All resources" : resource}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role === "all" ? "All roles" : role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-2 gap-2 lg:col-span-2">
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

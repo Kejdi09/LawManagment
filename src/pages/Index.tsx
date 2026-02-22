@@ -6,23 +6,20 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
-import { Scale, Users } from "lucide-react";
+import { AlertTriangle, CalendarClock, KanbanSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [query, setQuery] = useState("");
@@ -50,61 +47,11 @@ const Index = () => {
   const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
-  const [alerts, setAlerts] = useState<
-    { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[]
-  >([]);
-  const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
-  const [alertHintShown, setAlertHintShown] = useState(false);
   const { toast } = useToast();
 
   const loadCases = useCallback(async () => {
     const all = await getAllCases();
     const base = query ? await searchCases(query) : all;
-
-    // Compute alerts from the full dataset (not filtered by search)
-    const now = Date.now();
-    const alertsComputed = all.flatMap((c) => {
-      const last = c.lastStateChange ? new Date(c.lastStateChange).getTime() : 0;
-      const hours = last ? (now - last) / (1000 * 60 * 60) : 0;
-      const items: { id: string; customerId: string; caseId?: string; message?: string; kind: "follow" | "respond" | "deadline"; severity: "warn" | "critical" }[] = [];
-      // Map legacy state to logical stage for alerting
-      const stage = mapCaseStateToStage(c.state);
-      const isWaiting = stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
-      if (isWaiting && hours >= 48 && hours < 72) {
-        items.push({ id: `${c.caseId}-wait-48`, customerId: c.customerId, kind: "follow", severity: "warn" });
-      }
-      if (isWaiting && hours >= 72 && hours < 96) {
-        items.push({ id: `${c.caseId}-wait-72`, customerId: c.customerId, kind: "follow", severity: "critical" });
-      }
-      if (isWaiting && hours >= 96 && hours < 120) {
-        items.push({ id: `${c.caseId}-wait-96`, customerId: c.customerId, kind: "follow", severity: "critical" });
-      }
-
-      const isSend = stage === "WAITING_CUSTOMER";
-      if (isSend && hours >= 12) {
-        items.push({ id: `${c.caseId}-send-12`, customerId: c.customerId, caseId: c.caseId, message: `Respond: ${c.caseId}`, kind: "respond", severity: "warn" });
-      }
-
-      // Deadline notifications
-      if (c.deadline && mapCaseStateToStage(c.state) !== "FINALIZED") {
-        const deadlineTime = new Date(c.deadline).getTime();
-        const hoursUntilDeadline = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
-        
-        // Case is overdue
-        if (deadlineTime < now) {
-          items.push({ id: `${c.caseId}-overdue`, customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
-        }
-        // Deadline within 48 hours
-        else if (hoursUntilDeadline <= 48) {
-          items.push({ id: `${c.caseId}-deadline-48`, customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntilDeadline)}h`, kind: "deadline", severity: "warn" });
-        }
-      }
-
-      return items;
-    });
-
-    // Customer notifications are surfaced on the Customers page only; keep main alerts for cases
-    setAlerts([...alertsComputed]);
 
     const filtered = base.filter((c) => {
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
@@ -141,18 +88,38 @@ const Index = () => {
     () => customers.map((c) => ({ id: c.customerId, name: c.name })),
     [customers],
   );
-  const criticalCount = useMemo(() => alerts.filter((a) => a.severity === "critical").length, [alerts]);
-  const warnCount = useMemo(() => alerts.filter((a) => a.severity === "warn").length, [alerts]);
-  const totalAlerts = criticalCount + warnCount;
-  const unreadCount = useMemo(() => alerts.filter((a) => !seenAlertIds.has(a.id)).length, [alerts, seenAlertIds]);
 
-  // One-time hint toast if any alerts are present
-  useEffect(() => {
-    if (alertHintShown) return;
-    if (alerts.length === 0) return;
-    toast({ title: "Check notifications", description: "Open the bell to view follow-ups and responses." });
-    setAlertHintShown(true);
-  }, [alerts, toast, alertHintShown]);
+  const workflowStageSummary = useMemo(() => {
+    return ALL_STAGES.map((stage) => ({
+      stage,
+      count: caseList.filter((c) => mapCaseStateToStage(c.state) === stage).length,
+    }));
+  }, [caseList]);
+
+  const todaysQueue = useMemo(() => {
+    const now = Date.now();
+    const in24h = now + 24 * 60 * 60 * 1000;
+    const overdue = caseList.filter((c) => c.deadline && new Date(c.deadline).getTime() < now);
+    const dueToday = caseList.filter((c) => {
+      if (!c.deadline) return false;
+      const ts = new Date(c.deadline).getTime();
+      return ts >= now && ts <= in24h;
+    });
+    const waiting = caseList.filter((c) => {
+      const stage = mapCaseStateToStage(c.state);
+      return stage === "WAITING_CUSTOMER" || stage === "WAITING_AUTHORITIES";
+    });
+    const topItems = [...overdue, ...dueToday, ...waiting]
+      .filter((item, idx, arr) => arr.findIndex((x) => x.caseId === item.caseId) === idx)
+      .slice(0, 5);
+
+    return {
+      overdue,
+      dueToday,
+      waiting,
+      topItems,
+    };
+  }, [caseList]);
 
   const openCreateCase = () => {
     setCaseForm({
@@ -211,6 +178,93 @@ const Index = () => {
 
         <Card>
           <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <KanbanSquare className="h-4 w-4" />
+              Case Workflow
+            </div>
+            <div className="overflow-x-auto">
+              <div className="flex min-w-max gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStageFilter("all")}
+                  className={`rounded-md border px-3 py-2 text-left transition-colors ${stageFilter === "all" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                >
+                  <div className="text-xs font-semibold">All Stages</div>
+                  <div className={`text-[11px] ${stageFilter === "all" ? "text-primary-foreground/90" : "text-muted-foreground"}`}>full pipeline</div>
+                  <div className="mt-1 text-sm font-semibold">{caseList.length}</div>
+                </button>
+                {workflowStageSummary.map((entry) => {
+                  const active = stageFilter === entry.stage;
+                  return (
+                    <button
+                      key={entry.stage}
+                      type="button"
+                      onClick={() => setStageFilter(entry.stage)}
+                      className={`rounded-md border px-3 py-2 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
+                    >
+                      <div className="text-xs font-semibold">{STAGE_LABELS[entry.stage]}</div>
+                      <div className={`text-[11px] ${active ? "text-primary-foreground/90" : "text-muted-foreground"}`}>workflow lane</div>
+                      <div className="mt-1 text-sm font-semibold">{entry.count}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <CalendarClock className="h-4 w-4" />
+              Today's Queue
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Overdue Deadlines</div>
+                <div className="text-xl font-semibold text-destructive">{todaysQueue.overdue.length}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Due in 24h</div>
+                <div className="text-xl font-semibold">{todaysQueue.dueToday.length}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Waiting on Response</div>
+                <div className="text-xl font-semibold">{todaysQueue.waiting.length}</div>
+              </div>
+            </div>
+            {todaysQueue.topItems.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {todaysQueue.topItems.map((item) => (
+                  <button
+                    key={item.caseId}
+                    type="button"
+                    onClick={() => setSelectedCaseId(item.caseId)}
+                    className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left hover:bg-muted/50"
+                  >
+                    <div>
+                      <div className="text-sm font-medium">{item.caseId}</div>
+                      <div className="text-xs text-muted-foreground">{customerNames[item.customerId] ?? item.customerId} • {item.category}</div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      {item.deadline && new Date(item.deadline).getTime() < Date.now() && (
+                        <span className="inline-flex items-center gap-1 text-destructive"><AlertTriangle className="h-3 w-3" />Overdue</span>
+                      )}
+                      <Badge variant="outline">{STAGE_LABELS[mapCaseStateToStage(item.state)]}</Badge>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <KanbanSquare className="h-4 w-4" />
+              Case Command Bar
+            </div>
             <div className="space-y-3">
               <SearchFilterBar
                 query={query}

@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -91,6 +91,22 @@ const WORKFLOW_STEPS: Array<{ status: LeadStatus; title: string; subtitle: strin
   { status: "SEND_RESPONSE", title: "6. Response", subtitle: "final response" },
   { status: "CLIENT", title: "7. Client", subtitle: "converted" },
 ];
+
+const WORKFLOW_SEQUENCE: LeadStatus[] = [
+  "INTAKE",
+  "SEND_PROPOSAL",
+  "WAITING_APPROVAL",
+  "SEND_CONTRACT",
+  "WAITING_ACCEPTANCE",
+  "SEND_RESPONSE",
+  "CLIENT",
+];
+
+function getNextWorkflowStatus(status: LeadStatus): LeadStatus | null {
+  const index = WORKFLOW_SEQUENCE.indexOf(status);
+  if (index < 0) return null;
+  return WORKFLOW_SEQUENCE[index + 1] ?? null;
+}
 
 const Customers = () => {
   const [search, setSearch] = useState("");
@@ -250,13 +266,6 @@ const Customers = () => {
       withCases,
     };
   }, [sectionFilteredCustomers, assignedMap, caseCounts]);
-
-  const customerById = useMemo(() => {
-    return customers.reduce<Record<string, Customer>>((acc, cust) => {
-      acc[cust.customerId] = cust;
-      return acc;
-    }, {});
-  }, [customers]);
 
   const toggleCategoryFilter = (category: string) => {
     setSelectedCategories((prev) => (
@@ -448,6 +457,15 @@ const Customers = () => {
     }
   };
 
+  const handleAdvanceStatus = async (customer: Customer) => {
+    const next = getNextWorkflowStatus(customer.status);
+    if (!next) {
+      toast({ title: "No next step", description: "This customer is already at the final workflow stage." });
+      return;
+    }
+    await handleSetStatus(customer.customerId, next);
+  };
+
   // Confirm-assign dialog state
   const [showConfirmAssign, setShowConfirmAssign] = useState(false);
   const [confirmAssignCustomerId, setConfirmAssignCustomerId] = useState<string | null>(null);
@@ -470,8 +488,6 @@ const Customers = () => {
       toast({ title: 'Confirm failed', description: String(err), variant: 'destructive' });
     }
   };
-
-  const isAdmin = user?.role === "admin";
 
   const handleUploadCustomerDocument = async (file?: File) => {
     if (!file || !selectedCustomer) return;
@@ -598,67 +614,74 @@ const Customers = () => {
           </CardContent>
         </Card>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                Categories ({selectedCategories.length})
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {CATEGORY_OPTIONS.map((category) => {
-                const checked = selectedCategories.includes(category);
-                return (
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <SlidersHorizontal className="h-4 w-4" />
+              Customer Command Bar
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Categories ({selectedCategories.length})
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {CATEGORY_OPTIONS.map((category) => {
+                    const checked = selectedCategories.includes(category);
+                    return (
+                      <DropdownMenuItem
+                        key={category}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          toggleCategoryFilter(category);
+                        }}
+                        className="gap-2"
+                      >
+                        <Checkbox checked={checked} />
+                        <span>{category}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
                   <DropdownMenuItem
-                    key={category}
                     onSelect={(e) => {
                       e.preventDefault();
-                      toggleCategoryFilter(category);
+                      setSelectedCategories([...CATEGORY_OPTIONS]);
                     }}
-                    className="gap-2"
                   >
-                    <Checkbox checked={checked} />
-                    <span>{category}</span>
+                    Select all
                   </DropdownMenuItem>
-                );
-              })}
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setSelectedCategories([...CATEGORY_OPTIONS]);
-                }}
-              >
-                Select all
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setSelectedCategories([]);
-                }}
-              >
-                Clear all
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="flex items-center gap-2">
-            <Button variant={sectionView === "main" ? "default" : "outline"} size="sm" onClick={() => setSectionView("main")}>Main</Button>
-            <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
-            <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
-          </div>
-          {statusView !== "all" && (
-            <Button variant="ghost" size="sm" onClick={() => setStatusView("all")}>Clear Stage Filter</Button>
-          )}
-          {/* Removed global Expand/Collapse - category headers are collapsible individually */}
-          {(user?.role === 'intake' || user?.role === 'admin') && (
-            <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
-              <Plus className="h-4 w-4" /> New Customer
-            </Button>
-          )}
-        </div>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setSelectedCategories([]);
+                    }}
+                  >
+                    Clear all
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="flex items-center gap-2">
+                <Button variant={sectionView === "main" ? "default" : "outline"} size="sm" onClick={() => setSectionView("main")}>Main</Button>
+                <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
+                <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
+              </div>
+              {statusView !== "all" && (
+                <Button variant="ghost" size="sm" onClick={() => setStatusView("all")}>Clear Stage Filter</Button>
+              )}
+              {(user?.role === 'intake' || user?.role === 'admin') && (
+                <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
+                  <Plus className="h-4 w-4" /> New Customer
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="p-0">
@@ -701,7 +724,7 @@ const Customers = () => {
                     : group.items.map((c) => {
                       const caseCount = caseCounts[c.customerId] || 0;
                       return (
-                        <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer" onClick={() => setSelectedId(c.customerId)}>
+                        <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
                           <TableCell className="text-sm">{c.phone}</TableCell>
@@ -724,6 +747,24 @@ const Customers = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Edit</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-8"
+                                    disabled={!getNextWorkflowStatus(c.status)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAdvanceStatus(c).catch(() => {});
+                                    }}
+                                  >
+                                    Advance
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Move to next workflow step</TooltipContent>
                               </Tooltip>
 
                               {c.status !== 'ARCHIVED' ? (
@@ -820,6 +861,14 @@ const Customers = () => {
                         <div className="mt-2 flex items-center justify-between">
                           <Badge variant="secondary">{caseCount} case{caseCount === 1 ? "" : "s"}</Badge>
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={!getNextWorkflowStatus(c.status)}
+                              onClick={() => handleAdvanceStatus(c).catch(() => {})}
+                            >
+                              Advance
+                            </Button>
                             <Button variant="outline" size="sm" onClick={() => openEdit(c.customerId)}>Edit</Button>
                             <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(c.customerId)}>Delete</Button>
                           </div>
