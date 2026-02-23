@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
+import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 
 type CaseFormState = {
@@ -342,7 +343,7 @@ const Index = () => {
   return (
     <MainLayout
       title="Client Cases"
-      right={<Button size="sm" onClick={openCreateCase}>New Case</Button>}
+      right={<><CaseAlerts filterType="case" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
     >
       <div className="space-y-4">
         <DashboardKPIs key={tick} />

@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteCustomerNotification, getAllCases, getAllCustomers, getConfirmedClients, getCustomerNotifications } from "@/lib/case-store";
-import { mapCaseStateToStage } from "@/lib/utils";
+import { mapCaseStateToStage, stripProfessionalTitle } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Customer, CustomerNotification } from "@/lib/types";
+
+export type AlertFilterType = "case" | "customer" | "all";
 
 const DISMISSED_ALERTS_KEY = "dismissed_customer_alerts";
 const DISMISSED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -120,11 +122,20 @@ type AlertItem = {
   severity: "warn" | "critical";
 };
 
-export const CaseAlerts = () => {
+export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterType }) => {
   const { user } = useAuth();
-  const canSeeCustomerAlerts = user?.role === "admin" || user?.role === "intake";
   const isAdmin = user?.role === "admin";
-  const canSeeCaseAlerts = Boolean(user) && user?.role !== "intake";
+  const currentLawyer = stripProfessionalTitle(user?.consultantName || user?.lawyerName) || "";
+
+  // What alert types to show based on role + filterType
+  const canSeeCustomerAlerts =
+    (user?.role === "admin" || user?.role === "intake") &&
+    (filterType === "customer" || filterType === "all");
+  const canSeeCaseAlerts =
+    Boolean(user) &&
+    user?.role !== "intake" &&
+    (filterType === "case" || filterType === "all");
+
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [customersMap, setCustomersMap] = useState<Record<string, string>>({});
   const [seenAlertIds, setSeenAlertIds] = useState<Set<string>>(new Set());
@@ -154,8 +165,9 @@ export const CaseAlerts = () => {
       acc[c.customerId] = c.name;
       return acc;
     }, {});
-    const statusMap = allCustomers.reduce<Record<string, string>>((acc, c) => {
-      acc[c.customerId] = c.status || "";
+    // Map customerId → assignedTo (normalized) for per-user filtering
+    const assignedToMap = allCustomers.reduce<Record<string, string>>((acc, c) => {
+      acc[c.customerId] = stripProfessionalTitle((c as Customer & { assignedTo?: string }).assignedTo) || "";
       return acc;
     }, {});
     setCustomersMap(nameMap);
@@ -164,45 +176,51 @@ export const CaseAlerts = () => {
     if (canSeeCaseAlerts) {
       const all = await getAllCases();
       const now = Date.now();
-      caseAlerts = all.flatMap((c) => {
-        const out: AlertItem[] = [];
-        if (c.deadline) {
-          const stage = mapCaseStateToStage(c.state);
-          if (stage === "FINALIZED") return out;
-          const deadlineTime = new Date(c.deadline).getTime();
-          const hoursUntil = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
-          if (deadlineTime < now) out.push({ id: `case-${c.caseId}-overdue`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
-          else if (hoursUntil <= 48) out.push({ id: `case-${c.caseId}-deadline-48`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntil)}h`, kind: "deadline", severity: "warn" });
-        }
-        return out;
-      });
+      caseAlerts = all
+        // Non-admins only see cases assigned to themselves
+        .filter((c) => isAdmin || !currentLawyer || stripProfessionalTitle(c.assignedTo) === currentLawyer)
+        .flatMap((c) => {
+          const out: AlertItem[] = [];
+          if (c.deadline) {
+            const stage = mapCaseStateToStage(c.state);
+            if (stage === "FINALIZED") return out;
+            const deadlineTime = new Date(c.deadline).getTime();
+            const hoursUntil = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
+            if (deadlineTime < now) out.push({ id: `case-${c.caseId}-overdue`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
+            else if (hoursUntil <= 48) out.push({ id: `case-${c.caseId}-deadline-48`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntil)}h`, kind: "deadline", severity: "warn" });
+          }
+          return out;
+        });
     }
 
     let customerAlerts: AlertItem[] = [];
     if (canSeeCustomerAlerts) {
       const remote = await getCustomerNotifications();
       const source = remote.length > 0 ? remote : buildFallbackNotifications(customers);
-      customerAlerts = source.map((n) => ({
-        id: n.notificationId,
-        type: "customer",
-        customerId: n.customerId,
-        message: n.message,
-        kind: n.kind,
-        severity: n.severity,
-      }));
+      customerAlerts = source
+        // Non-admins only see notifications for customers assigned to themselves
+        .filter((n) => isAdmin || !currentLawyer || assignedToMap[n.customerId] === currentLawyer)
+        .map((n) => ({
+          id: n.notificationId,
+          type: "customer" as const,
+          customerId: n.customerId,
+          message: n.message,
+          kind: n.kind,
+          severity: n.severity,
+        }));
     }
 
     const combined = [...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
     setAlerts(combined);
-  }, [canSeeCaseAlerts, canSeeCustomerAlerts, dismissedAlertMap]);
+  }, [canSeeCaseAlerts, canSeeCustomerAlerts, dismissedAlertMap, isAdmin, currentLawyer]);
 
-  const dismissCustomerAlert = useCallback(async (alertId: string) => {
+  // Unified dismiss — works for both case and customer alerts
+  const dismissAlert = useCallback(async (alertId: string, alertType: "case" | "customer") => {
     if (!alertId) return;
     markAlertDismissed(alertId);
     setAlerts((prev) => prev.filter((a) => a.id !== alertId));
-    if (alertId.startsWith("local-")) {
-      return;
-    }
+    // Case alerts and local-fallback customer alerts are local only — no server call needed
+    if (alertType === "case" || alertId.startsWith("local-")) return;
     setDismissingIds((prev) => {
       const next = new Set(prev);
       next.add(alertId);
@@ -262,22 +280,21 @@ export const CaseAlerts = () => {
                 <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
                 <span className="text-xs text-muted-foreground">{customersMap[a.customerId] ? `${customersMap[a.customerId]} (${a.customerId})` : a.customerId}</span>
               </div>
-              {a.type === "customer" && (user?.role === "admin" || user?.role === "intake") && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  aria-label="Dismiss notification"
-                  disabled={dismissingIds.has(a.id)}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dismissCustomerAlert(a.id).catch(() => {});
-                  }}
-                >
-                  <X className={`h-3.5 w-3.5 ${dismissingIds.has(a.id) ? "animate-spin" : ""}`} />
-                </Button>
-              )}
+              {/* X button on every alert — all users can dismiss their own notifications */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                aria-label="Dismiss notification"
+                disabled={dismissingIds.has(a.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dismissAlert(a.id, a.type).catch(() => {});
+                }}
+              >
+                <X className={`h-3.5 w-3.5 ${dismissingIds.has(a.id) ? "animate-spin" : ""}`} />
+              </Button>
             </div>
           </DropdownMenuItem>
         ))}

@@ -47,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
+import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 
 // Reusable safe date formatter
@@ -635,7 +636,7 @@ const Customers = () => {
     }
   };
   return (
-    <MainLayout title="Customers">
+    <MainLayout title="Customers" right={<CaseAlerts filterType="customer" />}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           <Card>

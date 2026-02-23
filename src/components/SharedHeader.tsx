@@ -8,7 +8,6 @@ import {
 import Nav from "./Nav";
 import { DrawerContentLeft } from "./ui/drawer";
 import { Menu, Moon, Sun } from "lucide-react";
-import CaseAlerts from "./CaseAlerts";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 
@@ -19,7 +18,6 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
-  const canSeeAlerts = Boolean(user);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showMoreColumns, setShowMoreColumns] = useState(false);
   const canToggleColumns = location.pathname === "/" || location.pathname.startsWith("/customers");
@@ -101,7 +99,6 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
-          {canSeeAlerts && <CaseAlerts />}
           {right}
         </div>
       </div>
