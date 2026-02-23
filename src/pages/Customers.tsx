@@ -308,7 +308,7 @@ const Customers = () => {
     ON_HOLD: "bg-amber-50 text-amber-800",
   };
 
-  const customerTableColumns = showMoreCustomerColumns ? 6 : 4;
+  const customerTableColumns = showMoreCustomerColumns ? 6 : 5;
 
   const hasCustomerFilters = Boolean(search) || sectionView !== "main" || statusView !== "all" || selectedCategories.length !== CATEGORY_OPTIONS.length;
 
@@ -805,11 +805,12 @@ const Customers = () => {
         <Card>
           <CardContent className="p-0">
             <div className="hidden md:block overflow-x-auto">
-            <Table className="min-w-[760px]">
+            <Table className="min-w-[860px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Assigned</TableHead>
                   {showMoreCustomerColumns && <TableHead>Contact</TableHead>}
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[220px] text-right">Actions</TableHead>
@@ -846,6 +847,7 @@ const Customers = () => {
                         <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
                           {showMoreCustomerColumns && (
                             <TableCell className="text-sm text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
                           )}

@@ -133,7 +133,6 @@ export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterTyp
     (filterType === "customer" || filterType === "all");
   const canSeeCaseAlerts =
     Boolean(user) &&
-    user?.role !== "intake" &&
     (filterType === "case" || filterType === "all");
 
   const [alerts, setAlerts] = useState<AlertItem[]>([]);

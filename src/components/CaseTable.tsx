@@ -30,14 +30,16 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
       <CardContent className="p-0">
         {/* Desktop / tablet: full table */}
         <div className="hidden sm:block overflow-x-auto">
-          <Table className={showMoreColumns ? "min-w-[860px]" : "min-w-[560px]"}>
+          <Table className={showMoreColumns ? "min-w-[1000px]" : "min-w-[700px]"}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
                 <TableHead>Customer</TableHead>
-                {showMoreColumns && <TableHead>Category</TableHead>}
-                <TableHead className="w-[220px]">Due</TableHead>
-                {showMoreColumns && <TableHead className="w-[100px]">Assigned</TableHead>}
+                <TableHead>Category</TableHead>
+                <TableHead className="w-[110px]">Assigned</TableHead>
+                <TableHead className="w-[160px]">Due</TableHead>
+                {showMoreColumns && <TableHead className="w-[80px]">Priority</TableHead>}
+                {showMoreColumns && <TableHead className="w-[90px]">Docs</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -54,7 +56,8 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                   <TableRow key={c.caseId} className={`cursor-pointer transition-colors hover:bg-muted/50 ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
                     <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
                     <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
-                    {showMoreColumns && <TableCell className="text-muted-foreground text-sm">{c.category} / {c.subcategory}</TableCell>}
+                    <TableCell className="text-sm text-muted-foreground">{c.category}{c.subcategory ? ` / ${c.subcategory}` : ""}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
                     <TableCell className={`text-xs ${overdue ? "text-destructive font-semibold" : dueSoon ? "text-amber-700 font-medium" : ""}`}>
                       {c.deadline ? (
                         <span className={`flex items-center gap-1 ${overdue ? "text-destructive" : dueSoon ? "text-amber-700" : "text-muted-foreground"}`}>
@@ -65,7 +68,16 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                         <span className="text-muted-foreground">No deadline</span>
                       )}
                     </TableCell>
-                    {showMoreColumns && <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo}</TableCell>}
+                    {showMoreColumns && (
+                      <TableCell className="text-xs capitalize text-muted-foreground">{c.priority || "—"}</TableCell>
+                    )}
+                    {showMoreColumns && (
+                      <TableCell>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.documentState === "missing" ? "bg-destructive/10 text-destructive" : "bg-green-100 text-green-700"}`}>
+                          {c.documentState === "missing" ? "Missing" : "OK"}
+                        </span>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

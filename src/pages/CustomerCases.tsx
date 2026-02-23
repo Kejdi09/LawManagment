@@ -6,7 +6,7 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
-import { CalendarClock, KanbanSquare } from "lucide-react";
+import { CalendarClock, ChevronDown, KanbanSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +43,7 @@ type SavedCaseView = {
 const SAVED_CASE_VIEWS_KEY = "lm:saved-customer-case-views";
 const CASE_COLUMNS_MODE_KEY = "lm:show-more-columns";
 const CASE_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
+const DASHBOARD_OPEN_KEY = "lm:dashboard-open";
 
 const CustomerCases = () => {
   const { user } = useAuth();
@@ -80,6 +81,9 @@ const CustomerCases = () => {
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
   const [newViewName, setNewViewName] = useState("");
   const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(() => {
+    try { return localStorage.getItem(DASHBOARD_OPEN_KEY) !== "0"; } catch { return true; }
+  });
   const [listPage, setListPage] = useState(1);
   const listPageSize = 30;
   const { toast } = useToast();
@@ -318,9 +322,22 @@ const CustomerCases = () => {
       right={<><CaseAlerts filterType="case" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
     >
       <div className="space-y-4">
-        <DashboardKPIs key={tick} />
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => {
+            const next = !dashboardOpen;
+            setDashboardOpen(next);
+            try { localStorage.setItem(DASHBOARD_OPEN_KEY, next ? "1" : "0"); } catch {}
+          }}
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${dashboardOpen ? "rotate-0" : "-rotate-90"}`} />
+          {dashboardOpen ? "Hide dashboard" : "Show dashboard"}
+        </button>
 
-        <Card>
+        {dashboardOpen && <DashboardKPIs key={tick} />}
+
+        {dashboardOpen && <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <KanbanSquare className="h-4 w-4" />
@@ -355,9 +372,9 @@ const CustomerCases = () => {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card>}
 
-        <Card>
+        {dashboardOpen && <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <CalendarClock className="h-4 w-4" />
@@ -390,9 +407,9 @@ const CustomerCases = () => {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
-        <Card>
+        {dashboardOpen && <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="mb-3 text-sm font-semibold">{myWorkSummary.title}</div>
             <div className="grid gap-3 md:grid-cols-3">
@@ -404,7 +421,7 @@ const CustomerCases = () => {
               ))}
             </div>
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card>
           <CardContent className="p-3 sm:p-4">
