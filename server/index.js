@@ -465,6 +465,7 @@ function buildCaseFilters(query) {
   const filters = {};
   if (query.state) filters.state = query.state;
   if (query.customerId) filters.customerId = query.customerId;
+  if (query.caseType === 'customer' || query.caseType === 'client') filters.caseType = query.caseType;
   return filters;
 }
 
@@ -1199,7 +1200,7 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
     return res.status(400).json({ error: isIntakeUser ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
   }
 
-  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null };
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null, caseType: useCustomerCol ? 'customer' : 'client' };
   // Strip internal routing hint before storing
   delete payload.caseScope;
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);

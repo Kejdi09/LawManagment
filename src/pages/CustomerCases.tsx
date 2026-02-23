@@ -150,8 +150,8 @@ const CustomerCases = () => {
   }, [savedViews, persistSavedViews]);
 
   const loadCases = useCallback(async () => {
-    const all = await getAllCases();
-    const base = query ? await searchCases(query) : all;
+    const all = await getAllCases('customer');
+    const base = query ? await searchCases(query, 'customer') : all;
     const filtered = base.filter((c) => {
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
       if (docFilter !== "all" && c.documentState !== docFilter) return false;

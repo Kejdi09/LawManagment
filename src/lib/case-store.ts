@@ -63,8 +63,9 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 // ── Cases ──
-export async function getAllCases(): Promise<Case[]> {
-  return api<Case[]>("/api/cases");
+export async function getAllCases(caseType?: string): Promise<Case[]> {
+  const url = caseType ? `/api/cases?caseType=${caseType}` : "/api/cases";
+  return api<Case[]>(url);
 }
 
 export async function getCasesPage(page: number, pageSize: number, sortBy = "caseId", sortDir: "asc" | "desc" = "asc"): Promise<PagedResult<Case>> {
@@ -93,9 +94,10 @@ export async function getCasesByCustomer(customerId: string): Promise<Case[]> {
   return api<Case[]>(`/api/customers/${customerId}/cases`);
 }
 
-export async function searchCases(query: string): Promise<Case[]> {
+export async function searchCases(query: string, caseType?: string): Promise<Case[]> {
   const q = encodeURIComponent(query);
-  return api<Case[]>(`/api/cases?q=${q}`);
+  const typeParam = caseType ? `&caseType=${caseType}` : "";
+  return api<Case[]>(`/api/cases?q=${q}${typeParam}`);
 }
 
 export async function createCase(payload: Omit<Case, "caseId" | "lastStateChange">): Promise<Case> {
