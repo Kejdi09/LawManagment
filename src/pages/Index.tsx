@@ -6,7 +6,7 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
-import { CalendarClock, ChevronDown, KanbanSquare } from "lucide-react";
+import { CalendarClock, ChevronDown, KanbanSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +74,26 @@ const Index = () => {
   const availableLawyers = isAdmin ? CLIENT_LAWYERS : [];
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  const exportCSV = useCallback(() => {
+    const header = ["Case ID", "Customer", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Priority", "Deadline"];
+    const rows = caseList.map((c) => [
+      c.caseId,
+      customerNames[c.customerId] || c.customerId,
+      c.title || "",
+      c.category,
+      c.subcategory || "",
+      c.state,
+      c.assignedTo || "",
+      c.priority || "",
+      c.deadline || "",
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "client-cases.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }, [caseList, customerNames]);
 
   const [caseList, setCaseList] = useState<Awaited<ReturnType<typeof getAllCases>>>([]);
   const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
@@ -361,7 +381,7 @@ const Index = () => {
   return (
     <MainLayout
       title="Client Cases"
-      right={<><CaseAlerts filterType="case" caseScope="client" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
+      right={<><CaseAlerts filterType="case" caseScope="client" /><Button size="sm" variant="outline" onClick={exportCSV} title="Export to CSV"><Download className="h-4 w-4 mr-1" />Export</Button><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
     >
       <div className="space-y-4">
         <button

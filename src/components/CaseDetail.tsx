@@ -3,11 +3,12 @@ import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
   getTasksByCaseId, addHistory, addNote, addTask, toggleTask, deleteTask, updateCase, deleteCase,
   getDocuments, uploadDocument, deleteDocument, fetchDocumentBlob, StoredDocument,
+  getCommsLog, addCommEntry, deleteCommEntry,
 } from "@/lib/case-store";
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
   Case, Customer, HistoryRecord, Note, CaseTask,
-  CLIENT_LAWYERS, INTAKE_LAWYERS,
+  CLIENT_LAWYERS, INTAKE_LAWYERS, CommEntry, CommChannel, CommDirection,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
   const [caseNotes, setCaseNotes] = useState<Note[]>([]);
   const [caseTasks, setCaseTasks] = useState<CaseTask[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
+  const [commsLog, setCommsLog] = useState<CommEntry[]>([]);
+  const [commChannel, setCommChannel] = useState<CommChannel>("phone");
+  const [commDirection, setCommDirection] = useState<CommDirection>("inbound");
+  const [commSummary, setCommSummary] = useState("");
+  const [isCommBusy, setIsCommBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [noteText, setNoteText] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -129,6 +135,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
         setDocuments(docs);
       } catch (e) {
         setDocuments([]);
+      }
+      try {
+        const comms = await getCommsLog(id);
+        setCommsLog(comms);
+      } catch {
+        setCommsLog([]);
       }
       previousCaseIdRef.current = id;
     } catch (err: unknown) {
@@ -670,6 +682,67 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Comms Log */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Communications Log</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Select value={commChannel} onValueChange={(v) => setCommChannel(v as CommChannel)}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phone">Phone</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="inperson">In Person</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={commDirection} onValueChange={(v) => setCommDirection(v as CommDirection)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inbound">Inbound</SelectItem>
+                    <SelectItem value="outbound">Outbound</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input placeholder="Summary..." value={commSummary} onChange={(e) => setCommSummary(e.target.value)} className="flex-1 min-w-[140px]" disabled={isCommBusy} />
+                <Button size="sm" disabled={isCommBusy || !commSummary.trim()} onClick={async () => {
+                  if (!caseId || !commSummary.trim()) return;
+                  setIsCommBusy(true);
+                  try {
+                    await addCommEntry(caseId, { channel: commChannel, direction: commDirection, summary: commSummary.trim(), date: new Date().toISOString() });
+                    setCommSummary("");
+                    setCommsLog(await getCommsLog(caseId));
+                  } catch (err) {
+                    toast({ title: "Error", description: String(err), variant: "destructive" });
+                  } finally { setIsCommBusy(false); }
+                }}>Log</Button>
+              </div>
+              {commsLog.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No communications logged.</p>
+              ) : (
+                <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                  {commsLog.map((entry) => (
+                    <div key={entry.commId} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+                      <div className="flex-1">
+                        <div className="flex gap-2 flex-wrap items-center">
+                          <Badge variant="outline" className="capitalize text-xs">{entry.channel}</Badge>
+                          <Badge variant={entry.direction === "inbound" ? "secondary" : "default"} className="text-xs">{entry.direction}</Badge>
+                          <span className="text-xs text-muted-foreground ml-auto">{formatOptionalDateTime(entry.date)}</span>
+                        </div>
+                        <p className="mt-1 text-sm">{entry.summary}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={async () => {
+                        if (!caseId) return;
+                        try { await deleteCommEntry(entry.commId); setCommsLog(await getCommsLog(caseId)); } catch {}
+                      }}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   ))}
                 </div>

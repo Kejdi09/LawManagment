@@ -263,3 +263,44 @@ export interface CustomerNotification {
   severity: "warn" | "critical";
   createdAt: string;
 }
+
+export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
+
+export interface Invoice {
+  invoiceId: string;
+  caseId?: string | null;
+  customerId: string;
+  description: string;
+  amount: number;
+  currency: string;
+  status: InvoiceStatus;
+  dueDate?: string | null;
+  createdAt: string;
+  createdBy?: string | null;
+  assignedTo?: string | null;
+}
+
+export type CommChannel = "email" | "whatsapp" | "phone" | "inperson";
+export type CommDirection = "inbound" | "outbound";
+
+export interface CommEntry {
+  commId: string;
+  caseId: string;
+  channel: CommChannel;
+  direction: CommDirection;
+  summary: string;
+  date: string;
+  loggedBy?: string | null;
+}
+
+export interface SearchResult {
+  customers: Array<{ customerId: string; name: string; status: string; type: "customer" }>;
+  clients: Array<{ customerId: string; name: string; status: string; type: "client" }>;
+  cases: Array<{ caseId: string; title?: string; customerId: string; state: string; caseType?: string; type: "case" }>;
+}
+
+export interface PortalData {
+  client: { name: string; customerId: string; services: ServiceType[]; status: string };
+  cases: Array<{ caseId: string; title?: string; category: string; subcategory: string; state: string; deadline?: string | null; lastStateChange: string }>;
+  history: HistoryRecord[];
+}

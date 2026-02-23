@@ -1,4 +1,4 @@
-import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Meeting, Note, TeamSummary } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Invoice, Meeting, Note, PortalData, SearchResult, TeamSummary } from "./types";
 
 export type PagedResult<T> = {
   items: T[];
@@ -355,4 +355,60 @@ export async function updateMeeting(meetingId: string, patch: Partial<Meeting>):
 
 export async function deleteMeeting(meetingId: string): Promise<void> {
   await api(`/api/meetings/${meetingId}`, { method: "DELETE" });
+}
+
+// ── Global Search ──
+export async function globalSearch(q: string): Promise<SearchResult> {
+  return api<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`);
+}
+
+// ── Invoices ──
+export async function getInvoices(filters?: { caseId?: string; customerId?: string }): Promise<Invoice[]> {
+  const params = new URLSearchParams();
+  if (filters?.caseId) params.set("caseId", filters.caseId);
+  if (filters?.customerId) params.set("customerId", filters.customerId);
+  const qs = params.toString();
+  return api<Invoice[]>(qs ? `/api/invoices?${qs}` : "/api/invoices");
+}
+
+export async function createInvoice(payload: Omit<Invoice, "invoiceId" | "createdAt">): Promise<Invoice> {
+  return api<Invoice>("/api/invoices", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updateInvoice(invoiceId: string, patch: Partial<Invoice>): Promise<Invoice> {
+  return api<Invoice>(`/api/invoices/${invoiceId}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+
+export async function deleteInvoice(invoiceId: string): Promise<void> {
+  await api(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+}
+
+// ── Communications Log ──
+export async function getCommsLog(caseId: string): Promise<CommEntry[]> {
+  return api<CommEntry[]>(`/api/cases/${caseId}/comms`);
+}
+
+export async function addCommEntry(caseId: string, payload: { channel: string; direction: string; summary: string }): Promise<CommEntry> {
+  return api<CommEntry>(`/api/cases/${caseId}/comms`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function deleteCommEntry(commId: string): Promise<void> {
+  await api(`/api/comms/${commId}`, { method: "DELETE" });
+}
+
+// ── Client Portal ──
+export async function generatePortalToken(customerId: string, expiresInDays = 30): Promise<{ token: string; expiresAt: string }> {
+  return api("/api/portal/tokens", { method: "POST", body: JSON.stringify({ customerId, expiresInDays }) });
+}
+
+export async function getPortalToken(customerId: string): Promise<{ token: string; expiresAt: string } | null> {
+  try {
+    return await api<{ token: string; expiresAt: string } | null>(`/api/portal/tokens/${customerId}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function getPortalData(token: string): Promise<PortalData> {
+  return api<PortalData>(`/api/portal/${token}`);
 }

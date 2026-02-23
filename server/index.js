@@ -18,6 +18,9 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || "lawman";
 const IS_PROD = process.env.NODE_ENV === "production";
 let documentsCol;
+let invoicesCol;
+let commsLogCol;
+let portalTokensCol;
 const app = express();
 app.set("trust proxy", 1);
 
@@ -108,6 +111,9 @@ async function connectDb() {
   usersCol = db.collection("users");
   auditLogsCol = db.collection("auditLogs");
   documentsCol = db.collection("documents");
+  invoicesCol = db.collection("invoices");
+  commsLogCol = db.collection("commsLog");
+  portalTokensCol = db.collection("portalTokens");
 }
 
 async function seedIfEmpty() {
@@ -1708,4 +1714,146 @@ app.delete('/api/meetings/:id', verifyAuth, async (req, res) => {
   await meetingsCol.deleteOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'meeting', resourceId: id });
   res.json({ ok: true });
+});
+
+// ── Global Search ──────────────────────────────────────────────────────────────
+app.get('/api/search', verifyAuth, async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q || q.length < 2) return res.json({ customers: [], clients: [], cases: [] });
+  const regex = new RegExp(escapeRegex(q), 'i');
+  const [customers, clients, cases] = await Promise.all([
+    customersCol.find({ $or: [{ name: regex }, { customerId: regex }, { phone: regex }, { email: regex }] }).limit(8).toArray(),
+    confirmedClientsCol.find({ $or: [{ name: regex }, { customerId: regex }, { phone: regex }, { email: regex }] }).limit(8).toArray(),
+    casesCol.find({ $or: [{ caseId: regex }, { title: regex }, { category: regex }, { customerId: regex }], ...buildCaseScopeFilter(req.user) }).limit(8).toArray(),
+  ]);
+  res.json({
+    customers: customers.map(c => ({ customerId: c.customerId, name: c.name, status: c.status, type: 'customer' })),
+    clients: clients.map(c => ({ customerId: c.customerId, name: c.name, status: c.status, type: 'client' })),
+    cases: cases.map(c => ({ caseId: c.caseId, title: c.title, customerId: c.customerId, state: c.state, caseType: c.caseType, type: 'case' })),
+  });
+});
+
+// ── Invoices ───────────────────────────────────────────────────────────────────
+app.get('/api/invoices', verifyAuth, async (req, res) => {
+  const filter = {};
+  if (req.query.caseId) filter.caseId = String(req.query.caseId);
+  if (req.query.customerId) filter.customerId = String(req.query.customerId);
+  if (!isAdminUser(req.user)) {
+    const lawyerName = getUserLawyerName(req.user);
+    if (lawyerName) filter.assignedTo = lawyerName;
+  }
+  const items = await invoicesCol.find(filter).sort({ createdAt: -1 }).toArray();
+  res.json(items);
+});
+
+app.post('/api/invoices', verifyAuth, async (req, res) => {
+  const { caseId, customerId, description, amount, currency = 'EUR', status = 'pending', dueDate } = req.body;
+  if (!customerId) return res.status(400).json({ error: 'customerId required' });
+  const now = new Date().toISOString();
+  const doc = {
+    invoiceId: genShortId('INV'),
+    caseId: caseId || null,
+    customerId,
+    description: description || '',
+    amount: Number(amount) || 0,
+    currency,
+    status, // pending | paid | overdue | cancelled
+    dueDate: dueDate || null,
+    createdAt: now,
+    createdBy: req.user?.username || null,
+    assignedTo: getUserLawyerName(req.user) || null,
+  };
+  await invoicesCol.insertOne(doc);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'invoice', resourceId: doc.invoiceId, details: { doc } });
+  res.status(201).json(doc);
+});
+
+app.put('/api/invoices/:id', verifyAuth, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const update = { ...req.body };
+  delete update._id;
+  delete update.invoiceId;
+  delete update.createdAt;
+  delete update.createdBy;
+  await invoicesCol.updateOne({ invoiceId: id }, { $set: update });
+  const updated = await invoicesCol.findOne({ invoiceId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'invoice', resourceId: id, details: { update } });
+  res.json(updated);
+});
+
+app.delete('/api/invoices/:id', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  await invoicesCol.deleteOne({ invoiceId: String(req.params.id) });
+  res.json({ ok: true });
+});
+
+// ── Case Communications Log ────────────────────────────────────────────────────
+app.get('/api/cases/:id/comms', verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: 'Not found' });
+  const items = await commsLogCol.find({ caseId: req.params.id }).sort({ date: -1 }).toArray();
+  res.json(items);
+});
+
+app.post('/api/cases/:id/comms', verifyAuth, async (req, res) => {
+  const allowed = await casesCol.findOne({ caseId: req.params.id, ...buildCaseScopeFilter(req.user) });
+  if (!allowed) return res.status(404).json({ error: 'Not found' });
+  const { channel, summary, direction = 'outbound' } = req.body;
+  if (!summary) return res.status(400).json({ error: 'summary required' });
+  const doc = {
+    commId: genShortId('CM'),
+    caseId: req.params.id,
+    channel: channel || 'email', // email | whatsapp | phone | inperson
+    direction, // inbound | outbound
+    summary,
+    date: new Date().toISOString(),
+    loggedBy: req.user?.username || null,
+  };
+  await commsLogCol.insertOne(doc);
+  res.status(201).json(doc);
+});
+
+app.delete('/api/comms/:id', verifyAuth, async (req, res) => {
+  await commsLogCol.deleteOne({ commId: String(req.params.id) });
+  res.json({ ok: true });
+});
+
+// ── Client Portal Tokens ───────────────────────────────────────────────────────
+app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const { customerId, expiresInDays = 30 } = req.body;
+  if (!customerId) return res.status(400).json({ error: 'customerId required' });
+  const client = await confirmedClientsCol.findOne({ customerId: String(customerId).trim() });
+  if (!client) return res.status(404).json({ error: 'Confirmed client not found' });
+  // Revoke any existing token for this client
+  await portalTokensCol.deleteMany({ customerId: String(customerId).trim() });
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+  const doc = { token: rawToken, customerId: String(customerId).trim(), createdAt: new Date().toISOString(), expiresAt, createdBy: req.user?.username };
+  await portalTokensCol.insertOne(doc);
+  res.json({ token: rawToken, expiresAt });
+});
+
+app.get('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const existing = await portalTokensCol.findOne({ customerId: String(req.params.customerId).trim() });
+  res.json(existing || null);
+});
+
+// Public portal data — no staff auth needed, uses portal token instead
+app.get('/api/portal/:token', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
+  const client = await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const cases = await casesCol.find({ customerId: tokenDoc.customerId }).sort({ lastStateChange: -1 }).toArray();
+  const caseIds = cases.map(c => c.caseId);
+  const history = caseIds.length ? await historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [];
+  // Return safe subset — no internal notes, no assignedTo details
+  res.json({
+    client: { name: client.name, customerId: client.customerId, services: client.services, status: client.status },
+    cases: cases.map(c => ({ caseId: c.caseId, title: c.title, category: c.category, subcategory: c.subcategory, state: c.state, deadline: c.deadline, lastStateChange: c.lastStateChange })),
+    history,
+  });
 });

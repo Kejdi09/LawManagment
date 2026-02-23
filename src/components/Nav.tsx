@@ -12,7 +12,8 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onCalendar = location.pathname.startsWith("/calendar");
   const onActivity = location.pathname.startsWith("/activity");
   const onCustomerCases = location.pathname.startsWith("/customer-cases");
-  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases);
+  const onInvoices = location.pathname.startsWith("/invoices");
+  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices);
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -46,6 +47,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         )}
         {user?.role === "admin" && (
           <Button className={itemClass} variant={onActivity ? "default" : "ghost"} onClick={() => go("/activity")}>Activity</Button>
+        )}
+        {user?.role === "admin" && (
+          <Button className={itemClass} variant={onInvoices ? "default" : "ghost"} onClick={() => go("/invoices")}>Invoices</Button>
         )}
       </div>
       {showAccount && (

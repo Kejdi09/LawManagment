@@ -10,6 +10,7 @@ import { DrawerContentLeft } from "./ui/drawer";
 import { Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
+import GlobalSearch from "./GlobalSearch";
 
 const GLOBAL_COLUMNS_MODE_KEY = "lm:show-more-columns";
 const GLOBAL_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
@@ -86,6 +87,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
           <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <GlobalSearch />
           {canToggleColumns && (
             <Button size="sm" variant="ghost" onClick={handleToggleColumns} className="hidden md:inline-flex">
               {showMoreColumns ? "Show fewer columns" : "Show more columns"}

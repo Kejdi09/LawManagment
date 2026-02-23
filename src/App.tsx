@@ -16,6 +16,8 @@ const AdminActivity = lazy(() => import("./pages/AdminActivity"));
 const Archived = lazy(() => import("./pages/Archived"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Login = lazy(() => import("./pages/Login"));
+const Invoices = lazy(() => import("./pages/Invoices"));
+const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 
 const queryClient = new QueryClient();
 
@@ -75,6 +77,8 @@ const App = () => (
                 <Route path="/calendar" element={<RequireAuth><Calendar /></RequireAuth>} />
                 <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
                 <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
+                <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
+                <Route path="/portal/:token" element={<ClientPortal />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

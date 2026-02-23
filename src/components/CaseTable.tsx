@@ -30,11 +30,12 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
       <CardContent className="p-0">
         {/* Desktop / tablet: full table */}
         <div className="hidden sm:block overflow-x-auto">
-          <Table className={showMoreColumns ? "min-w-[1000px]" : "min-w-[700px]"}>
+          <Table className={showMoreColumns ? "min-w-[1150px]" : "min-w-[860px]"}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
-                <TableHead>Customer</TableHead>
+                <TableHead className="w-[160px]">Customer</TableHead>
+                <TableHead>Title</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="w-[110px]">Assigned</TableHead>
                 <TableHead className="w-[160px]">Due</TableHead>
@@ -70,7 +71,12 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                     </TableCell>
                     <TableCell className="font-medium">
                       <div>{customerName ?? c.customerId}</div>
-                      {c.title && <div className="text-xs text-muted-foreground truncate max-w-[180px]">{c.title}</div>}
+                      <div className="text-xs text-muted-foreground font-mono">{c.customerId}</div>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {c.title
+                        ? <span className="text-sm">{c.title}</span>
+                        : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.category}{c.subcategory ? ` / ${c.subcategory}` : ""}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
@@ -118,7 +124,8 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                   <div className="font-mono text-xs font-medium">{c.caseId}</div>
                   <div className="flex-1">
                     <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
-                    {c.title && <div className="text-xs text-muted-foreground truncate">{c.title}</div>}
+                    <div className="text-xs text-muted-foreground font-mono">{c.customerId}</div>
+                    {c.title && <div className="text-xs font-medium mt-0.5 truncate">{c.title}</div>}
                     <div className="mt-2 text-xs text-muted-foreground ml-auto">{c.deadline ? formatDate(c.deadline) : 'No deadline'}</div>
                   </div>
                 </div>
