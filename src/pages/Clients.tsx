@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Phone, Mail, MapPin, StickyNote, Trash2 } from "lucide-react";
+import { Phone, Mail, MapPin, StickyNote, Trash2, Link2, Copy, RefreshCw } from "lucide-react";
 import {
   Customer,
   CustomerHistoryRecord,
@@ -38,6 +38,7 @@ import {
   fetchDocumentBlob,
   StoredDocument,
   createMeeting,
+  generatePortalToken,
 } from "@/lib/case-store";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -84,6 +85,8 @@ const ClientsPage = () => {
   const [clientDocuments, setClientDocuments] = useState<StoredDocument[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<Partial<Customer>>({});
+  const [portalLink, setPortalLink] = useState<string | null>(null);
+  const [isGeneratingPortal, setIsGeneratingPortal] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -110,6 +113,7 @@ const ClientsPage = () => {
 
   const openDetail = async (client: Customer) => {
     setSelectedClient(client);
+    setPortalLink(null);
     const [cases, history, docs] = await Promise.all([
       getCasesByCustomer(client.customerId),
       getCustomerHistory(client.customerId).catch(() => []),
@@ -347,6 +351,49 @@ const ClientsPage = () => {
                 </DialogHeader>
 
                 <div className="grid gap-4">
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Link2 className="h-4 w-4" />Client Portal Link</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-xs text-muted-foreground">Generate a secure read-only link your client can use to view their case status. The link expires in 30 days.</p>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isGeneratingPortal}
+                          onClick={async () => {
+                            if (!selectedClient) return;
+                            setIsGeneratingPortal(true);
+                            try {
+                              const result = await generatePortalToken(selectedClient.customerId, 30);
+                              const base = window.location.href.split('#')[0];
+                              const link = `${base}#/portal/${result.token}`;
+                              setPortalLink(link);
+                            } catch (err) {
+                              toast({ title: "Error", description: String(err), variant: "destructive" });
+                            } finally { setIsGeneratingPortal(false); }
+                          }}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          {portalLink ? "Regenerate Link" : "Generate Link"}
+                        </Button>
+                        {portalLink && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(portalLink);
+                              toast({ title: "Copied!", description: "Portal link copied to clipboard." });
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />Copy Link
+                          </Button>
+                        )}
+                      </div>
+                      {portalLink && (
+                        <div className="rounded-md bg-muted px-3 py-2 text-xs font-mono break-all select-all">{portalLink}</div>
+                      )}
+                    </CardContent>
+                  </Card>
+
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Overview</CardTitle></CardHeader>
                     <CardContent className="grid gap-2 text-sm">
