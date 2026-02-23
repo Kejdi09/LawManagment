@@ -11,7 +11,8 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onClients = location.pathname.startsWith("/clients");
   const onCalendar = location.pathname.startsWith("/calendar");
   const onActivity = location.pathname.startsWith("/activity");
-  const onCases = !onCustomers && !onClients && !onCalendar && !onActivity;
+  const onCustomerCases = location.pathname.startsWith("/customer-cases");
+  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases);
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -26,8 +27,13 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   return (
     <nav className="flex flex-col h-full">
       <div className="flex flex-col p-2 gap-2">
-        {!isAuthLoading && (
-          <Button className={itemClass} variant={onCases ? "default" : "ghost"} onClick={() => go("/")}>Cases</Button>
+        {/* Customer Cases: for intake/manager — pre-confirmation customer cases */}
+        {!isAuthLoading && (user?.role === "intake" || user?.role === "manager" || user?.role === "admin") && (
+          <Button className={itemClass} variant={onCustomerCases ? "default" : "ghost"} onClick={() => go("/customer-cases")}>Customer Cases</Button>
+        )}
+        {/* Client Cases: for consultants/admin — confirmed client cases */}
+        {!isAuthLoading && (user?.role === "consultant" || user?.role === "admin") && (
+          <Button className={itemClass} variant={onClientCases ? "default" : "ghost"} onClick={() => go("/")}>Client Cases</Button>
         )}
         {!isAuthLoading && (user?.role === "intake" || user?.role === "manager" || user?.role === "admin") && (
           <Button className={itemClass} variant={onCustomers ? "default" : "ghost"} onClick={() => go("/customers")}>Customers</Button>

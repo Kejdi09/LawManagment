@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { getAllCases, searchCases, createCase, getConfirmedClients } from "@/lib/case-store";
-import { ALL_STAGES, Priority, CLIENT_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
+import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
+import { ALL_STAGES, Priority, INTAKE_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -39,11 +39,11 @@ type SavedCaseView = {
   stageFilter: "all" | CaseStage;
 };
 
-const SAVED_CASE_VIEWS_KEY = "lm:saved-case-views";
+const SAVED_CASE_VIEWS_KEY = "lm:saved-customer-case-views";
 const CASE_COLUMNS_MODE_KEY = "lm:show-more-columns";
 const CASE_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 
-const Index = () => {
+const CustomerCases = () => {
   const { user } = useAuth();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -51,6 +51,12 @@ const Index = () => {
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [docFilter, setDocFilter] = useState<"all" | "ok" | "missing">("all");
   const [showCaseForm, setShowCaseForm] = useState(false);
+  const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+  const currentLawyer = user?.consultantName || user?.lawyerName || "";
+  // Admin and manager assign to the intake team; intake users are locked to themselves
+  const availableLawyers = (isAdmin || isManager) ? INTAKE_LAWYERS : [];
+
   const [caseForm, setCaseForm] = useState<CaseFormState>({
     customerId: "",
     category: "",
@@ -61,13 +67,8 @@ const Index = () => {
     generalNote: "",
     priority: "medium",
     deadline: "",
-    assignedTo: CLIENT_LAWYERS[0],
+    assignedTo: isAdmin || isManager ? (currentLawyer || INTAKE_LAWYERS[0]) : (currentLawyer || ""),
   });
-  const isAdmin = user?.role === "admin";
-  const isManager = user?.role === "manager";
-  const currentLawyer = user?.consultantName || user?.lawyerName || "";
-  // Client Cases: admin assigns to Kejdi/Albert only; consultants are locked to themselves
-  const availableLawyers = isAdmin ? CLIENT_LAWYERS : [];
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -151,7 +152,6 @@ const Index = () => {
   const loadCases = useCallback(async () => {
     const all = await getAllCases();
     const base = query ? await searchCases(query) : all;
-
     const filtered = base.filter((c) => {
       if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
       if (docFilter !== "all" && c.documentState !== docFilter) return false;
@@ -162,19 +162,17 @@ const Index = () => {
 
   useEffect(() => {
     (async () => {
-      // Client Cases always link to confirmed clients
-      const confirmedClients = await getConfirmedClients();
-      const map = confirmedClients.reduce<Record<string, string>>((acc, c) => {
+      // Customer Cases always link to pre-confirmation customers
+      const allCustomers = await getAllCustomers();
+      const map = allCustomers.reduce<Record<string, string>>((acc, c) => {
         acc[c.customerId] = c.name;
         return acc;
       }, {});
-      setCustomers(confirmedClients);
+      setCustomers(allCustomers);
       setCustomerNames(map);
     })();
   }, []);
 
-
-  // Filtered cases by state for rendering tables
   const filteredByState = useMemo(
     () => ALL_STAGES.map((stage) => ({
       state: stage,
@@ -195,34 +193,25 @@ const Index = () => {
   const pagedByState = useMemo(() => {
     let remainingStart = (listPage - 1) * listPageSize;
     let remainingTake = listPageSize;
-
     return filteredByState.map((group) => {
-      if (stageFilter !== "all" && group.state !== stageFilter) {
-        return { ...group, cases: [] as typeof group.cases };
-      }
-
+      if (stageFilter !== "all" && group.state !== stageFilter) return { ...group, cases: [] as typeof group.cases };
       if (remainingTake <= 0) return { ...group, cases: [] as typeof group.cases };
-
       if (remainingStart >= group.cases.length) {
         remainingStart -= group.cases.length;
         return { ...group, cases: [] as typeof group.cases };
       }
-
       const start = remainingStart;
       const take = Math.min(remainingTake, group.cases.length - start);
       const sliced = group.cases.slice(start, start + take);
       remainingStart = 0;
       remainingTake -= take;
-
       return { ...group, cases: sliced };
     });
   }, [filteredByState, stageFilter, listPage]);
+
   const categoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.category))).sort(), [caseList]);
   const subcategoryOptions = useMemo(() => Array.from(new Set(caseList.map((c) => c.subcategory))).sort(), [caseList]);
-  const customerOptions = useMemo(
-    () => customers.map((c) => ({ id: c.customerId, name: c.name })),
-    [customers],
-  );
+  const customerOptions = useMemo(() => customers.map((c) => ({ id: c.customerId, name: c.name })), [customers]);
 
   const workflowStageSummary = useMemo(() => {
     return ALL_STAGES.map((stage) => ({
@@ -231,9 +220,7 @@ const Index = () => {
     }));
   }, [caseList]);
 
-  useEffect(() => {
-    setListPage(1);
-  }, [query, priorityFilter, docFilter, stageFilter]);
+  useEffect(() => { setListPage(1); }, [query, priorityFilter, docFilter, stageFilter]);
 
   const todaysQueue = useMemo(() => {
     const now = Date.now();
@@ -243,22 +230,11 @@ const Index = () => {
       const ts = new Date(c.deadline).getTime();
       return ts >= now && ts <= in24h;
     });
-    const topItems = [...dueToday]
-      .filter((item, idx, arr) => arr.findIndex((x) => x.caseId === item.caseId) === idx)
-      .slice(0, 5);
-
-    return {
-      dueToday,
-      topItems,
-    };
+    return { dueToday, topItems: [...dueToday].slice(0, 5) };
   }, [caseList]);
 
   const myWorkSummary = useMemo(() => {
-    const assignee = currentLawyer;
-    const mine = assignee ? caseList.filter((c) => c.assignedTo === assignee) : [];
-    const highPriorityMine = mine.filter((c) => c.priority === "high");
-
-    if (user?.role === "admin") {
+    if (isAdmin) {
       return {
         title: "Admin Focus",
         cards: [
@@ -268,27 +244,26 @@ const Index = () => {
         ],
       };
     }
-
-    if (user?.role === "intake") {
+    if (isManager) {
       return {
-        title: "Intake Focus",
+        title: "Team Focus",
         cards: [
-          { label: "New Cases", value: caseList.filter((c) => mapCaseStateToStage(c.state) === "NEW").length },
-          { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
+          { label: "Total Cases", value: caseList.length },
           { label: "Due in 24h", value: todaysQueue.dueToday.length },
+          { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
         ],
       };
     }
-
+    const mine = currentLawyer ? caseList.filter((c) => c.assignedTo === currentLawyer) : [];
     return {
       title: "My Work Today",
       cards: [
         { label: "Assigned to Me", value: mine.length },
         { label: "Due in 24h", value: todaysQueue.dueToday.length },
-        { label: "My High Priority", value: highPriorityMine.length },
+        { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
       ],
     };
-  }, [caseList, todaysQueue, currentLawyer, user?.role]);
+  }, [caseList, todaysQueue, currentLawyer, isAdmin, isManager]);
 
   const openCreateCase = () => {
     setCaseForm({
@@ -301,7 +276,7 @@ const Index = () => {
       generalNote: "",
       priority: "medium",
       deadline: "",
-      assignedTo: isAdmin ? (CLIENT_LAWYERS[0]) : (currentLawyer || CLIENT_LAWYERS[0]),
+      assignedTo: (isAdmin || isManager) ? (currentLawyer || INTAKE_LAWYERS[0]) : (currentLawyer || ""),
     });
     setShowCaseForm(true);
   };
@@ -312,11 +287,12 @@ const Index = () => {
       return;
     }
     try {
-      // Map UI stage (state) to a legacy CaseState for backend
       const mappedState = mapStageToState(caseForm.state);
       const payload = {
         ...caseForm,
-        assignedTo: isAdmin ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
+        // pass caseScope='customer' so the server knows to look in customersCol for admin too
+        caseScope: "customer",
+        assignedTo: (isAdmin || isManager) ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
         state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
       };
@@ -331,17 +307,13 @@ const Index = () => {
     }
   };
 
-  // Load cases on mount and when refreshed (tick)
   useEffect(() => {
-    loadCases().catch((err) => {
-      console.error("Failed to load cases:", err);
-    });
+    loadCases().catch((err) => console.error("Failed to load cases:", err));
   }, [tick, loadCases]);
 
-  
   return (
     <MainLayout
-      title="Client Cases"
+      title="Customer Cases"
       right={<Button size="sm" onClick={openCreateCase}>New Case</Button>}
     >
       <div className="space-y-4">
@@ -457,21 +429,8 @@ const Index = () => {
                 <div className="flex flex-wrap gap-2">
                   {savedViews.map((view) => (
                     <div key={view.name} className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1">
-                      <button
-                        type="button"
-                        onClick={() => applySavedView(view)}
-                        className="text-xs font-medium hover:underline"
-                      >
-                        {view.name}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteSavedView(view.name)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        aria-label={`Delete view ${view.name}`}
-                      >
-                        ×
-                      </button>
+                      <button type="button" onClick={() => applySavedView(view)} className="text-xs font-medium hover:underline">{view.name}</button>
+                      <button type="button" onClick={() => deleteSavedView(view.name)} className="text-xs text-muted-foreground hover:text-foreground" aria-label={`Delete view ${view.name}`}>×</button>
                     </div>
                   ))}
                 </div>
@@ -512,12 +471,8 @@ const Index = () => {
                 Showing page {listPage} of {totalPages} ({totalVisibleCases} total cases)
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled={listPage <= 1} onClick={() => setListPage((p) => Math.max(1, p - 1))}>
-                  Previous
-                </Button>
-                <Button size="sm" variant="outline" disabled={listPage >= totalPages} onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}>
-                  Next
-                </Button>
+                <Button size="sm" variant="outline" disabled={listPage <= 1} onClick={() => setListPage((p) => Math.max(1, p - 1))}>Previous</Button>
+                <Button size="sm" variant="outline" disabled={listPage >= totalPages} onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
               </div>
             </CardContent>
           </Card>
@@ -534,14 +489,14 @@ const Index = () => {
       <Dialog open={showCaseForm} onOpenChange={(o) => !o && setShowCaseForm(false)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New Client Case</DialogTitle>
-            <DialogDescription>Create a case for a confirmed client. Additional details can be edited later in the full case window.</DialogDescription>
+            <DialogTitle>New Customer Case</DialogTitle>
+            <DialogDescription>Create a case for a pre-confirmation customer. Additional details can be edited later.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Customer ID *</label>
               <Input
-                list="customer-ids"
+                list="cc-customer-ids"
                 autoComplete="off"
                 value={caseForm.customerId}
                 onChange={(e) => setCaseForm({ ...caseForm, customerId: e.target.value })}
@@ -550,7 +505,7 @@ const Index = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Assigned Consultant</label>
+              <label className="text-sm font-medium">Assigned To</label>
               {(isAdmin || isManager) ? (
                 <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -564,17 +519,11 @@ const Index = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Category *</label>
-              <Input
-                list="category-options"
-                autoComplete="off"
-                value={caseForm.category}
-                onChange={(e) => setCaseForm({ ...caseForm, category: e.target.value })}
-                required
-              />
+              <Input list="cc-category-options" autoComplete="off" value={caseForm.category} onChange={(e) => setCaseForm({ ...caseForm, category: e.target.value })} required />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Subcategory</label>
-              <Input list="subcategory-options" autoComplete="off" value={caseForm.subcategory} onChange={(e) => setCaseForm({ ...caseForm, subcategory: e.target.value })} />
+              <Input list="cc-subcategory-options" autoComplete="off" value={caseForm.subcategory} onChange={(e) => setCaseForm({ ...caseForm, subcategory: e.target.value })} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">State</label>
@@ -624,16 +573,14 @@ const Index = () => {
             <Button variant="ghost" onClick={() => setShowCaseForm(false)}>Cancel</Button>
             <Button onClick={handleCreateCase}>Create Case</Button>
           </div>
-          <datalist id="customer-ids">
-            {customerOptions.map((o) => (
-              <option key={o.id} value={o.id}>{`${o.id} — ${o.name}`}</option>
-            ))}
+          <datalist id="cc-customer-ids">
+            {customerOptions.map((o) => <option key={o.id} value={o.id}>{`${o.id} — ${o.name}`}</option>)}
           </datalist>
-          <datalist id="category-options">
-            {categoryOptions.map((c) => (<option key={c} value={c} />))}
+          <datalist id="cc-category-options">
+            {categoryOptions.map((c) => <option key={c} value={c} />)}
           </datalist>
-          <datalist id="subcategory-options">
-            {subcategoryOptions.map((s) => (<option key={s} value={s} />))}
+          <datalist id="cc-subcategory-options">
+            {subcategoryOptions.map((s) => <option key={s} value={s} />)}
           </datalist>
         </DialogContent>
       </Dialog>
@@ -641,4 +588,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default CustomerCases;

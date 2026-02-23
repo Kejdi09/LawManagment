@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const Index = lazy(() => import("./pages/Index"));
+const CustomerCases = lazy(() => import("./pages/CustomerCases"));
 const Customers = lazy(() => import("./pages/Customers"));
 const Clients = lazy(() => import("./pages/Clients"));
 const Calendar = lazy(() => import("./pages/Calendar"));
@@ -45,8 +46,8 @@ function LoginRoute() {
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
   const returnTo = from ? `${from.pathname || "/"}${from.search || ""}${from.hash || ""}` : "/";
-  // Default redirect for intake users should be /customers
-  const defaultRedirect = user?.role === 'intake' || user?.role === 'manager' ? '/customers' : '/';
+  // Default redirect for intake/manager users → customer cases
+  const defaultRedirect = user?.role === 'intake' || user?.role === 'manager' ? '/customer-cases' : '/';
   const finalReturnTo = from ? returnTo : defaultRedirect;
 
   if (isAuthLoading) {
@@ -68,6 +69,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<LoginRoute />} />
                 <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
+                <Route path="/customer-cases" element={<RequireAuth><RequireCustomersAccess><CustomerCases /></RequireCustomersAccess></RequireAuth>} />
                 <Route path="/customers" element={<RequireAuth><RequireCustomersAccess><Customers /></RequireCustomersAccess></RequireAuth>} />
                 <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
                 <Route path="/calendar" element={<RequireAuth><Calendar /></RequireAuth>} />

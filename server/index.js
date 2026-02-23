@@ -1188,15 +1188,20 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
 
   // For manager/intake: cases link to pre-confirmation customers.
   // For admin/consultant: cases link to confirmed clients.
+  // Exception: admin creating with caseScope='customer' links to pre-confirmation customers.
   const isIntakeUser = req.user?.role === 'intake' || isManagerUser(req.user);
-  const customerSource = isIntakeUser ? customersCol : confirmedClientsCol;
-  const customerScopeForCase = isIntakeUser ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
+  const adminWantsCustomerScope = isAdminUser(req.user) && String(req.body?.caseScope || '').trim() === 'customer';
+  const useCustomerCol = isIntakeUser || adminWantsCustomerScope;
+  const customerSource = useCustomerCol ? customersCol : confirmedClientsCol;
+  const customerScopeForCase = useCustomerCol ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
   const customer = await customerSource.findOne({ customerId: requestedCustomerId, ...customerScopeForCase });
   if (!customer) {
     return res.status(400).json({ error: isIntakeUser ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
   }
 
   const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null };
+  // Strip internal routing hint before storing
+  delete payload.caseScope;
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
   if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
