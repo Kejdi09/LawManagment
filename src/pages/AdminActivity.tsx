@@ -274,7 +274,8 @@ const AdminActivity = () => {
               </TableBody>
             </Table>
           </CardContent>
-        </> }
+        </Card>
+        </>}
 
         <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
           <DialogContent className="max-w-2xl">
