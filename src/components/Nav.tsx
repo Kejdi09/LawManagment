@@ -9,8 +9,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const { user, isAuthLoading, logout } = useAuth();
   const onCustomers = location.pathname.startsWith("/customers");
   const onClients = location.pathname.startsWith("/clients");
+  const onCalendar = location.pathname.startsWith("/calendar");
   const onActivity = location.pathname.startsWith("/activity");
-  const onCases = !onCustomers && !onClients && !onActivity;
+  const onCases = !onCustomers && !onClients && !onCalendar && !onActivity;
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -28,11 +29,14 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         {!isAuthLoading && user?.role !== "intake" && (
           <Button className={itemClass} variant={onCases ? "default" : "ghost"} onClick={() => go("/")}>Cases</Button>
         )}
-        {!isAuthLoading && (user?.role === "intake" || user?.role === "admin") && (
+        {!isAuthLoading && (user?.role === "intake" || user?.role === "manager" || user?.role === "admin") && (
           <Button className={itemClass} variant={onCustomers ? "default" : "ghost"} onClick={() => go("/customers")}>Customers</Button>
         )}
         {!isAuthLoading && user?.role !== "intake" && (
           <Button className={itemClass} variant={onClients ? "default" : "ghost"} onClick={() => go("/clients")}>Clients</Button>
+        )}
+        {!isAuthLoading && (
+          <Button className={itemClass} variant={onCalendar ? "default" : "ghost"} onClick={() => go("/calendar")}>Calendar</Button>
         )}
         {user?.role === "admin" && (
           <Button className={itemClass} variant={onActivity ? "default" : "ghost"} onClick={() => go("/activity")}>Activity</Button>

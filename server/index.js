@@ -64,6 +64,7 @@ let customerNotificationsCol;
 let confirmedClientsCol;
 let notesCol;
 let tasksCol;
+let meetingsCol;
 let usersCol;
 let auditLogsCol;
 
@@ -103,6 +104,7 @@ async function connectDb() {
   confirmedClientsCol = db.collection("confirmedClients");
   notesCol = db.collection("notes");
   tasksCol = db.collection("tasks");
+  meetingsCol = db.collection("meetings");
   usersCol = db.collection("users");
   auditLogsCol = db.collection("auditLogs");
   documentsCol = db.collection("documents");
@@ -157,10 +159,32 @@ const CONSULTANT_BY_USERNAME = {
   albert: "Albert",
   kejdi: "Kejdi",
   lenci: "Lenci",
+  kejdi1: "Kejdi 1",
+  kejdi2: "Kejdi 2",
+  kejdi3: "Kejdi 3",
+};
+
+const TEAM_MEMBERS_BY_MANAGER = {
+  lenci: ["kejdi1", "kejdi2", "kejdi3"],
 };
 
 function isAdminUser(user) {
   return user?.role === "admin";
+}
+
+function isManagerUser(user) {
+  return user?.role === "manager";
+}
+
+function getManagedUsernames(user) {
+  if (!user?.username) return [];
+  return TEAM_MEMBERS_BY_MANAGER[user.username] || [];
+}
+
+function getManagedLawyerNames(user) {
+  return getManagedUsernames(user)
+    .map((username) => stripProfessionalTitle(CONSULTANT_BY_USERNAME[username] || ""))
+    .filter(Boolean);
 }
 
 function stripProfessionalTitle(value) {
@@ -171,7 +195,8 @@ function buildAssignedToMatcher(rawName) {
   const clean = stripProfessionalTitle(rawName);
   if (!clean) return null;
   const escaped = escapeRegex(clean);
-  return new RegExp(`^\\s*(?:dr|mag)\\.?\\s*${escaped}\\s*$`, "i");
+  // Prefix (dr/mag) is optional – plain names like "Kejdi" must also match
+  return new RegExp(`^\\s*(?:(?:dr|mag)\\.?\\s*)?${escaped}\\s*$`, "i");
 }
 
 function getUserLawyerName(user) {
@@ -181,6 +206,17 @@ function getUserLawyerName(user) {
 
 function buildCaseScopeFilter(user) {
   if (isAdminUser(user)) return {};
+  if (isManagerUser(user)) {
+    const managedLawyers = getManagedLawyerNames(user);
+    if (!managedLawyers.length) return { _id: { $exists: false } };
+    const matchers = managedLawyers.map((name) => buildAssignedToMatcher(name) || name);
+    return {
+      $or: [
+        { assignedTo: { $in: matchers } },
+        { createdBy: user.username || "" },
+      ],
+    };
+  }
   // Users with role 'intake' should not access cases
   if (user?.role === "intake") return { _id: { $exists: false } };
   const lawyerName = getUserLawyerName(user);
@@ -191,6 +227,7 @@ function buildCaseScopeFilter(user) {
 
 function buildCustomerScopeFilter(user) {
   if (isAdminUser(user)) return {};
+  if (isManagerUser(user)) return {};
   const lawyerName = getUserLawyerName(user);
   // Allow creators to see their own customers. Intake users may not have a lawyerName,
   // so include a createdBy clause so they can see customers they created.
@@ -207,6 +244,7 @@ function buildCustomerScopeFilter(user) {
 function userCanAccessCustomer(user, customer) {
   if (!customer) return false;
   if (isAdminUser(user)) return true;
+  if (isManagerUser(user)) return true;
   const lawyerName = getUserLawyerName(user);
   return Boolean(lawyerName) && stripProfessionalTitle(customer.assignedTo) === lawyerName;
 }
@@ -214,8 +252,36 @@ function userCanAccessCustomer(user, customer) {
 function userCanAccessCase(user, doc) {
   if (!doc) return false;
   if (isAdminUser(user)) return true;
+  if (isManagerUser(user)) {
+    const allowedLawyers = new Set(getManagedLawyerNames(user));
+    const assigned = stripProfessionalTitle(doc.assignedTo);
+    return allowedLawyers.has(assigned) || doc.createdBy === user.username;
+  }
   const lawyerName = getUserLawyerName(user);
   return Boolean(lawyerName) && stripProfessionalTitle(doc.assignedTo) === lawyerName;
+}
+
+function buildMeetingScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  if (isManagerUser(user)) {
+    const managedLawyers = getManagedLawyerNames(user);
+    if (!managedLawyers.length) return { createdBy: user.username || "" };
+    return {
+      $or: [
+        { assignedTo: { $in: managedLawyers } },
+        { createdBy: user.username || "" },
+      ],
+    };
+  }
+  if (user?.role === "intake") return { createdBy: user.username || "" };
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  return {
+    $or: [
+      { assignedTo: lawyerName },
+      { createdBy: user.username || "" },
+    ],
+  };
 }
 
 function getLastStatusChangeAt(customer) {
@@ -398,6 +464,80 @@ function parseSortQuery(query, allowed, fallbackField) {
   return { sortBy, sortDir };
 }
 
+async function runDataMigrations() {
+  await Promise.all([
+    customersCol.createIndex({ customerId: 1 }, { unique: true }),
+    confirmedClientsCol.createIndex({ customerId: 1 }, { unique: true }),
+    casesCol.createIndex({ caseId: 1 }, { unique: true }),
+    usersCol.createIndex({ username: 1 }, { unique: true }),
+    meetingsCol.createIndex({ meetingId: 1 }, { unique: true }),
+    meetingsCol.createIndex({ startsAt: 1 }),
+    meetingsCol.createIndex({ assignedTo: 1 }),
+    auditLogsCol.createIndex({ at: -1 }),
+  ]);
+
+  const [customers, confirmedClients, caseRows] = await Promise.all([
+    customersCol.find({}).toArray(),
+    confirmedClientsCol.find({}).toArray(),
+    casesCol.find({}).toArray(),
+  ]);
+
+  for (const customer of customers) {
+    const normalizedAssignedTo = stripProfessionalTitle(customer.assignedTo || "");
+    await customersCol.updateOne(
+      { customerId: customer.customerId },
+      {
+        $set: {
+          assignedTo: customer.status === "CLIENT" ? normalizedAssignedTo : "",
+          createdBy: customer.createdBy || null,
+          version: Number(customer.version || 1),
+        },
+      }
+    );
+
+    if (customer.status === "CLIENT") {
+      const confirmedPayload = {
+        ...customer,
+        assignedTo: normalizedAssignedTo,
+        sourceCustomerId: customer.customerId,
+        confirmedAt: customer.confirmedAt || new Date().toISOString(),
+      };
+      await confirmedClientsCol.updateOne(
+        { customerId: customer.customerId },
+        { $set: confirmedPayload },
+        { upsert: true }
+      );
+      await customersCol.deleteOne({ customerId: customer.customerId });
+    }
+  }
+
+  for (const customer of confirmedClients) {
+    await confirmedClientsCol.updateOne(
+      { customerId: customer.customerId },
+      {
+        $set: {
+          assignedTo: stripProfessionalTitle(customer.assignedTo || ""),
+          createdBy: customer.createdBy || null,
+          version: Number(customer.version || 1),
+        },
+      }
+    );
+  }
+
+  for (const row of caseRows) {
+    await casesCol.updateOne(
+      { caseId: row.caseId },
+      {
+        $set: {
+          assignedTo: stripProfessionalTitle(row.assignedTo || ""),
+          createdBy: row.createdBy || null,
+          version: Number(row.version || 1),
+        },
+      }
+    );
+  }
+}
+
 function cleanLoginField(value, maxLen = 100) {
   return String(value || "").trim().slice(0, maxLen);
 }
@@ -424,8 +564,10 @@ async function seedDemoUser() {
       { username: "admirim", password: "adi33", role: "admin", consultantName: "Albert" },
       { username: "albert", password: "alb33", role: "consultant", consultantName: "Albert" },
       { username: "kejdi", password: "kej33", role: "consultant", consultantName: "Kejdi" },
-      // Intake-only demo user: can work with non-confirmed customers but not confirmed clients or cases
-      { username: "lenci", password: "len33", role: "intake", consultantName: "Lenci" },
+      { username: "lenci", password: "len33", role: "manager", consultantName: "Lenci" },
+      { username: "kejdi1", password: "kej331", role: "consultant", consultantName: "Kejdi 1", managerUsername: "lenci" },
+      { username: "kejdi2", password: "kej332", role: "consultant", consultantName: "Kejdi 2", managerUsername: "lenci" },
+      { username: "kejdi3", password: "kej333", role: "consultant", consultantName: "Kejdi 3", managerUsername: "lenci" },
     ];
 
     for (const demoUser of demoUsers) {
@@ -438,6 +580,7 @@ async function seedDemoUser() {
             role: demoUser.role,
             consultantName: demoUser.consultantName,
             lawyerName: demoUser.consultantName,
+            managerUsername: demoUser.managerUsername || null,
             updatedAt: new Date().toISOString(),
           },
           $setOnInsert: {
@@ -448,7 +591,7 @@ async function seedDemoUser() {
         { upsert: true }
       );
     }
-    console.log("Synced default users: admirim, albert, kejdi, lenci.");
+    console.log("Synced default users: admirim, albert, kejdi, lenci, kejdi1, kejdi2, kejdi3.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
@@ -598,7 +741,7 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users and admin should see non-confirmed customers
   const paging = parsePagingQuery(req.query || {});
   const { sortBy, sortDir } = parseSortQuery(req.query || {}, ["customerId", "name", "registeredAt", "status"], "customerId");
-  if (!(req.user?.role === 'intake' || isAdminUser(req.user))) {
+  if (!(req.user?.role === 'intake' || isManagerUser(req.user) || isAdminUser(req.user))) {
     if (paging.requested) {
       return res.json({ items: [], total: 0, page: paging.page, pageSize: paging.pageSize, totalPages: 0 });
     }
@@ -640,7 +783,7 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
 
 app.post("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users can create new (non-confirmed) customers
-  if (req.user?.role !== 'intake' && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
+  if (req.user?.role !== 'intake' && !isManagerUser(req.user) && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = await genCustomerId();
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null, version: 1 };
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
@@ -746,7 +889,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
-  const scope = buildCustomerScopeFilter(req.user);
+  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
   // Intake users should not see confirmed clients
   if (req.user?.role === 'intake') return res.json([]);
   const docs = await confirmedClientsCol.find(scope).sort({ customerId: 1 }).toArray();
@@ -756,7 +899,7 @@ app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
 app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   // Intake users should not access confirmed client records
   if (req.user?.role === 'intake') return res.status(404).json({ error: "Not found" });
-  const scope = buildCustomerScopeFilter(req.user);
+  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
   const doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...scope });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
@@ -818,12 +961,15 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   delete update._id;
   delete update.customerId;
-  const scope = buildCustomerScopeFilter(req.user);
+  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
   const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
 
-  // Only admins may modify confirmed client records
-  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
+  // Admins/managers may assign within their visibility.
+  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+    const lawyerName = getUserLawyerName(req.user);
+    if (lawyerName) update.assignedTo = lawyerName;
+  }
 
   if (current.status !== update.status) {
     const historyId = `CH${pad3(Date.now() % 1000)}`;
@@ -865,48 +1011,6 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   }
 
   // Admin updates stay within confirmedClients
-  await confirmedClientsCol.updateOne({ customerId: id, ...scope }, { $set: update });
-  const updated = await confirmedClientsCol.findOne({ customerId: id, ...scope });
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
-  res.json(updated);
-});
-
-app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
-  const { id } = req.params;
-  const update = { ...req.body };
-  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
-  delete update._id;
-  delete update.customerId;
-  const scope = buildCustomerScopeFilter(req.user);
-  const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
-  if (!current) return res.status(404).json({ error: "Not found" });
-  if (!isAdminUser(req.user)) {
-    const lawyerName = getUserLawyerName(req.user);
-    if (lawyerName) update.assignedTo = lawyerName;
-  }
-
-  if (current.status !== update.status) {
-    const historyId = `CH${pad3(Date.now() % 1000)}`;
-    await customerHistoryCol.insertOne({
-      historyId,
-      customerId: id,
-      statusFrom: current.status,
-      statusTo: update.status,
-      date: new Date().toISOString(),
-      changedBy: req.user?.username || null,
-      changedByRole: req.user?.role || null,
-      changedByConsultant: getUserLawyerName(req.user) || null,
-      changedByLawyer: getUserLawyerName(req.user) || null,
-    });
-    if (!update.statusHistory) {
-      update.statusHistory = (current.statusHistory || []);
-    }
-    update.statusHistory.push({
-      status: update.status,
-      date: new Date().toISOString(),
-    });
-  }
-
   await confirmedClientsCol.updateOne({ customerId: id, ...scope }, { $set: update });
   const updated = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'confirmedClient', resourceId: id, details: { update } });
@@ -1075,9 +1179,9 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
     return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
   }
 
-  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1 };
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null };
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
-  if (!isAdminUser(req.user)) {
+  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
   }
   await casesCol.insertOne(payload);
@@ -1102,7 +1206,7 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
     return res.status(409).json({ error: 'conflict', latest: current });
   }
 
-  if (!isAdminUser(req.user)) {
+  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
   }
   if (update.customerId) {
@@ -1279,6 +1383,7 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   }
   await seedIfEmpty();
   await seedDemoUser();
+  await runDataMigrations();
   // periodic cleanup for stale cases
   setInterval(() => {
     cleanupStaleCases().catch((err) => console.error("cleanup failed", err));
@@ -1438,4 +1543,113 @@ app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) =>
   } catch (err) {
     res.status(500).json({ error: 'failed' });
   }
+});
+
+app.get('/api/team/summary', verifyAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const users = await usersCol.find({ role: { $in: ['consultant', 'manager'] } }).project({ username: 1, consultantName: 1, role: 1 }).toArray();
+    const summaries = [];
+    const now = new Date();
+    const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    for (const user of users) {
+      const consultantName = stripProfessionalTitle(user.consultantName || CONSULTANT_BY_USERNAME[user.username] || user.username);
+      const matcher = buildAssignedToMatcher(consultantName) || consultantName;
+      const [customersCount, clientsCount, casesCount, meetingsCount] = await Promise.all([
+        customersCol.countDocuments({ assignedTo: matcher }),
+        confirmedClientsCol.countDocuments({ assignedTo: matcher }),
+        casesCol.countDocuments({ assignedTo: matcher }),
+        meetingsCol.countDocuments({ assignedTo: matcher, startsAt: { $gte: now.toISOString(), $lte: weekLater.toISOString() } }),
+      ]);
+      summaries.push({
+        username: user.username,
+        consultantName,
+        role: user.role,
+        customersCount,
+        clientsCount,
+        casesCount,
+        meetingsCount,
+      });
+    }
+    res.json(summaries.sort((a, b) => a.consultantName.localeCompare(b.consultantName)));
+  } catch (err) {
+    res.status(500).json({ error: 'failed' });
+  }
+});
+
+app.get('/api/meetings', verifyAuth, async (req, res) => {
+  const scope = buildMeetingScopeFilter(req.user);
+  const meetings = await meetingsCol.find(scope).sort({ startsAt: 1 }).toArray();
+  res.json(meetings);
+});
+
+app.post('/api/meetings', verifyAuth, async (req, res) => {
+  const parsedStarts = new Date(req.body?.startsAt || '');
+  if (Number.isNaN(parsedStarts.getTime())) return res.status(400).json({ error: 'invalid_startsAt' });
+
+  const meetingId = `M${Date.now()}`;
+  const assignedToRaw = stripProfessionalTitle(req.body?.assignedTo || '') || getUserLawyerName(req.user) || '';
+  if (!assignedToRaw) return res.status(400).json({ error: 'assignedTo_required' });
+
+  const payload = {
+    meetingId,
+    title: String(req.body?.title || 'Consultation').trim().slice(0, 140),
+    customerId: String(req.body?.customerId || '').trim() || null,
+    startsAt: parsedStarts.toISOString(),
+    endsAt: req.body?.endsAt ? new Date(req.body.endsAt).toISOString() : null,
+    assignedTo: assignedToRaw,
+    notes: String(req.body?.notes || '').trim().slice(0, 2000),
+    status: String(req.body?.status || 'scheduled').slice(0, 40),
+    createdBy: req.user?.username || null,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!isAdminUser(req.user) && !isManagerUser(req.user) && payload.assignedTo !== getUserLawyerName(req.user)) {
+    return res.status(403).json({ error: 'forbidden_assignee' });
+  }
+
+  await meetingsCol.insertOne(payload);
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'meeting', resourceId: meetingId, details: { assignedTo: payload.assignedTo, customerId: payload.customerId } });
+  res.status(201).json(payload);
+});
+
+app.put('/api/meetings/:id', verifyAuth, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const current = await meetingsCol.findOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) });
+  if (!current) return res.status(404).json({ error: 'not_found' });
+
+  const update = { ...req.body };
+  delete update._id;
+  delete update.meetingId;
+  delete update.createdBy;
+  delete update.createdAt;
+
+  if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
+  if (update.startsAt) {
+    const parsedStarts = new Date(update.startsAt);
+    if (Number.isNaN(parsedStarts.getTime())) return res.status(400).json({ error: 'invalid_startsAt' });
+    update.startsAt = parsedStarts.toISOString();
+  }
+  if (update.endsAt) {
+    const parsedEnds = new Date(update.endsAt);
+    if (Number.isNaN(parsedEnds.getTime())) return res.status(400).json({ error: 'invalid_endsAt' });
+    update.endsAt = parsedEnds.toISOString();
+  }
+
+  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+    update.assignedTo = getUserLawyerName(req.user);
+  }
+
+  await meetingsCol.updateOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) }, { $set: update });
+  const updated = await meetingsCol.findOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'meeting', resourceId: id, details: { update } });
+  res.json(updated);
+});
+
+app.delete('/api/meetings/:id', verifyAuth, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const current = await meetingsCol.findOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) });
+  if (!current) return res.status(404).json({ error: 'not_found' });
+  await meetingsCol.deleteOne({ meetingId: id, ...buildMeetingScopeFilter(req.user) });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'meeting', resourceId: id });
+  res.json({ ok: true });
 });

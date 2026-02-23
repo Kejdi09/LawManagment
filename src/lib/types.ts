@@ -101,6 +101,29 @@ export interface CaseTask {
   dueDate: string | null;
 }
 
+export interface Meeting {
+  meetingId: string;
+  title: string;
+  customerId?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  assignedTo: string;
+  notes?: string;
+  status: string;
+  createdBy?: string | null;
+  createdAt?: string;
+}
+
+export interface TeamSummary {
+  username: string;
+  consultantName: string;
+  role: string;
+  customersCount: number;
+  clientsCount: number;
+  casesCount: number;
+  meetingsCount: number;
+}
+
 export type ServiceType =
   | "visa_c"
   | "visa_d"
@@ -222,7 +245,7 @@ export const ALL_STATES: CaseState[] = [
   "WAITING_RESPONSE_C",
 ];
 
-export const LAWYERS = ["Kejdi", "Albert"];
+export const LAWYERS = ["Kejdi", "Albert", "Kejdi 1", "Kejdi 2", "Kejdi 3"];
 
 export interface CustomerNotification {
   notificationId: string;

@@ -7,8 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getAuditLogs } from "@/lib/case-store";
-import { AuditLogRecord } from "@/lib/types";
+import { getAuditLogs, getTeamSummary } from "@/lib/case-store";
+import { AuditLogRecord, TeamSummary } from "@/lib/types";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -21,10 +21,12 @@ const AdminActivity = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
+  const [teamSummary, setTeamSummary] = useState<TeamSummary[]>([]);
   const { user } = useAuth();
 
   useEffect(() => {
     getAuditLogs().then(setLogs).catch(() => setLogs([]));
+    getTeamSummary().then(setTeamSummary).catch(() => setTeamSummary([]));
   }, []);
 
   const actionOptions = useMemo(
@@ -203,6 +205,43 @@ const AdminActivity = () => {
                           </Button>
                         )}
                       </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Team Member</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Customers</TableHead>
+                  <TableHead>Clients</TableHead>
+                  <TableHead>Cases</TableHead>
+                  <TableHead>Meetings (7d)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teamSummary.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                      No team summary available.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  teamSummary.map((row) => (
+                    <TableRow key={row.username}>
+                      <TableCell className="text-sm">{row.consultantName}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs capitalize">{row.role}</Badge></TableCell>
+                      <TableCell className="text-sm font-medium">{row.customersCount}</TableCell>
+                      <TableCell className="text-sm font-medium">{row.clientsCount}</TableCell>
+                      <TableCell className="text-sm font-medium">{row.casesCount}</TableCell>
+                      <TableCell className="text-sm font-medium">{row.meetingsCount ?? 0}</TableCell>
                     </TableRow>
                   ))
                 )}

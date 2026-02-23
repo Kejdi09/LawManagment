@@ -11,6 +11,7 @@ import {
   fetchDocumentBlob,
   StoredDocument,
   getCustomerHistory,
+  createMeeting,
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
@@ -460,12 +461,25 @@ const Customers = () => {
     });
   };
 
+  // ── Consultation scheduling state ──
+  const [showConsultScheduler, setShowConsultScheduler] = useState(false);
+  const [consultScheduleCustomerId, setConsultScheduleCustomerId] = useState<string | null>(null);
+  const [consultForm, setConsultForm] = useState({ title: 'Consultation', startsAt: '', endsAt: '', notes: '' });
+
   const handleSetStatus = async (customerId: string, status: LeadStatus) => {
     try {
       // If current user is intake and confirming to CLIENT, require assignee selection
       if (user?.role === 'intake' && status === 'CLIENT') {
         setConfirmAssignCustomerId(customerId);
         setShowConfirmAssign(true);
+        return;
+      }
+
+      // When setting CONSULTATION_SCHEDULED, show the scheduling dialog first
+      if (status === 'CONSULTATION_SCHEDULED') {
+        setConsultScheduleCustomerId(customerId);
+        setConsultForm({ title: 'Consultation', startsAt: '', endsAt: '', notes: '' });
+        setShowConsultScheduler(true);
         return;
       }
 
@@ -485,6 +499,37 @@ const Customers = () => {
         toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
       }
       await loadCustomers();
+    }
+  };
+
+  const handleConfirmConsultation = async () => {
+    if (!consultScheduleCustomerId) return;
+    if (!consultForm.startsAt) {
+      toast({ title: 'Date required', description: 'Please select the consultation date and time.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const current = customers.find((c) => c.customerId === consultScheduleCustomerId);
+      const assignedTo = stripProfessionalTitle(user?.consultantName || user?.lawyerName || LAWYERS[0]) || LAWYERS[0];
+      await Promise.all([
+        updateCustomer(consultScheduleCustomerId, { status: 'CONSULTATION_SCHEDULED', expectedVersion: current?.version ?? 1 }),
+        createMeeting({
+          title: consultForm.title || 'Consultation',
+          customerId: consultScheduleCustomerId,
+          startsAt: new Date(consultForm.startsAt).toISOString(),
+          endsAt: consultForm.endsAt ? new Date(consultForm.endsAt).toISOString() : null,
+          assignedTo,
+          notes: consultForm.notes || '',
+          status: 'scheduled',
+        }),
+      ]);
+      toast({ title: 'Consultation scheduled', description: `Scheduled for ${new Date(consultForm.startsAt).toLocaleString()}` });
+      setShowConsultScheduler(false);
+      setConsultScheduleCustomerId(null);
+      await loadCustomers();
+      if (selectedId) await loadCustomerDetail(selectedId);
+    } catch (err: unknown) {
+      toast({ title: 'Failed to schedule', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     }
   };
 
@@ -710,7 +755,7 @@ const Customers = () => {
                 <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
                 <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
               </div>
-              {(user?.role === 'intake' || user?.role === 'admin') && (
+              {(user?.role === 'intake' || user?.role === 'manager' || user?.role === 'admin') && (
                 <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
                   <Plus className="h-4 w-4" /> New Customer
                 </Button>
@@ -1120,6 +1165,40 @@ const Customers = () => {
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => { setShowConfirmAssign(false); setConfirmAssignCustomerId(null); }}>Cancel</Button>
               <Button onClick={handleConfirmAssign}>Confirm & Assign</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Consultation scheduling dialog */}
+      <Dialog open={showConsultScheduler} onOpenChange={(o) => { if (!o) { setShowConsultScheduler(false); setConsultScheduleCustomerId(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule Consultation</DialogTitle>
+            <DialogDescription>Set the date, time and details for this consultation meeting.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input value={consultForm.title} onChange={(e) => setConsultForm((f) => ({ ...f, title: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Start Date &amp; Time <span className="text-destructive">*</span></Label>
+                <Input type="datetime-local" value={consultForm.startsAt} onChange={(e) => setConsultForm((f) => ({ ...f, startsAt: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>End Date &amp; Time</Label>
+                <Input type="datetime-local" value={consultForm.endsAt} onChange={(e) => setConsultForm((f) => ({ ...f, endsAt: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={consultForm.notes} onChange={(e) => setConsultForm((f) => ({ ...f, notes: e.target.value }))} rows={3} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => { setShowConsultScheduler(false); setConsultScheduleCustomerId(null); }}>Cancel</Button>
+              <Button onClick={handleConfirmConsultation}>Schedule</Button>
             </div>
           </div>
         </DialogContent>

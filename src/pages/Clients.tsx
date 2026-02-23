@@ -36,6 +36,7 @@ import {
   deleteDocument,
   fetchDocumentBlob,
   StoredDocument,
+  createMeeting,
 } from "@/lib/case-store";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -84,6 +85,11 @@ const ClientsPage = () => {
   const [form, setForm] = useState<Partial<Customer>>({});
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Consultation scheduling state
+  const [showConsultScheduler, setShowConsultScheduler] = useState(false);
+  const [pendingSavePayload, setPendingSavePayload] = useState<{ id: string; update: Partial<Customer> } | null>(null);
+  const [consultForm, setConsultForm] = useState({ title: 'Consultation', startsAt: '', endsAt: '', notes: '' });
 
   const isAdmin = user?.role === "admin";
   const serviceEntries = Object.entries(SERVICE_LABELS);
@@ -141,6 +147,15 @@ const ClientsPage = () => {
     };
     const { customerId, ...withoutId } = payload as Partial<Customer> & { customerId?: string; _id?: unknown };
     const { _id, ...safePayload } = withoutId as typeof withoutId & { _id?: unknown };
+
+    // Intercept CONSULTATION_SCHEDULED to let user schedule a meeting
+    if (form.status === 'CONSULTATION_SCHEDULED') {
+      setPendingSavePayload({ id: form.customerId, update: safePayload });
+      setConsultForm({ title: 'Consultation', startsAt: '', endsAt: '', notes: '' });
+      setShowConsultScheduler(true);
+      return;
+    }
+
     try {
       await updateConfirmedClient(form.customerId, safePayload);
       setShowEdit(false);
@@ -152,6 +167,40 @@ const ClientsPage = () => {
       toast({ title: "Saved", description: "Confirmed client updated" });
     } catch (err) {
       toast({ title: "Save failed", description: err instanceof Error ? err.message : "Unable to update confirmed client", variant: "destructive" });
+    }
+  };
+
+  const handleConfirmConsultation = async () => {
+    if (!pendingSavePayload) return;
+    if (!consultForm.startsAt) {
+      toast({ title: 'Date required', description: 'Please select the consultation date and time.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const assignedTo = stripProfessionalTitle(user?.consultantName || user?.lawyerName || LAWYERS[0]) || LAWYERS[0];
+      await Promise.all([
+        updateConfirmedClient(pendingSavePayload.id, pendingSavePayload.update),
+        createMeeting({
+          title: consultForm.title || 'Consultation',
+          customerId: pendingSavePayload.id,
+          startsAt: new Date(consultForm.startsAt).toISOString(),
+          endsAt: consultForm.endsAt ? new Date(consultForm.endsAt).toISOString() : null,
+          assignedTo,
+          notes: consultForm.notes || '',
+          status: 'scheduled',
+        }),
+      ]);
+      toast({ title: 'Consultation scheduled' });
+      setShowConsultScheduler(false);
+      setPendingSavePayload(null);
+      setShowEdit(false);
+      await load();
+      if (selectedClient?.customerId === pendingSavePayload.id) {
+        const updated = await getConfirmedClients().then((rows) => rows.find((x) => x.customerId === pendingSavePayload.id) || null);
+        if (updated) await openDetail(updated);
+      }
+    } catch (err) {
+      toast({ title: 'Failed to schedule', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     }
   };
 
@@ -535,6 +584,40 @@ const ClientsPage = () => {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowEdit(false)}>Cancel</Button>
               <Button onClick={saveEdit}>Save</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Consultation scheduling dialog */}
+        <Dialog open={showConsultScheduler} onOpenChange={(o) => { if (!o) { setShowConsultScheduler(false); setPendingSavePayload(null); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Schedule Consultation</DialogTitle>
+              <DialogDescription>Set the date and time for this consultation meeting.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input value={consultForm.title} onChange={(e) => setConsultForm((f) => ({ ...f, title: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Start Date &amp; Time <span className="text-destructive">*</span></Label>
+                  <Input type="datetime-local" value={consultForm.startsAt} onChange={(e) => setConsultForm((f) => ({ ...f, startsAt: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Date &amp; Time</Label>
+                  <Input type="datetime-local" value={consultForm.endsAt} onChange={(e) => setConsultForm((f) => ({ ...f, endsAt: e.target.value }))} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea value={consultForm.notes} onChange={(e) => setConsultForm((f) => ({ ...f, notes: e.target.value }))} rows={3} />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => { setShowConsultScheduler(false); setPendingSavePayload(null); }}>Cancel</Button>
+                <Button onClick={handleConfirmConsultation}>Schedule</Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

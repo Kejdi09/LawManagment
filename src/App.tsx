@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 const Index = lazy(() => import("./pages/Index"));
 const Customers = lazy(() => import("./pages/Customers"));
 const Clients = lazy(() => import("./pages/Clients"));
+const Calendar = lazy(() => import("./pages/Calendar"));
 const AdminActivity = lazy(() => import("./pages/AdminActivity"));
 const Archived = lazy(() => import("./pages/Archived"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -34,7 +35,7 @@ function RequireCustomersAccess({ children }: { children: JSX.Element }) {
   if (isAuthLoading) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
   }
-  const canAccessCustomers = user?.role === "intake" || user?.role === "admin";
+  const canAccessCustomers = user?.role === "intake" || user?.role === "manager" || user?.role === "admin";
   if (!canAccessCustomers) return <Navigate to="/" replace />;
   return children;
 }
@@ -45,7 +46,7 @@ function LoginRoute() {
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
   const returnTo = from ? `${from.pathname || "/"}${from.search || ""}${from.hash || ""}` : "/";
   // Default redirect for intake users should be /customers
-  const defaultRedirect = user?.role === 'intake' ? '/customers' : '/';
+  const defaultRedirect = user?.role === 'intake' || user?.role === 'manager' ? '/customers' : '/';
   const finalReturnTo = from ? returnTo : defaultRedirect;
 
   if (isAuthLoading) {
@@ -69,6 +70,7 @@ const App = () => (
                 <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
                 <Route path="/customers" element={<RequireAuth><RequireCustomersAccess><Customers /></RequireCustomersAccess></RequireAuth>} />
                 <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
+                <Route path="/calendar" element={<RequireAuth><Calendar /></RequireAuth>} />
                 <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
                 <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
                 <Route path="*" element={<NotFound />} />

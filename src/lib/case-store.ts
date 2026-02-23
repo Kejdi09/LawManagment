@@ -1,4 +1,4 @@
-import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Note } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Meeting, Note, TeamSummary } from "./types";
 
 export type PagedResult<T> = {
   items: T[];
@@ -333,4 +333,24 @@ export async function getAuditLogs(options?: {
   const result = await api<AuditLogRecord[] | { items?: AuditLogRecord[] }>(path);
   if (Array.isArray(result)) return result;
   return Array.isArray(result?.items) ? result.items : [];
+}
+
+export async function getTeamSummary(): Promise<TeamSummary[]> {
+  return api<TeamSummary[]>("/api/team/summary");
+}
+
+export async function getMeetings(): Promise<Meeting[]> {
+  return api<Meeting[]>("/api/meetings");
+}
+
+export async function createMeeting(payload: Omit<Meeting, "meetingId" | "createdAt" | "createdBy">): Promise<Meeting> {
+  return api<Meeting>("/api/meetings", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updateMeeting(meetingId: string, patch: Partial<Meeting>): Promise<Meeting> {
+  return api<Meeting>(`/api/meetings/${meetingId}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+
+export async function deleteMeeting(meetingId: string): Promise<void> {
+  await api(`/api/meetings/${meetingId}`, { method: "DELETE" });
 }

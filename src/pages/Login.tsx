@@ -44,7 +44,7 @@ export default function Login({ onLogin }: { onLogin?: () => void }) {
           if (onLogin) {
             onLogin();
           } else {
-            const dest = role === 'intake' ? '/customers' : returnTo;
+            const dest = role === 'intake' || role === 'manager' ? '/customers' : returnTo;
             navigate(dest, { replace: true });
             void refreshSession();
           }
