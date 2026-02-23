@@ -63,6 +63,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
   const previousCaseIdRef = useRef<string | null>(null);
   const lastRequestedCaseIdRef = useRef<string | null>(null);
   const [editForm, setEditForm] = useState({
+    title: "",
     category: "",
     subcategory: "",
     state: "INTAKE" as CaseStage,
@@ -110,6 +111,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
       // Do not overwrite in-progress edits for the same case.
       if (!editModeRef.current || previousCaseIdRef.current !== id) {
         setEditForm({
+          title: data.title ?? "",
           category: data.category,
           subcategory: data.subcategory,
           state: mapCaseStateToStage(data.state),
@@ -337,6 +339,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
       // Optimistically update local state
       const updatedCaseData: Case = {
         ...caseData,
+        title: editForm.title,
         category: editForm.category,
         subcategory: editForm.subcategory,
         state: mapStageToState(editForm.state),
@@ -365,6 +368,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
         const savedCase = saved as Case;
         setCaseData(savedCase);
         setEditForm({
+          title: savedCase.title ?? "",
           category: savedCase.category,
           subcategory: savedCase.subcategory,
           state: mapCaseStateToStage(savedCase.state),
@@ -416,6 +420,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
           <DialogTitle className="flex items-center gap-3 text-xl flex-wrap">
             <FileText className="h-5 w-5" />
             {c.caseId}
+            {c.title && <span className="text-base font-normal text-muted-foreground">— {c.title}</span>}
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>
               {pCfg.label}
             </span>
@@ -469,6 +474,10 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                 )}
                 {editMode && (
                   <div className="space-y-2">
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Title</span>
+                      <Input value={editForm.title} onChange={(e) => updateEditForm({ title: e.target.value })} placeholder="e.g. Residence Permit Application" />
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Category</span>

@@ -22,6 +22,7 @@ const AdminActivity = () => {
   const [toDate, setToDate] = useState("");
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
   const [teamSummary, setTeamSummary] = useState<TeamSummary[]>([]);
+  const [activeTab, setActiveTab] = useState<"logs" | "team">("logs");
   const { user } = useAuth();
 
   useEffect(() => {
@@ -90,6 +91,68 @@ const AdminActivity = () => {
   return (
     <MainLayout title="Admin Activity">
       <div className="space-y-3">
+        {/* Tab switcher */}
+        <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveTab("logs")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "logs" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Activity Log
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("team")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "team" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Team Summary
+          </button>
+        </div>
+
+        {activeTab === "team" && (
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Team Member</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Customers</TableHead>
+                    <TableHead>Clients</TableHead>
+                    <TableHead>Cases</TableHead>
+                    <TableHead>Meetings (7d)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {teamSummary.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                        No team summary available.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    teamSummary.map((row) => (
+                      <TableRow key={row.username}>
+                        <TableCell className="text-sm">{row.consultantName}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-xs capitalize">{row.role}</Badge></TableCell>
+                        <TableCell className="text-sm font-medium">{row.customersCount}</TableCell>
+                        <TableCell className="text-sm font-medium">{row.clientsCount}</TableCell>
+                        <TableCell className="text-sm font-medium">{row.casesCount}</TableCell>
+                        <TableCell className="text-sm font-medium">{row.meetingsCount ?? 0}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "logs" && <>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Card>
             <CardContent className="p-3">
@@ -211,44 +274,7 @@ const AdminActivity = () => {
               </TableBody>
             </Table>
           </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Team Member</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Customers</TableHead>
-                  <TableHead>Clients</TableHead>
-                  <TableHead>Cases</TableHead>
-                  <TableHead>Meetings (7d)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teamSummary.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
-                      No team summary available.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  teamSummary.map((row) => (
-                    <TableRow key={row.username}>
-                      <TableCell className="text-sm">{row.consultantName}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs capitalize">{row.role}</Badge></TableCell>
-                      <TableCell className="text-sm font-medium">{row.customersCount}</TableCell>
-                      <TableCell className="text-sm font-medium">{row.clientsCount}</TableCell>
-                      <TableCell className="text-sm font-medium">{row.casesCount}</TableCell>
-                      <TableCell className="text-sm font-medium">{row.meetingsCount ?? 0}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        </> }
 
         <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
           <DialogContent className="max-w-2xl">

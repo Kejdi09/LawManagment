@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Customer, CustomerNotification } from "@/lib/types";
 
 export type AlertFilterType = "case" | "customer" | "all";
+export type CaseScopeType = "client" | "customer";
 
 const DISMISSED_ALERTS_KEY = "dismissed_customer_alerts";
 const DISMISSED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -115,6 +116,7 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
 type AlertItem = {
   id: string;
   type: "case" | "customer";
+  caseType?: "client" | "customer";
   customerId: string;
   caseId?: string;
   message: string;
@@ -122,7 +124,7 @@ type AlertItem = {
   severity: "warn" | "critical";
 };
 
-export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterType }) => {
+export const CaseAlerts = ({ filterType = "all", caseScope }: { filterType?: AlertFilterType; caseScope?: CaseScopeType }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const currentLawyer = stripProfessionalTitle(user?.consultantName || user?.lawyerName) || "";
@@ -173,7 +175,8 @@ export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterTyp
 
     let caseAlerts: AlertItem[] = [];
     if (canSeeCaseAlerts) {
-      const all = await getAllCases();
+      // Only load cases matching caseScope (client/customer) — prevents cross-type ghost alerts
+      const all = await getAllCases(caseScope);
       const now = Date.now();
       caseAlerts = all
         // Non-admins only see cases assigned to themselves
@@ -185,8 +188,8 @@ export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterTyp
             if (stage === "FINALIZED") return out;
             const deadlineTime = new Date(c.deadline).getTime();
             const hoursUntil = Math.max(0, (deadlineTime - now) / (1000 * 60 * 60));
-            if (deadlineTime < now) out.push({ id: `case-${c.caseId}-overdue`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
-            else if (hoursUntil <= 48) out.push({ id: `case-${c.caseId}-deadline-48`, type: "case", customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntil)}h`, kind: "deadline", severity: "warn" });
+            if (deadlineTime < now) out.push({ id: `case-${c.caseId}-overdue`, type: "case", caseType: c.caseType, customerId: c.customerId, caseId: c.caseId, message: `Overdue: ${c.caseId}`, kind: "deadline", severity: "critical" });
+            else if (hoursUntil <= 48) out.push({ id: `case-${c.caseId}-deadline-48`, type: "case", caseType: c.caseType, customerId: c.customerId, caseId: c.caseId, message: `${c.caseId} due in ${Math.ceil(hoursUntil)}h`, kind: "deadline", severity: "warn" });
           }
           return out;
         });
@@ -211,7 +214,7 @@ export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterTyp
 
     const combined = [...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
     setAlerts(combined);
-  }, [canSeeCaseAlerts, canSeeCustomerAlerts, dismissedAlertMap, isAdmin, currentLawyer]);
+  }, [canSeeCaseAlerts, canSeeCustomerAlerts, caseScope, dismissedAlertMap, isAdmin, currentLawyer]);
 
   // Unified dismiss — works for both case and customer alerts
   const dismissAlert = useCallback(async (alertId: string, alertType: "case" | "customer") => {
@@ -275,8 +278,19 @@ export const CaseAlerts = ({ filterType = "all" }: { filterType?: AlertFilterTyp
         {alerts.map((a) => (
           <DropdownMenuItem key={a.id} onSelect={(e) => e.preventDefault()} className={`items-start py-2 ${a.severity === 'critical' ? 'text-destructive' : ''}`}>
             <div className="flex w-full items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-col">
-                <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {a.type === "case" && a.caseType && (
+                    <span className={`inline-flex rounded px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide ${
+                      a.caseType === "client"
+                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                        : "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+                    }`}>
+                      {a.caseType === "client" ? "Client Case" : "Customer Case"}
+                    </span>
+                  )}
+                  <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
+                </div>
                 <span className="text-xs text-muted-foreground">{customersMap[a.customerId] ? `${customersMap[a.customerId]} (${a.customerId})` : a.customerId}</span>
               </div>
               {/* X button on every alert — all users can dismiss their own notifications */}

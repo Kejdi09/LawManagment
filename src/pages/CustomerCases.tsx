@@ -20,6 +20,7 @@ import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 
 type CaseFormState = {
+  title: string;
   customerId: string;
   category: string;
   subcategory: string;
@@ -60,6 +61,7 @@ const CustomerCases = () => {
   const availableLawyers = (isAdmin || isManager) ? INTAKE_LAWYERS : [];
 
   const [caseForm, setCaseForm] = useState<CaseFormState>({
+    title: "",
     customerId: "",
     category: "",
     subcategory: "",
@@ -80,7 +82,7 @@ const CustomerCases = () => {
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
   const [newViewName, setNewViewName] = useState("");
-  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(false);
+  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(true);
   const [dashboardOpen, setDashboardOpen] = useState(() => {
     try { return localStorage.getItem(DASHBOARD_OPEN_KEY) !== "0"; } catch { return true; }
   });
@@ -103,18 +105,20 @@ const CustomerCases = () => {
 
   useEffect(() => {
     try {
-      setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+      const stored = localStorage.getItem(CASE_COLUMNS_MODE_KEY);
+      setShowMoreCaseColumns(stored !== "0");
     } catch {
-      setShowMoreCaseColumns(false);
+      setShowMoreCaseColumns(true);
     }
   }, []);
 
   useEffect(() => {
     const sync = () => {
       try {
-        setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+        const stored = localStorage.getItem(CASE_COLUMNS_MODE_KEY);
+        setShowMoreCaseColumns(stored !== "0");
       } catch {
-        setShowMoreCaseColumns(false);
+        setShowMoreCaseColumns(true);
       }
     };
     window.addEventListener("storage", sync);
@@ -272,6 +276,7 @@ const CustomerCases = () => {
 
   const openCreateCase = () => {
     setCaseForm({
+      title: "",
       customerId: "",
       category: "",
       subcategory: "",
@@ -316,10 +321,18 @@ const CustomerCases = () => {
     loadCases().catch((err) => console.error("Failed to load cases:", err));
   }, [tick, loadCases]);
 
+  // Real-time polling: refresh cases every 30s
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadCases().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [loadCases]);
+
   return (
     <MainLayout
       title="Customer Cases"
-      right={<><CaseAlerts filterType="case" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
+      right={<><CaseAlerts filterType="case" caseScope="customer" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
     >
       <div className="space-y-4">
         <button
@@ -512,6 +525,14 @@ const CustomerCases = () => {
             <DialogDescription>Create a case for a pre-confirmation customer. Additional details can be edited later.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-medium">Case Title</label>
+              <Input
+                value={caseForm.title}
+                onChange={(e) => setCaseForm({ ...caseForm, title: e.target.value })}
+                placeholder="e.g. Family Reunification"
+              />
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Customer ID *</label>
               <Input

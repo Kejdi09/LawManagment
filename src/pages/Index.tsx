@@ -20,6 +20,7 @@ import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 
 type CaseFormState = {
+  title: string;
   customerId: string;
   category: string;
   subcategory: string;
@@ -54,6 +55,7 @@ const Index = () => {
   const [docFilter, setDocFilter] = useState<"all" | "ok" | "missing">("all");
   const [showCaseForm, setShowCaseForm] = useState(false);
   const [caseForm, setCaseForm] = useState<CaseFormState>({
+    title: "",
     customerId: "",
     category: "",
     subcategory: "",
@@ -79,7 +81,7 @@ const Index = () => {
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
   const [newViewName, setNewViewName] = useState("");
-  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(false);
+  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(true);
   const [dashboardOpen, setDashboardOpen] = useState(() => {
     try { return localStorage.getItem(DASHBOARD_OPEN_KEY) !== "0"; } catch { return true; }
   });
@@ -102,18 +104,21 @@ const Index = () => {
 
   useEffect(() => {
     try {
-      setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+      const stored = localStorage.getItem(CASE_COLUMNS_MODE_KEY);
+      // default to true (show all columns) unless user explicitly turned it off
+      setShowMoreCaseColumns(stored !== "0");
     } catch {
-      setShowMoreCaseColumns(false);
+      setShowMoreCaseColumns(true);
     }
   }, []);
 
   useEffect(() => {
     const sync = () => {
       try {
-        setShowMoreCaseColumns(localStorage.getItem(CASE_COLUMNS_MODE_KEY) === "1");
+        const stored = localStorage.getItem(CASE_COLUMNS_MODE_KEY);
+        setShowMoreCaseColumns(stored !== "0");
       } catch {
-        setShowMoreCaseColumns(false);
+        setShowMoreCaseColumns(true);
       }
     };
     window.addEventListener("storage", sync);
@@ -297,6 +302,7 @@ const Index = () => {
 
   const openCreateCase = () => {
     setCaseForm({
+      title: "",
       customerId: "",
       category: "",
       subcategory: "",
@@ -343,11 +349,19 @@ const Index = () => {
     });
   }, [tick, loadCases]);
 
+  // Real-time polling: refresh cases every 30s
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadCases().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [loadCases]);
+
   
   return (
     <MainLayout
       title="Client Cases"
-      right={<><CaseAlerts filterType="case" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
+      right={<><CaseAlerts filterType="case" caseScope="client" /><Button size="sm" onClick={openCreateCase}>New Case</Button></>}
     >
       <div className="space-y-4">
         <button
@@ -557,6 +571,14 @@ const Index = () => {
             <DialogDescription>Create a case for a confirmed client. Additional details can be edited later in the full case window.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-medium">Case Title</label>
+              <Input
+                value={caseForm.title}
+                onChange={(e) => setCaseForm({ ...caseForm, title: e.target.value })}
+                placeholder="e.g. Residence Permit Application"
+              />
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Customer ID *</label>
               <Input

@@ -450,15 +450,16 @@ async function genCustomerId() {
   const num = last.length ? Number((last[0].customerId || "0").replace(/\D/g, "")) : 0;
   return `C${pad3(num + 1)}`;
 }
-async function genCaseId() {
+// prefix: 'CC' for customer cases, 'CL' for client cases (legacy 'CASE' still works for old records)
+async function genCaseId(prefix = "CASE") {
   const last = await casesCol
-    .find({})
+    .find({ caseId: { $regex: `^${escapeRegex(prefix)}-` } })
     .project({ caseId: 1 })
     .sort({ caseId: -1 })
     .limit(1)
     .toArray();
   const num = last.length ? Number((last[0].caseId || "0").replace(/\D/g, "")) : 0;
-  return `CASE-${pad3(num + 1)}`;
+  return `${prefix}-${pad3(num + 1)}`;
 }
 
 function buildCaseFilters(query) {
@@ -1182,7 +1183,6 @@ app.get("/api/cases/:id", verifyAuth, async (req, res) => {
 });
 
 app.post("/api/cases", verifyAuth, async (req, res) => {
-  const caseId = await genCaseId();
   const now = new Date().toISOString();
   const requestedCustomerId = String(req.body?.customerId || "").trim();
   if (!requestedCustomerId) return res.status(400).json({ error: "customerId is required" });
@@ -1200,7 +1200,12 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
     return res.status(400).json({ error: isIntakeUser ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
   }
 
-  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null, caseType: useCustomerCol ? 'customer' : 'client' };
+  // CC- prefix for customer cases, CL- prefix for client cases
+  const caseTypeValue = useCustomerCol ? 'customer' : 'client';
+  const caseIdPrefix = useCustomerCol ? 'CC' : 'CL';
+  const caseId = await genCaseId(caseIdPrefix);
+
+  const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null, caseType: caseTypeValue };
   // Strip internal routing hint before storing
   delete payload.caseScope;
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);

@@ -202,6 +202,14 @@ const Customers = () => {
   }, [customers]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
+
+  // Real-time polling: refresh customers every 30s
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadCustomers().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [loadCustomers]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
 
   const filteredCustomers = useMemo(() => {

@@ -54,8 +54,24 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                     : "";
                 return (
                   <TableRow key={c.caseId} className={`cursor-pointer transition-colors hover:bg-muted/50 ${rowClassName}`} onClick={() => onSelectCase(c.caseId)}>
-                    <TableCell className="font-mono text-xs font-medium">{c.caseId}</TableCell>
-                    <TableCell className="font-medium">{customerName ?? c.customerId}</TableCell>
+                    <TableCell className="font-mono text-xs font-medium">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {c.caseId}
+                        {c.caseType && (
+                          <span className={`inline-flex rounded px-1 py-0 text-[10px] font-semibold uppercase tracking-wide ${
+                            c.caseType === "client"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                              : "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+                          }`}>
+                            {c.caseType === "client" ? "Client" : "Customer"}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <div>{customerName ?? c.customerId}</div>
+                      {c.title && <div className="text-xs text-muted-foreground truncate max-w-[180px]">{c.title}</div>}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.category}{c.subcategory ? ` / ${c.subcategory}` : ""}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
                     <TableCell className={`text-xs ${overdue ? "text-destructive font-semibold" : dueSoon ? "text-amber-700 font-medium" : ""}`}>
@@ -102,6 +118,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                   <div className="font-mono text-xs font-medium">{c.caseId}</div>
                   <div className="flex-1">
                     <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
+                    {c.title && <div className="text-xs text-muted-foreground truncate">{c.title}</div>}
                     <div className="mt-2 text-xs text-muted-foreground ml-auto">{c.deadline ? formatDate(c.deadline) : 'No deadline'}</div>
                   </div>
                 </div>

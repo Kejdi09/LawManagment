@@ -16,6 +16,8 @@ export type Priority = "urgent" | "high" | "medium" | "low";
 export interface Case {
   caseId: string;
   version?: number;
+  title?: string;
+  caseType?: "client" | "customer";
   customerId: string;
   category: string;
   subcategory: string;
