@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { createMeeting, deleteMeeting, getAllCustomers, getConfirmedClients, getMeetings, updateMeeting } from "@/lib/case-store";
-import { LAWYERS, INTAKE_LAWYERS, Meeting } from "@/lib/types";
+import { LAWYERS, INTAKE_LAWYERS, CLIENT_LAWYERS, Meeting } from "@/lib/types";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +38,9 @@ const MeetingsCalendarPage = () => {
   const { user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
+  // Track which IDs belong to each team for boundary enforcement
+  const [customerIdSet, setCustomerIdSet] = useState<Set<string>>(new Set());
+  const [clientIdSet, setClientIdSet] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   const [form, setForm] = useState<MeetingForm>({
@@ -48,7 +51,18 @@ const MeetingsCalendarPage = () => {
   // Admin picks from all lawyers; manager picks from their intake team; others are locked to themselves
   const isAdmin = user?.role === 'admin';
   const isAdminLike = isAdmin || user?.role === 'manager';
-  const meetingAssigneePicker = isAdmin ? LAWYERS : user?.role === 'manager' ? INTAKE_LAWYERS : [];
+
+  // Determine which team the currently selected customer belongs to
+  const selectedPersonTeam = form.customerId
+    ? (customerIdSet.has(form.customerId) ? 'customer' : clientIdSet.has(form.customerId) ? 'client' : null)
+    : null;
+
+  // Restrict the assignee picker based on the selected person's team
+  const meetingAssigneePicker = isAdmin
+    ? (selectedPersonTeam === 'customer' ? INTAKE_LAWYERS
+      : selectedPersonTeam === 'client' ? CLIENT_LAWYERS
+      : LAWYERS)
+    : user?.role === 'manager' ? INTAKE_LAWYERS : [];
 
   const load = async () => {
     const [rows, customers, confirmed] = await Promise.all([
@@ -62,6 +76,8 @@ const MeetingsCalendarPage = () => {
       return acc;
     }, {});
     setCustomerNames(map);
+    setCustomerIdSet(new Set(customers.map((c) => c.customerId)));
+    setClientIdSet(new Set(confirmed.map((c) => c.customerId)));
   };
 
   useEffect(() => {
@@ -70,6 +86,17 @@ const MeetingsCalendarPage = () => {
       setCustomerNames({});
     });
   }, []);
+
+  // Auto-correct assignedTo when the selected customer's team changes
+  useEffect(() => {
+    if (!isAdmin || !form.customerId) return;
+    const allowedTeam = customerIdSet.has(form.customerId) ? INTAKE_LAWYERS
+      : clientIdSet.has(form.customerId) ? CLIENT_LAWYERS
+      : null;
+    if (allowedTeam && !allowedTeam.includes(form.assignedTo)) {
+      setForm((f) => ({ ...f, assignedTo: allowedTeam[0] }));
+    }
+  }, [form.customerId, customerIdSet, clientIdSet]);
 
   const meetingDays = useMemo(() => {
     return meetings.map((m) => new Date(m.startsAt));

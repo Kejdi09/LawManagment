@@ -7,6 +7,7 @@ import {
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
   Case, Customer, HistoryRecord, Note, CaseTask,
+  CLIENT_LAWYERS, INTAKE_LAWYERS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -221,6 +222,13 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
   if (!caseId || !caseData) return null;
 
   const c = caseData;
+  // Enforce team boundaries: always use the correct team list for the case type,
+  // regardless of what the parent page passes as availableLawyers
+  const effectiveLawyers = c.caseType === 'client'
+    ? CLIENT_LAWYERS
+    : c.caseType === 'customer'
+    ? INTAKE_LAWYERS
+    : availableLawyers;
   const assignedDisplayName = stripProfessionalTitle(c.assignedTo) || c.assignedTo;
   const pCfg = PRIORITY_CONFIG[c.priority];
   const overdue = c.deadline && isPast(new Date(c.deadline));
@@ -348,7 +356,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
         generalNote: editForm.generalNote,
         priority: editForm.priority,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
-        assignedTo: availableLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
+        assignedTo: effectiveLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
       };
       setCaseData(updatedCaseData);
       setEditMode(false);
@@ -358,7 +366,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
         ...editForm,
         version: caseData?.version,
         expectedVersion: caseData?.version ?? 1,
-        assignedTo: availableLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
+        assignedTo: effectiveLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       };
@@ -526,11 +534,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Assigned Consultant</span>
-                        {availableLawyers.length > 0 ? (
+                        {effectiveLawyers.length > 0 ? (
                           <Select value={editForm.assignedTo} onValueChange={(v) => updateEditForm({ assignedTo: v })}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {availableLawyers.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                              {effectiveLawyers.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         ) : (

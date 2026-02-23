@@ -170,6 +170,22 @@ const TEAM_MEMBERS_BY_MANAGER = {
   lenci: ["kejdi1", "kejdi2", "kejdi3"],
 };
 
+// Hard boundaries: client cases ↔ client team only; customer cases ↔ intake team only
+const CLIENT_LAWYERS_SERVER = ['Kejdi', 'Albert'];
+const INTAKE_LAWYERS_SERVER = ['Lenci', 'Kejdi 1', 'Kejdi 2', 'Kejdi 3'];
+
+function validateCaseTeamBoundary(caseType, assignedTo) {
+  if (!assignedTo) return null;
+  const name = stripProfessionalTitle(assignedTo);
+  if (caseType === 'client' && !CLIENT_LAWYERS_SERVER.includes(name)) {
+    return `Client cases can only be assigned to: ${CLIENT_LAWYERS_SERVER.join(', ')}`;
+  }
+  if (caseType === 'customer' && !INTAKE_LAWYERS_SERVER.includes(name)) {
+    return `Customer cases can only be assigned to: ${INTAKE_LAWYERS_SERVER.join(', ')}`;
+  }
+  return null;
+}
+
 function isAdminUser(user) {
   return user?.role === "admin";
 }
@@ -1212,6 +1228,9 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
   }
+  // Enforce team boundaries: client cases → CLIENT team; customer cases → INTAKE team
+  const teamErrCreate = validateCaseTeamBoundary(caseTypeValue, payload.assignedTo);
+  if (teamErrCreate) return res.status(400).json({ error: teamErrCreate });
   await casesCol.insertOne(payload);
   await historyCol.insertOne({ historyId: genShortId('H'), caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case', resourceId: caseId, details: { payload } });
@@ -1236,6 +1255,12 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
 
   if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
+  }
+  // Enforce team boundaries on reassignment
+  if (update.assignedTo) {
+    const existingCaseType = current.caseType;
+    const teamErrUpdate = validateCaseTeamBoundary(existingCaseType, update.assignedTo);
+    if (teamErrUpdate) return res.status(400).json({ error: teamErrUpdate });
   }
   if (update.customerId) {
     const isIntakeUser2 = req.user?.role === 'intake' || isManagerUser(req.user);
