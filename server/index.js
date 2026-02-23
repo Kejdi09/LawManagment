@@ -137,6 +137,8 @@ async function cleanupStaleCases() {
 }
 
 const pad3 = (n) => String(n).padStart(3, "0");
+// Generates a short unique ID that avoids collisions from rapid insertions.
+const genShortId = (prefix) => `${prefix}${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;
 const escapeRegex = (str = "") => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 8;
@@ -273,9 +275,10 @@ function buildMeetingScopeFilter(user) {
   if (isManagerUser(user)) {
     const managedLawyers = getManagedLawyerNames(user);
     if (!managedLawyers.length) return { createdBy: user.username || "" };
+    const matchers = managedLawyers.map((name) => buildAssignedToMatcher(name) || name);
     return {
       $or: [
-        { assignedTo: { $in: managedLawyers } },
+        { assignedTo: { $in: matchers } },
         { createdBy: user.username || "" },
       ],
     };
@@ -506,7 +509,8 @@ async function runDataMigrations() {
       { customerId: customer.customerId },
       {
         $set: {
-          assignedTo: customer.status === "CLIENT" ? normalizedAssignedTo : "",
+          // Preserve the assignedTo for all statuses (intake assigns customers before CLIENT confirmation)
+          assignedTo: normalizedAssignedTo,
           createdBy: customer.createdBy || null,
           version: Number(customer.version || 1),
         },
@@ -809,10 +813,7 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
   if (payload.status === "CLIENT" && !payload.assignedTo) {
     return res.status(400).json({ error: 'must_assign_confirmed_client' });
   }
-  // For non-client creations, ensure assignedTo is cleared
-  if (payload.status !== "CLIENT") {
-    payload.assignedTo = "";
-  }
+  // For non-CLIENT customers, keep the intake assignedTo set by the manager/intake team
   if (payload.status === "CLIENT") {
     const confirmedPayload = {
       ...payload,
@@ -863,7 +864,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 
   // Track status history
   if (current.status !== update.status) {
-    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    const historyId = genShortId('CH');
     await customerHistoryCol.insertOne({
       historyId,
       customerId: id,
@@ -934,7 +935,8 @@ app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
   if (isAdminUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
 
   // Intake users may see notifications for non-confirmed customers.
-  if (req.user?.role === 'intake') return res.json(docsForCustomers.slice(0, 50));
+  // Manager (lenci) oversees all pre-confirmation customers — show all notifications
+  if (req.user?.role === 'intake' || isManagerUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
 
   // Other authenticated users (consultant/lawyer) should only receive notifications
   // for customers assigned to them.
@@ -945,7 +947,8 @@ app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
 
 
 app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
-  if (!isAdminUser(req.user) && req.user?.role !== 'intake') {
+  // Admin, manager (lenci), and intake users can dismiss pre-confirmation customer notifications
+  if (!isAdminUser(req.user) && !isManagerUser(req.user) && req.user?.role !== 'intake') {
     return res.status(403).json({ error: 'forbidden' });
   }
   const { id } = req.params;
@@ -983,7 +986,7 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   }
 
   if (current.status !== update.status) {
-    const historyId = `CH${pad3(Date.now() % 1000)}`;
+    const historyId = genShortId('CH');
     await customerHistoryCol.insertOne({
       historyId,
       customerId: id,
@@ -1050,7 +1053,7 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
 
 app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
-  const customerScope = buildCustomerScopeFilter(req.user);
+  const customerScope = buildClientScopeFilter(req.user);
   const current = await confirmedClientsCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: "Not found" });
   const caseScope = buildCaseScopeFilter(req.user);
@@ -1084,7 +1087,7 @@ app.get("/api/customers/:id/history", verifyAuth, async (req, res) => {
 app.post("/api/customers/:id/history", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const { statusFrom, statusTo } = req.body;
-  const historyId = `CH${pad3(Date.now() % 1000)}`;
+  const historyId = genShortId('CH');
   const record = {
     historyId,
     customerId: id,
@@ -1198,7 +1201,7 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
     payload.assignedTo = getUserLawyerName(req.user);
   }
   await casesCol.insertOne(payload);
-  await historyCol.insertOne({ historyId: `H${pad3(Date.now() % 1000)}`, caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
+  await historyCol.insertOne({ historyId: genShortId('H'), caseId, stateFrom: payload.state, stateIn: payload.state, date: now });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case', resourceId: caseId, details: { payload } });
   res.status(201).json(payload);
 });
@@ -1272,7 +1275,7 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
   const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
   if (!allowed) return res.status(404).json({ error: "Not found" });
   const { stateFrom, stateIn } = req.body;
-  const historyId = `H${pad3(Date.now() % 1000)}`;
+  const historyId = genShortId('H');
   const record = { historyId, caseId: id, stateFrom, stateIn, date: new Date().toISOString() };
   await historyCol.insertOne(record);
   await casesCol.updateOne({ caseId: id }, { $set: { state: stateIn, lastStateChange: record.date } });
@@ -1292,7 +1295,7 @@ app.post("/api/cases/:id/notes", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
   if (!allowed) return res.status(404).json({ error: "Not found" });
-  const noteId = `N${pad3(Date.now() % 1000)}`;
+  const noteId = genShortId('N');
   const note = { noteId, caseId: id, date: new Date().toISOString(), noteText: req.body.noteText };
   await notesCol.insertOne(note);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'note', resourceId: noteId, details: { caseId: id } });
@@ -1314,7 +1317,7 @@ app.post("/api/cases/:id/tasks", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const allowed = await casesCol.findOne({ caseId: id, ...buildCaseScopeFilter(req.user) });
   if (!allowed) return res.status(404).json({ error: "Not found" });
-  const taskId = `T${pad3(Date.now() % 1000)}`;
+  const taskId = genShortId('T');
   const task = {
     taskId,
     caseId: id,
@@ -1397,7 +1400,7 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   } catch (err) {
     console.warn("Could not create uploads directory:", err?.message || err);
   }
-  await seedIfEmpty();
+  // seedIfEmpty() removed — data is entered manually; no sample data is seeded.
   await seedDemoUser();
   await runDataMigrations();
   // periodic cleanup for stale cases
