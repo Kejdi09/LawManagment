@@ -45,7 +45,7 @@ export function getDeadlineNotification(deadline: string | null | undefined, cas
 // and `dd/MM/yyyy HH:mm` when `includeTime` is true.
 export function formatDate(value: string | Date | null | undefined, includeTime = false) {
   if (!value) return "N/A";
-  const d = new Date(value as any);
+  const d = value instanceof Date ? value : new Date(value);
   if (isNaN(d.getTime())) return "N/A";
   return includeTime ? format(d, "dd/MM/yyyy HH:mm") : format(d, "dd/MM/yyyy");
 }

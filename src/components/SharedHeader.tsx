@@ -87,7 +87,7 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
         </div>
         <div className="ml-auto flex items-center gap-2">
           {canToggleColumns && (
-            <Button size="sm" variant="ghost" onClick={handleToggleColumns}>
+            <Button size="sm" variant="ghost" onClick={handleToggleColumns} className="hidden md:inline-flex">
               {showMoreColumns ? "Show fewer columns" : "Show more columns"}
             </Button>
           )}

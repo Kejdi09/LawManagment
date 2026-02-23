@@ -1,17 +1,18 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import Index from "./pages/Index";
-import Customers from "./pages/Customers";
-import Clients from "./pages/Clients";
-import AdminActivity from "./pages/AdminActivity";
-import Archived from "./pages/Archived";
-import NotFound from "./pages/NotFound";
-import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 
+const Index = lazy(() => import("./pages/Index"));
+const Customers = lazy(() => import("./pages/Customers"));
+const Clients = lazy(() => import("./pages/Clients"));
+const AdminActivity = lazy(() => import("./pages/AdminActivity"));
+const Archived = lazy(() => import("./pages/Archived"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Login = lazy(() => import("./pages/Login"));
 
 const queryClient = new QueryClient();
 
@@ -60,15 +61,17 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <HashRouter>
-          <Routes>
-            <Route path="/login" element={<LoginRoute />} />
-            <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
-            <Route path="/customers" element={<RequireAuth><RequireCustomersAccess><Customers /></RequireCustomersAccess></RequireAuth>} />
-            <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
-            <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
-            <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>}>
+            <Routes>
+              <Route path="/login" element={<LoginRoute />} />
+              <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
+              <Route path="/customers" element={<RequireAuth><RequireCustomersAccess><Customers /></RequireCustomersAccess></RequireAuth>} />
+              <Route path="/clients" element={<RequireAuth><Clients /></RequireAuth>} />
+              <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
+              <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </HashRouter>
       </AuthProvider>
     </TooltipProvider>

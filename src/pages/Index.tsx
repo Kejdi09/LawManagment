@@ -18,6 +18,19 @@ import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import { useToast } from "@/hooks/use-toast";
 
+type CaseFormState = {
+  customerId: string;
+  category: string;
+  subcategory: string;
+  state: CaseStage;
+  documentState: "ok" | "missing";
+  communicationMethod: string;
+  generalNote: string;
+  priority: Priority;
+  deadline: string;
+  assignedTo: string;
+};
+
 type SavedCaseView = {
   name: string;
   query: string;
@@ -38,15 +51,15 @@ const Index = () => {
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [docFilter, setDocFilter] = useState<"all" | "ok" | "missing">("all");
   const [showCaseForm, setShowCaseForm] = useState(false);
-  const [caseForm, setCaseForm] = useState({
+  const [caseForm, setCaseForm] = useState<CaseFormState>({
     customerId: "",
     category: "",
     subcategory: "",
-    state: "INTAKE" as CaseStage,
-    documentState: "ok" as "ok" | "missing",
+    state: "NEW",
+    documentState: "ok",
     communicationMethod: "Email",
     generalNote: "",
-    priority: "medium" as Priority,
+    priority: "medium",
     deadline: "",
     assignedTo: LAWYERS[0],
   });
@@ -55,7 +68,7 @@ const Index = () => {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
-  const [caseList, setCaseList] = useState<any[]>([]);
+  const [caseList, setCaseList] = useState<Awaited<ReturnType<typeof getAllCases>>>([]);
   const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
@@ -142,7 +155,7 @@ const Index = () => {
       return true;
     });
     setCaseList(filtered);
-  }, [query, priorityFilter, docFilter, customers]);
+  }, [query, priorityFilter, docFilter]);
 
   useEffect(() => {
     (async () => {
@@ -296,19 +309,21 @@ const Index = () => {
     }
     try {
       // Map UI stage (state) to a legacy CaseState for backend
-      const mappedState = mapStageToState(caseForm.state as any);
-      await createCase({
+      const mappedState = mapStageToState(caseForm.state);
+      const payload = {
         ...caseForm,
         assignedTo: isAdmin ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
         state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
-      } as any);
+      };
+      await createCase(payload);
       setShowCaseForm(false);
       toast({ title: "Case created successfully" });
       setTick((t) => t + 1);
       await loadCases();
-    } catch (err: any) {
-      toast({ title: "Create failed", description: err?.message ?? "Unable to create case", variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to create case";
+      toast({ title: "Create failed", description: message, variant: "destructive" });
     }
   };
 
@@ -559,7 +574,7 @@ const Index = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">State</label>
-              <Select value={caseForm.state} onValueChange={(v) => setCaseForm({ ...caseForm, state: v as any })}>
+              <Select value={caseForm.state} onValueChange={(v) => setCaseForm({ ...caseForm, state: v as CaseStage })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ALL_STAGES.map((s) => <SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>)}
@@ -580,7 +595,7 @@ const Index = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Documents</label>
-              <Select value={caseForm.documentState} onValueChange={(v) => setCaseForm({ ...caseForm, documentState: v as any })}>
+              <Select value={caseForm.documentState} onValueChange={(v) => setCaseForm({ ...caseForm, documentState: v as "ok" | "missing" })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ok">OK</SelectItem>

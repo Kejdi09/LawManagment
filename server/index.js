@@ -16,6 +16,7 @@ dotenv.config();
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || "lawman";
+const IS_PROD = process.env.NODE_ENV === "production";
 let documentsCol;
 const app = express();
 app.set("trust proxy", 1);
@@ -35,7 +36,10 @@ app.use(
     origin: (origin, callback) => {
       // Allow non-browser (curl/postman) requests with no origin
       if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.length === 0) {
+        if (IS_PROD) return callback(new Error("CORS misconfigured: ALLOWED_ORIGINS is empty in production"));
+        return callback(null, true);
+      }
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("CORS not allowed"));
     },
@@ -149,9 +153,10 @@ const FOLLOW_UP_24H_STATUSES = ["INTAKE"];
 const FOLLOW_UP_72H_STATUSES = ["WAITING_APPROVAL", "WAITING_ACCEPTANCE"];
 const RESPOND_24H_STATUSES = ["SEND_PROPOSAL", "SEND_CONTRACT", "SEND_RESPONSE"];
 const CONSULTANT_BY_USERNAME = {
-  adi: "Albert",
+  admirim: "Albert",
   albert: "Albert",
   kejdi: "Kejdi",
+  lenci: "Lenci",
 };
 
 function isAdminUser(user) {
@@ -416,27 +421,34 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 async function seedDemoUser() {
   try {
     const demoUsers = [
-      { username: "adi", password: "890", role: "admin", consultantName: "Albert" },
-      { username: "albert", password: "890", role: "consultant", consultantName: "Albert" },
-      { username: "kejdi", password: "890", role: "consultant", consultantName: "Kejdi" },
+      { username: "admirim", password: "adi33", role: "admin", consultantName: "Albert" },
+      { username: "albert", password: "alb33", role: "consultant", consultantName: "Albert" },
+      { username: "kejdi", password: "kej33", role: "consultant", consultantName: "Kejdi" },
       // Intake-only demo user: can work with non-confirmed customers but not confirmed clients or cases
-      { username: "lenci", password: "80", role: "intake", consultantName: "Lenci" },
+      { username: "lenci", password: "len33", role: "intake", consultantName: "Lenci" },
     ];
 
     for (const demoUser of demoUsers) {
-      const existing = await usersCol.findOne({ username: demoUser.username });
-      if (existing) continue;
       const hashed = await bcrypt.hash(demoUser.password, 10);
-      await usersCol.insertOne({
-        username: demoUser.username,
-        password: hashed,
-        role: demoUser.role,
-        consultantName: demoUser.consultantName,
-        lawyerName: demoUser.consultantName,
-        createdAt: new Date().toISOString(),
-      });
+      await usersCol.updateOne(
+        { username: demoUser.username },
+        {
+          $set: {
+            password: hashed,
+            role: demoUser.role,
+            consultantName: demoUser.consultantName,
+            lawyerName: demoUser.consultantName,
+            updatedAt: new Date().toISOString(),
+          },
+          $setOnInsert: {
+            username: demoUser.username,
+            createdAt: new Date().toISOString(),
+          },
+        },
+        { upsert: true }
+      );
     }
-    console.log("Seeded default users: adi, albert, kejdi.");
+    console.log("Synced default users: admirim, albert, kejdi, lenci.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
@@ -505,21 +517,6 @@ app.get("/api/me", (req, res) => {
 
 // Debug endpoint to inspect received cookies. Enabled only when not in production
 // or when ENABLE_DEBUG_COOKIES=true is set in env. Returns `req.cookies` and decoded token payload if present.
-app.get("/api/_debug/cookies", (req, res) => {
-  const enabled = process.env.NODE_ENV !== "production" || process.env.ENABLE_DEBUG_COOKIES === "true";
-  if (!enabled) return res.status(404).json({ error: "Not found" });
-  const cookies = req.cookies || {};
-  let tokenPayload = null;
-  try {
-    if (cookies.token) {
-      tokenPayload = jwt.verify(cookies.token, JWT_SECRET);
-    }
-  } catch (err) {
-    tokenPayload = { error: "invalid_token" };
-  }
-  return res.json({ cookies, tokenPayload });
-});
-
 // --- Auth middleware ---
 function verifyAuth(req, res, next) {
   try {
@@ -530,20 +527,6 @@ function verifyAuth(req, res, next) {
     return next();
   } catch (err) {
     return res.status(401).json({ error: 'unauthenticated' });
-  }
-}
-
-function debugLogEnabled() {
-  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_COOKIES === 'true';
-}
-
-function debugLog(req, label, extra = {}) {
-  if (!debugLogEnabled()) return;
-  try {
-    const user = req.user || null;
-    console.log(`[DEBUG] ${label} ${req.method} ${req.originalUrl} user=${user ? user.username + ':' + user.role : 'anonymous'} params=${JSON.stringify(req.params)} bodyKeys=${Object.keys(req.body || {}).length}`, extra);
-  } catch (e) {
-    /* ignore logging errors */
   }
 }
 
@@ -572,27 +555,6 @@ async function logAudit({ username, role, action, resource, resourceId, details 
     console.warn('Failed to write audit log', err?.message || err);
   }
 }
-
-// Debug endpoint to (re)create the demo user. Enabled only when not in production
-// or when ENABLE_DEBUG_COOKIES=true is set. Use this if the seeded user was not created.
-app.post("/api/_debug/seed-user", async (req, res) => {
-  const enabled = process.env.NODE_ENV !== "production" || process.env.ENABLE_DEBUG_COOKIES === "true";
-  if (!enabled) return res.status(404).json({ error: "Not found" });
-  try {
-    const username = req.body?.username || "adi";
-    const password = req.body?.password || "890";
-    const hashed = await bcrypt.hash(String(password), 10);
-    await usersCol.updateOne(
-      { username },
-      { $set: { username, password: hashed, role: "admin", createdAt: new Date().toISOString() } },
-      { upsert: true }
-    );
-    return res.json({ ok: true, username });
-  } catch (err) {
-    console.error("/api/_debug/seed-user error:", err);
-    return res.status(500).json({ ok: false, error: "seed_failed" });
-  }
-});
 
 // Login using users collection and bcrypt, issue httpOnly JWT cookie
 app.post("/api/login", async (req, res) => {
@@ -660,7 +622,6 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  debugLog(req, 'GET /api/customers/:id');
   // Intake may view any non-confirmed customer. Other users (consultants/admin)
   // may view customers that are in their scope (assignedTo or createdBy).
   const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
@@ -669,10 +630,8 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
     doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...customerScope });
   }
   if (!doc) {
-    debugLog(req, 'GET /api/customers/:id - not found');
     return res.status(404).json({ error: "Not found" });
   }
-  debugLog(req, 'GET /api/customers/:id - ok', { customerId: doc.customerId });
   res.json(doc);
 });
 
@@ -712,7 +671,6 @@ app.post("/api/customers", verifyAuth, async (req, res) => {
 // can edit only within their scope. If status changes to CLIENT we require `assignedTo`
 // and migrate the record into `confirmedClients`.
 app.put("/api/customers/:id", verifyAuth, async (req, res) => {
-  debugLog(req, 'PUT /api/customers/:id');
   const { id } = req.params;
   const update = { ...req.body };
   if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
@@ -773,7 +731,6 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     await confirmedClientsCol.updateOne({ customerId: id }, { $set: confirmedPayload }, { upsert: true });
     await customersCol.deleteOne({ customerId: id });
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'confirm', resource: 'customer', resourceId: id, details: { assignedTo: confirmedPayload.assignedTo } });
-    debugLog(req, 'PUT /api/customers/:id - confirmed', { assignedTo: confirmedPayload.assignedTo });
     return res.json(confirmedPayload);
   }
 
@@ -782,7 +739,6 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   await customersCol.updateOne({ customerId: id, ...customerScope }, { $set: update });
   const updated = await customersCol.findOne({ customerId: id });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'customer', resourceId: id, details: { update } });
-  debugLog(req, 'PUT /api/customers/:id - updated', { updatedCustomerId: updated?.customerId });
   res.json(updated);
 });
 
@@ -1360,7 +1316,6 @@ function isValidOwnerId(value) {
 
 app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req, res) => {
   try {
-    debugLog(req, 'POST /api/documents/upload', { filename: req.file?.originalname });
     const ownerType = String(req.body.ownerType || "").trim(); // 'case' or 'customer'
     const ownerId = String(req.body.ownerId || "").trim();
     if (!req.file || !ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
@@ -1379,7 +1334,6 @@ app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req,
     };
     await documentsCol.insertOne(doc);
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'upload', resource: 'document', resourceId: doc.docId, details: { ownerType, ownerId, originalName: doc.originalName } });
-    debugLog(req, 'POST /api/documents/upload - saved', { docId: doc.docId });
     return res.json(doc);
   } catch (err) {
     if (err?.message === "invalid_file_type") {

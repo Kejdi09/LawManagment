@@ -51,7 +51,6 @@ export interface Customer {
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
   expectedVersion?: number;
   notes?: string;
-  expectedVersion?: number;
 }
 
 export interface HistoryRecord {

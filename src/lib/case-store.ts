@@ -287,7 +287,7 @@ export async function fetchDocumentBlob(docId: string): Promise<{ blob: Blob; fi
   if (!res.ok) throw new Error('Failed to load document');
   const blob = await res.blob();
   const disposition = res.headers.get('content-disposition') || '';
-  const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
   const fileName = match ? decodeURIComponent(match[1]) : null;
   return { blob, fileName };
 }

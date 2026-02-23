@@ -108,7 +108,6 @@ const Customers = () => {
   const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
   const [statusView, setStatusView] = useState<"all" | LeadStatus>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [customerPage, setCustomerPage] = useState(1);
   const customerPageSize = 25;
