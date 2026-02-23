@@ -769,8 +769,10 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
     }
     return res.json([]);
   }
-  // Intake/admin should be able to view all non-confirmed customers (no assignedTo restriction)
-  const baseFilter = { status: { $ne: "CLIENT" } };
+  // Apply scope so intake users (kejdi1/2/3) only see their assigned/created customers.
+  // Manager and admin get {} from buildCustomerScopeFilter so they see all.
+  const scopeFilter = buildCustomerScopeFilter(req.user);
+  const baseFilter = { status: { $ne: "CLIENT" }, ...scopeFilter };
   if (!paging.requested) {
     const docs = await customersCol.find(baseFilter).sort({ [sortBy]: sortDir }).toArray();
     return res.json(docs);
@@ -790,12 +792,11 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  // Intake may view any non-confirmed customer. Other users (consultants/admin)
-  // may view customers that are in their scope (assignedTo or createdBy).
-  const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
+  // Apply scope filter for all roles — intake users only see their assigned/created customers.
+  const customerScope = buildCustomerScopeFilter(req.user);
   let doc = await customersCol.findOne({ customerId: req.params.id, ...customerScope });
-  if (!doc && req.user?.role !== 'intake') {
-    doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...customerScope });
+  if (!doc && req.user?.role === 'consultant') {
+    doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...buildClientScopeFilter(req.user) });
   }
   if (!doc) {
     return res.status(404).json({ error: "Not found" });
