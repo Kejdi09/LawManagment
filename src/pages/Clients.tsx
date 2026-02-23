@@ -37,7 +37,7 @@ import {
   fetchDocumentBlob,
   StoredDocument,
 } from "@/lib/case-store";
-import { mapCaseStateToStage, formatDate } from "@/lib/utils";
+import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 
@@ -90,7 +90,12 @@ const ClientsPage = () => {
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
   const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
 
-  const load = () => getConfirmedClients().then(setClients).catch(() => setClients([]));
+  const load = () => getConfirmedClients()
+    .then((rows) => setClients(rows.map((row) => ({
+      ...row,
+      assignedTo: stripProfessionalTitle(row.assignedTo) || row.assignedTo || "",
+    }))))
+    .catch(() => setClients([]));
 
   useEffect(() => {
     load();
@@ -114,7 +119,7 @@ const ClientsPage = () => {
       registeredAt: client.registeredAt || new Date().toISOString(),
       services: client.services || [],
       serviceDescription: client.serviceDescription || "",
-      assignedTo: client.assignedTo || "",
+      assignedTo: stripProfessionalTitle(client.assignedTo) || client.assignedTo || "",
       followUpDate: client.followUpDate ? String(client.followUpDate).slice(0, 10) : "",
       notes: client.notes ?? "",
     });
@@ -125,7 +130,9 @@ const ClientsPage = () => {
     if (!form.customerId) return;
     const payload: Partial<Customer> = {
       ...form,
-      assignedTo: isAdmin ? (form.assignedTo || "") : (user?.consultantName || user?.lawyerName || form.assignedTo || ""),
+      assignedTo: isAdmin
+        ? (stripProfessionalTitle(form.assignedTo) || form.assignedTo || "")
+        : (stripProfessionalTitle(user?.consultantName || user?.lawyerName || form.assignedTo || "") || form.assignedTo || ""),
       followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(String(form.followUpDate)).toISOString() : null,
       services: form.services || [],
       serviceDescription: form.serviceDescription || "",
@@ -241,7 +248,7 @@ const ClientsPage = () => {
                     <TableRow key={client.customerId} className="cursor-pointer" onClick={() => openDetail(client)}>
                       <TableCell className="font-mono text-xs">{client.customerId}</TableCell>
                       <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{client.assignedTo || "Unassigned"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{stripProfessionalTitle(client.assignedTo) || client.assignedTo || "Unassigned"}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[client.contactChannel]}</Badge>
                       </TableCell>
@@ -365,7 +372,7 @@ const ClientsPage = () => {
                             </div>
                             <div className="text-right text-muted-foreground">
                               <div>{formatDate(row.date, true)}</div>
-                              <div>{row.changedByConsultant || row.changedByLawyer || row.changedBy || "System"}</div>
+                              <div>{stripProfessionalTitle(row.changedByConsultant || row.changedByLawyer || row.changedBy || "") || row.changedBy || "System"}</div>
                             </div>
                           </div>
                         ))}
@@ -471,7 +478,7 @@ const ClientsPage = () => {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input value={user?.consultantName || user?.lawyerName || form.assignedTo || "My clients"} disabled />
+                  <Input value={stripProfessionalTitle(user?.consultantName || user?.lawyerName || form.assignedTo || "") || form.assignedTo || "My clients"} disabled />
                 )}
               </div>
               <div className="space-y-2 md:col-span-2">

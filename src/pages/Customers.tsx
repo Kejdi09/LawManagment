@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import {
   getAllCustomers,
   createCustomer,
@@ -173,7 +173,10 @@ const Customers = () => {
 
   const loadCustomers = useCallback(async () => {
     const data = await getAllCustomers();
-    setCustomers(data);
+    setCustomers(data.map((row) => ({
+      ...row,
+      assignedTo: stripProfessionalTitle(row.assignedTo) || row.assignedTo || "",
+    })));
   }, []);
 
   const loadCustomerDetail = useCallback(async (id: string | null) => {
@@ -352,7 +355,7 @@ const Customers = () => {
       registeredAt: c.registeredAt || new Date().toISOString(),
       services: c.services || [],
       serviceDescription: c.serviceDescription || "",
-      assignedTo: c.assignedTo || "",
+      assignedTo: stripProfessionalTitle(c.assignedTo) || c.assignedTo || "",
       followUpDate: c.followUpDate ? String(c.followUpDate).slice(0, 10) : "",
       notes: c.notes ?? "",
     });
@@ -368,7 +371,7 @@ const Customers = () => {
       }
       const payload = {
         ...form,
-        assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : form.assignedTo,
+        assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : (stripProfessionalTitle(form.assignedTo) || form.assignedTo),
         followUpDate: form.status === "ON_HOLD" && form.followUpDate ? new Date(form.followUpDate).toISOString() : null,
         contact: form.contact || form.name,
         registeredAt: form.registeredAt || new Date().toISOString(),
@@ -384,7 +387,7 @@ const Customers = () => {
           // If editing, preserve existing assignedTo; if creating, ensure empty
           if (editingId) {
             const orig = customers.find((x) => x.customerId === editingId);
-            payload.assignedTo = orig?.assignedTo || "";
+            payload.assignedTo = stripProfessionalTitle(orig?.assignedTo || "") || orig?.assignedTo || "";
           } else {
             payload.assignedTo = "";
           }
@@ -509,10 +512,10 @@ const Customers = () => {
       const current = customers.find((c) => c.customerId === confirmAssignCustomerId);
       await updateCustomer(confirmAssignCustomerId, {
         status: 'CLIENT',
-        assignedTo: confirmAssignSelected,
+        assignedTo: stripProfessionalTitle(confirmAssignSelected) || confirmAssignSelected,
         expectedVersion: current?.version ?? 1,
       });
-      toast({ title: 'Client confirmed', description: `Assigned to ${confirmAssignSelected}` });
+      toast({ title: 'Client confirmed', description: `Assigned to ${stripProfessionalTitle(confirmAssignSelected) || confirmAssignSelected}` });
       setShowConfirmAssign(false);
       setConfirmAssignCustomerId(null);
       await loadCustomers();
@@ -1222,7 +1225,7 @@ const Customers = () => {
                                   <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[record.statusFrom as LeadStatus] || record.statusFrom}</span>
                                 </div>
                                 <span className="text-right text-muted-foreground">
-                                  {safeFormatDate(record.date)} • {record.changedByConsultant || record.changedByLawyer || record.changedBy || "System"}
+                                  {safeFormatDate(record.date)} • {stripProfessionalTitle(record.changedByConsultant || record.changedByLawyer || record.changedBy || "") || record.changedBy || "System"}
                                 </span>
                               </div>
                             ))}

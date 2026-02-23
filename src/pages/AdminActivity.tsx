@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAuditLogs } from "@/lib/case-store";
 import { AuditLogRecord } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 const AdminActivity = () => {
@@ -42,6 +42,9 @@ const AdminActivity = () => {
     [logs]
   );
 
+  const actorDisplayName = (log: AuditLogRecord) =>
+    stripProfessionalTitle(log.consultantName || log.username || "") || log.username || "System";
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
@@ -54,7 +57,7 @@ const AdminActivity = () => {
       if (resourceFilter !== "all" && l.resource !== resourceFilter) return false;
       if (roleFilter !== "all" && (l.role || "system") !== roleFilter) return false;
       if (!q) return true;
-      const actor = (l.consultantName || l.username || "").toLowerCase();
+      const actor = actorDisplayName(l).toLowerCase();
       const msg = `${l.action} ${l.resource} ${l.resourceId || ""}`.toLowerCase();
       const details = JSON.stringify(l.details || {}).toLowerCase();
       return actor.includes(q) || msg.includes(q) || details.includes(q);
@@ -63,7 +66,7 @@ const AdminActivity = () => {
 
   const total = filtered.length;
   const last24h = filtered.filter((log) => Date.now() - new Date(log.at).getTime() <= 24 * 60 * 60 * 1000).length;
-  const uniqueActors = new Set(filtered.map((log) => log.consultantName || log.username || "System")).size;
+  const uniqueActors = new Set(filtered.map((log) => actorDisplayName(log))).size;
   const destructiveChanges = filtered.filter((log) => log.action === "delete").length;
 
   const formatDetailsPreview = (details?: Record<string, unknown>) => {
@@ -185,7 +188,7 @@ const AdminActivity = () => {
                   filtered.map((log, idx) => (
                     <TableRow key={`${log.at}-${log.resourceId || idx}`}>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(log.at, true)}</TableCell>
-                      <TableCell className="text-sm">{log.consultantName || log.username || "System"}</TableCell>
+                      <TableCell className="text-sm">{actorDisplayName(log)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs capitalize">{log.role || "system"}</Badge>
                       </TableCell>
@@ -216,7 +219,7 @@ const AdminActivity = () => {
             </DialogHeader>
             <div className="space-y-2 text-sm">
               <div><span className="text-muted-foreground">When:</span> {selectedLog ? formatDate(selectedLog.at, true) : "-"}</div>
-              <div><span className="text-muted-foreground">Actor:</span> {selectedLog?.consultantName || selectedLog?.username || "System"}</div>
+              <div><span className="text-muted-foreground">Actor:</span> {selectedLog ? actorDisplayName(selectedLog) : "System"}</div>
               <div><span className="text-muted-foreground">Action:</span> {selectedLog?.action || "-"}</div>
               <div><span className="text-muted-foreground">Resource:</span> {selectedLog?.resource || "-"}</div>
               <pre className="max-h-[45vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
