@@ -6,7 +6,7 @@ import {
 } from "@/lib/case-store";
 import {
   ALL_STAGES, STAGE_LABELS, CaseStage, PRIORITY_CONFIG, Priority,
-  Case, Customer, HistoryRecord, Note, CaseTask, LAWYERS,
+  Case, Customer, HistoryRecord, Note, CaseTask,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,9 +43,10 @@ interface CaseDetailProps {
   open: boolean;
   onClose: () => void;
   onStateChanged: () => void;
+  availableLawyers?: string[];
 }
 
-export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetailProps) {
+export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLawyers = [] }: CaseDetailProps) {
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [caseHistory, setCaseHistory] = useState<HistoryRecord[]>([]);
@@ -81,7 +82,6 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   }, []);
   const { toast } = useToast();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const currentLawyer = user?.consultantName || user?.lawyerName || "";
   const getErrorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
   const formatOptionalDateTime = (value: string | null | undefined) => {
@@ -345,7 +345,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         generalNote: editForm.generalNote,
         priority: editForm.priority,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
-        assignedTo: isAdmin ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
+        assignedTo: availableLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
       };
       setCaseData(updatedCaseData);
       setEditMode(false);
@@ -355,7 +355,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
         ...editForm,
         version: caseData?.version,
         expectedVersion: caseData?.version ?? 1,
-        assignedTo: isAdmin ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
+        assignedTo: availableLawyers.length > 0 ? editForm.assignedTo : (currentLawyer || editForm.assignedTo),
         state: mapStageToState(editForm.state),
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
       };
@@ -517,11 +517,11 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                       </div>
                       <div className="space-y-1">
                         <span className="text-xs text-muted-foreground">Assigned Consultant</span>
-                        {isAdmin ? (
+                        {availableLawyers.length > 0 ? (
                           <Select value={editForm.assignedTo} onValueChange={(v) => updateEditForm({ assignedTo: v })}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                              {availableLawyers.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         ) : (

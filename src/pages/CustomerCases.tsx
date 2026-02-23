@@ -484,6 +484,7 @@ const CustomerCases = () => {
         open={!!selectedCaseId}
         onClose={() => setSelectedCaseId(null)}
         onStateChanged={refresh}
+        availableLawyers={availableLawyers}
       />
 
       <Dialog open={showCaseForm} onOpenChange={(o) => !o && setShowCaseForm(false)}>
