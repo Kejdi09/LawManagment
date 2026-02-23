@@ -258,9 +258,9 @@ const Index = () => {
       return {
         title: "Admin Focus",
         cards: [
-          { label: "Total Cases", value: caseList.length },
+          { label: "New Cases", value: caseList.filter((c) => mapCaseStateToStage(c.state) === "NEW").length },
           { label: "Due in 24h", value: todaysQueue.dueToday.length },
-          { label: "High Priority", value: caseList.filter((c) => c.priority === "high").length },
+          { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
         ],
       };
     }

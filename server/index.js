@@ -580,10 +580,13 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
     loginAttempts.delete(key);
-    const consultantName = user.consultantName || user.lawyerName || null;
-    const token = jwt.sign({ username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
+    const role = user.role || "user";
+    const consultantName = role === "admin"
+      ? null
+      : (user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || null);
+    const token = jwt.sign({ username: user.username, role, consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
-    return res.json({ success: true, username: user.username, role: user.role || "user", consultantName, lawyerName: consultantName, token });
+    return res.json({ success: true, username: user.username, role, consultantName, lawyerName: consultantName, token });
   } catch (err) {
     console.error("/api/login error:", err);
     return res.status(500).json({ success: false, message: "Server error" });

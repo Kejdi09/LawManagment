@@ -50,6 +50,11 @@ export function formatDate(value: string | Date | null | undefined, includeTime 
   return includeTime ? format(d, "dd/MM/yyyy HH:mm") : format(d, "dd/MM/yyyy");
 }
 
+export function stripProfessionalTitle(value: string | null | undefined) {
+  if (!value) return "";
+  return String(value).replace(/^\s*(dr|mag)\.?\s+/i, "").trim();
+}
+
 // Map legacy case state to simplified case stage used for grouping/UI
 export function mapCaseStateToStage(state: string): CaseStage {
   switch (state) {

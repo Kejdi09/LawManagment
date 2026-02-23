@@ -4,6 +4,9 @@ import { useAuth } from "@/lib/auth-context";
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
+  const displayName = user?.role === "admin"
+    ? (user?.username || user?.consultantName || user?.lawyerName)
+    : (user?.consultantName || user?.lawyerName || user?.username);
   return (
     <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:border-primary/20 md:bg-card md:shadow-sm">
       <div className="flex flex-col h-full">
@@ -17,7 +20,7 @@ export const Sidebar = () => {
           </div>
           <div className="mt-4 pt-2 border-t">
             <div className="text-xs text-muted-foreground">Account</div>
-            <div className="text-sm font-medium">{user?.consultantName || user?.lawyerName || user?.username}</div>
+            <div className="text-sm font-medium">{displayName}</div>
             <div className="text-xs text-muted-foreground capitalize">{user?.role}</div>
           </div>
         </div>

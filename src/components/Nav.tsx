@@ -11,6 +11,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onClients = location.pathname.startsWith("/clients");
   const onActivity = location.pathname.startsWith("/activity");
   const onCases = !onCustomers && !onClients && !onActivity;
+  const displayName = user?.role === "admin"
+    ? (user?.username || user?.consultantName || user?.lawyerName)
+    : (user?.consultantName || user?.lawyerName || user?.username);
 
   const go = (path: string) => {
     navigate(path);
@@ -39,7 +42,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         <div className="mt-auto p-4 border-t">
           <div className="flex flex-col gap-2">
             
-            <div className="text-sm font-medium">{user?.consultantName || user?.lawyerName || user?.username}</div>
+            <div className="text-sm font-medium">{displayName}</div>
             <div className="text-xs text-muted-foreground capitalize">{user?.role}</div>
             <div className="pt-2">
               <Button className="w-full" variant="outline" size="sm" onClick={() => { logout(); onSelect?.(); }}>Sign Out</Button>

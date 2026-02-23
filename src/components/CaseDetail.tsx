@@ -35,7 +35,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { isPast, differenceInHours } from "date-fns";
-import { getDeadlineNotification, mapStageToState, formatDate } from "@/lib/utils";
+import { getDeadlineNotification, mapStageToState, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { mapCaseStateToStage } from "@/lib/utils";
 
 interface CaseDetailProps {
@@ -219,6 +219,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
   if (!caseId || !caseData) return null;
 
   const c = caseData;
+  const assignedDisplayName = stripProfessionalTitle(c.assignedTo) || c.assignedTo;
   const pCfg = PRIORITY_CONFIG[c.priority];
   const overdue = c.deadline && isPast(new Date(c.deadline));
   const deadlineNotif = getDeadlineNotification(c.deadline, c.caseId);
@@ -429,7 +430,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
               </span>
             )}
           </DialogTitle>
-          <DialogDescription>{c.category} — {c.subcategory} • Assigned to {c.assignedTo}</DialogDescription>
+          <DialogDescription>{c.category} — {c.subcategory} • Assigned to {assignedDisplayName}</DialogDescription>
           <div className="flex gap-2 mt-2">
             {!editMode && <Button variant="outline" size="sm" onClick={() => setEditMode(true)} disabled={isLoading}>Edit</Button>}
             {editMode && (
@@ -455,7 +456,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged }: CaseDetail
                   <>
                     <div className="flex justify-between"><span className="text-muted-foreground">Documents</span><Badge variant={c.documentState === "ok" ? "default" : "destructive"}>{c.documentState}</Badge></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Communication</span><span>{c.communicationMethod}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span>{c.assignedTo}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span>{assignedDisplayName}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Priority</span><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pCfg.color}`}>{pCfg.label}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Last Change</span><span className="text-xs">{formatOptionalDateTime(c.lastStateChange)}</span></div>
                     {c.deadline && (

@@ -5,7 +5,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { isPast } from "date-fns";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { Clock } from "lucide-react";
 
 interface CaseTableProps {
@@ -65,7 +65,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                         <span className="text-muted-foreground">No deadline</span>
                       )}
                     </TableCell>
-                    {showMoreColumns && <TableCell className="text-xs text-muted-foreground">{c.assignedTo}</TableCell>}
+                    {showMoreColumns && <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo}</TableCell>}
                   </TableRow>
                 );
               })}
