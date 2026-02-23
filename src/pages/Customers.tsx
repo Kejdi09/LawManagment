@@ -367,9 +367,13 @@ const Customers = () => {
 
   const handleSave = async () => {
     try {
-      // UI-level validation: intake must choose assignee when confirming
+      // UI-level validation: intake/manager must choose a CLIENT_LAWYER when confirming
       if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && !form.assignedTo) {
         toast({ title: 'Assign required', description: 'Please select someone to assign the confirmed client', variant: 'destructive' });
+        return;
+      }
+      if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && form.assignedTo && !CLIENT_LAWYERS.includes(form.assignedTo)) {
+        toast({ title: 'Invalid assignee', description: 'Confirmed clients must be assigned to Kejdi or Albert', variant: 'destructive' });
         return;
       }
       const payload = {
@@ -470,8 +474,8 @@ const Customers = () => {
 
   const handleSetStatus = async (customerId: string, status: LeadStatus) => {
     try {
-      // If current user is intake and confirming to CLIENT, require assignee selection
-      if (user?.role === 'intake' && status === 'CLIENT') {
+      // Intake and manager must pick a consultant (Kejdi/Albert) when confirming to CLIENT
+      if ((user?.role === 'intake' || user?.role === 'manager') && status === 'CLIENT') {
         setConfirmAssignCustomerId(customerId);
         setShowConfirmAssign(true);
         return;
@@ -1071,15 +1075,15 @@ const Customers = () => {
             <div className="space-y-2">
               <Label>Assigned Consultant</Label>
               {/* Admin and manager can assign at any status; intake users cannot change assignment */}
-              {user?.role === 'admin' || user?.role === 'manager' ? (
+              {user?.role === 'admin' || user?.role === 'manager' || (user?.role === 'intake' && form.status === 'CLIENT') ? (
                 <Select
                   value={form.assignedTo || UNASSIGNED_CONSULTANT}
                   onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}
                 >
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
-                    {/* When confirming to CLIENT, assign to consultants (Kejdi/Albert); otherwise assign within intake team */}
+                    {user?.role !== 'intake' && <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>}
+                    {/* When confirming to CLIENT, only Kejdi/Albert; otherwise intake team */}
                     {(form.status === 'CLIENT' ? CLIENT_LAWYERS : INTAKE_LAWYERS).map((l) => (
                       <SelectItem key={l} value={l}>{l}</SelectItem>
                     ))}
@@ -1097,7 +1101,15 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as LeadStatus })}>
+              <Select
+                value={form.status}
+                onValueChange={(v) => {
+                  const newStatus = v as LeadStatus;
+                  // Reset assignedTo when intake users switch to/from CLIENT so wrong names don't carry over
+                  const shouldClearAssignment = user?.role === 'intake' && (newStatus === 'CLIENT' || form.status === 'CLIENT');
+                  setForm({ ...form, status: newStatus, ...(shouldClearAssignment ? { assignedTo: '' } : {}) });
+                }}
+              >
                 <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   {statusEntries.map(([key, label]) => (
