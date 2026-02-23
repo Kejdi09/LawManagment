@@ -40,6 +40,7 @@ import {
   createMeeting,
   generatePortalToken,
 } from "@/lib/case-store";
+import { CaseDetail } from "@/components/CaseDetail";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +80,7 @@ const ClientsPage = () => {
   const [clients, setClients] = useState<Customer[]>([]);
   const [selectedClient, setSelectedClient] = useState<Customer | null>(null);
   const [selectedCases, setSelectedCases] = useState<Case[]>([]);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [statusHistoryRows, setStatusHistoryRows] = useState<CustomerHistoryRecord[]>([]);
   const [showEdit, setShowEdit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -114,12 +116,13 @@ const ClientsPage = () => {
   const openDetail = async (client: Customer) => {
     setSelectedClient(client);
     setPortalLink(null);
+    setSelectedCases([]);
     const [cases, history, docs] = await Promise.all([
       getCasesByCustomer(client.customerId),
       getCustomerHistory(client.customerId).catch(() => []),
       getDocuments("customer", client.customerId).catch(() => []),
     ]);
-    setSelectedCases(cases.filter((row) => row.customerId === client.customerId));
+    setSelectedCases(cases);
     setStatusHistoryRows(history);
     setClientDocuments(docs);
   };
@@ -499,10 +502,17 @@ const ClientsPage = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
+                          {selectedCases.length === 0 && (
+                            <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">No cases found.</TableCell></TableRow>
+                          )}
                           {selectedCases.map((sc) => {
                             const pCfg = PRIORITY_CONFIG[sc.priority];
                             return (
-                              <TableRow key={sc.caseId}>
+                              <TableRow
+                                key={sc.caseId}
+                                className="cursor-pointer hover:bg-muted/50"
+                                onClick={() => setSelectedCaseId(sc.caseId)}
+                              >
                                 <TableCell className="font-mono text-xs">{sc.caseId}</TableCell>
                                 <TableCell className="text-sm">{sc.category} / {sc.subcategory}</TableCell>
                                 <TableCell><Badge className="text-xs">{STAGE_LABELS[mapCaseStateToStage(sc.state)]}</Badge></TableCell>
@@ -679,6 +689,15 @@ const ClientsPage = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      <CaseDetail
+        caseId={selectedCaseId}
+        open={!!selectedCaseId}
+        onClose={() => setSelectedCaseId(null)}
+        onStateChanged={() => {
+          if (selectedClient) openDetail(selectedClient);
+        }}
+      />
     </MainLayout>
   );
 };

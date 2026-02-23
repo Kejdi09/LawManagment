@@ -12,6 +12,8 @@ import {
   StoredDocument,
   getCustomerHistory,
   createMeeting,
+  generatePortalToken,
+  getPortalToken,
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
@@ -42,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, Link2, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -140,6 +142,9 @@ const Customers = () => {
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [portalLink, setPortalLink] = useState<string | null>(null);
+  const [portalLinkLoading, setPortalLinkLoading] = useState(false);
+  const [portalLinkCopied, setPortalLinkCopied] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -187,10 +192,14 @@ const Customers = () => {
     if (!id) {
       setSelectedCustomer(null);
       setCustomerStatusLog([]);
+      setPortalLink(null);
+      setPortalLinkCopied(false);
       return;
     }
     const customer = customers.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
+    setPortalLink(null);
+    setPortalLinkCopied(false);
     const history = await getCustomerHistory(id).catch(() => []);
     setCustomerStatusLog(history);
     try {
@@ -198,6 +207,15 @@ const Customers = () => {
       setCustomerDocuments(docs);
     } catch (e) {
       setCustomerDocuments([]);
+    }
+    // Load existing portal token if any
+    try {
+      const existing = await getPortalToken(id);
+      if (existing?.token) {
+        setPortalLink(`${window.location.origin}/portal/${existing.token}`);
+      }
+    } catch {
+      // ignore
     }
   }, [customers]);
 
@@ -591,6 +609,28 @@ const Customers = () => {
         toast({ title: 'Confirm failed', description: message, variant: 'destructive' });
       }
     }
+  };
+
+  const handleGeneratePortalLink = async () => {
+    if (!selectedCustomer) return;
+    setPortalLinkLoading(true);
+    try {
+      const { token } = await generatePortalToken(selectedCustomer.customerId, 30);
+      const link = `${window.location.origin}/portal/${token}`;
+      setPortalLink(link);
+    } catch {
+      toast({ title: "Failed to generate portal link", variant: "destructive" });
+    } finally {
+      setPortalLinkLoading(false);
+    }
+  };
+
+  const handleCopyPortalLink = () => {
+    if (!portalLink) return;
+    navigator.clipboard.writeText(portalLink).then(() => {
+      setPortalLinkCopied(true);
+      setTimeout(() => setPortalLinkCopied(false), 2000);
+    });
   };
 
   const handleUploadCustomerDocument = async (file?: File) => {
@@ -1268,6 +1308,29 @@ const Customers = () => {
                             {LEAD_STATUS_LABELS[selectedCustomer.status]}
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
+                        </div>
+                        {/* Client Portal Link */}
+                        <div className="pt-1 border-t mt-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1"><Link2 className="h-3 w-3" />Client Portal</span>
+                            {portalLink ? (
+                              <>
+                                <span className="font-mono text-[11px] truncate max-w-[220px] text-muted-foreground border rounded px-1.5 py-0.5">{portalLink}</span>
+                                <Button size="sm" variant="outline" className="h-6 px-2 text-xs gap-1" onClick={handleCopyPortalLink}>
+                                  <Copy className="h-3 w-3" />
+                                  {portalLinkCopied ? "Copied!" : "Copy"}
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={handleGeneratePortalLink} disabled={portalLinkLoading}>
+                                  Regenerate
+                                </Button>
+                              </>
+                            ) : (
+                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs gap-1" onClick={handleGeneratePortalLink} disabled={portalLinkLoading}>
+                                {portalLinkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+                                Generate Link
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
