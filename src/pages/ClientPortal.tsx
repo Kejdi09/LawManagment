@@ -5,13 +5,16 @@ import { PortalData, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
-import { FileText, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
+  MessageSquare, CalendarClock, StickyNote,
+} from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
   NEW: "New",
   IN_PROGRESS: "In Progress",
-  WAITING_CUSTOMER: "Waiting â€” Your Input Needed",
-  WAITING_AUTHORITIES: "Waiting â€” Authorities",
+  WAITING_CUSTOMER: "Waiting — Your Input Needed",
+  WAITING_AUTHORITIES: "Waiting — Authorities",
   FINALIZED: "Completed",
   INTAKE: "Under Review",
   SEND_PROPOSAL: "Proposal Sent",
@@ -22,14 +25,109 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 const STATE_COLOR: Record<string, string> = {
-  FINALIZED: "bg-green-100 text-green-800",
-  IN_PROGRESS: "bg-blue-100 text-blue-800",
-  WAITING_CUSTOMER: "bg-amber-100 text-amber-800",
-  default: "bg-gray-100 text-gray-700",
+  FINALIZED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  IN_PROGRESS: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  WAITING_CUSTOMER: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  WAITING_RESPONSE_P: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  WAITING_RESPONSE_C: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  WAITING_AUTHORITIES: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  default: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+};
+
+const PRIORITY_PORTAL: Record<string, string> = {
+  urgent: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200",
+  high: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200",
+  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200",
+  low: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
 };
 
 function stateColor(state: string) {
   return STATE_COLOR[state] || STATE_COLOR.default;
+}
+
+function CaseCard({ c, history }: {
+  c: PortalData["cases"][number];
+  history: PortalData["history"];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const caseHistory = history.filter((h) => h.caseId === c.caseId);
+  const isWaitingClient =
+    c.state === "WAITING_CUSTOMER" ||
+    c.state === "WAITING_RESPONSE_P" ||
+    c.state === "WAITING_RESPONSE_C";
+
+  return (
+    <Card className={isWaitingClient ? "border-amber-400 dark:border-amber-500" : ""}>
+      <CardContent className="pt-4 pb-3 space-y-3">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="min-w-0">
+            <span className="font-mono text-xs text-muted-foreground">{c.caseId}</span>
+            {c.title && <div className="font-semibold text-sm mt-0.5">{c.title}</div>}
+            <div className="text-sm text-muted-foreground">
+              {c.category}{c.subcategory ? ` — ${c.subcategory}` : ""}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${stateColor(c.state)}`}>
+              {STATE_LABELS[c.state] || c.state}
+            </span>
+            {c.priority && (
+              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${PRIORITY_PORTAL[c.priority] || PRIORITY_PORTAL.medium}`}>
+                {c.priority.charAt(0).toUpperCase() + c.priority.slice(1)} priority
+              </span>
+            )}
+            {isWaitingClient && (
+              <span className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" /> Action required
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+          {c.deadline && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" /> Deadline: {formatDate(c.deadline)}
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" /> Updated: {formatDate(c.lastStateChange)}
+          </span>
+        </div>
+
+        {c.generalNote && (
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex gap-2">
+            <StickyNote className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">{c.generalNote}</span>
+          </div>
+        )}
+
+        {caseHistory.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setExpanded((e) => !e)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {expanded ? "Hide" : "Show"} status timeline ({caseHistory.length} entries)
+            </button>
+            {expanded && (
+              <div className="mt-2 space-y-1 border-t pt-2">
+                {caseHistory.map((h) => (
+                  <div key={h.historyId} className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="font-mono w-24 shrink-0">{formatDate(h.date)}</span>
+                    <span className="text-muted-foreground/50">?</span>
+                    <span>{STATE_LABELS[h.stateIn] || h.stateIn}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ClientPortalPage() {
@@ -42,14 +140,21 @@ export default function ClientPortalPage() {
     if (!token) { setError("Invalid link"); setLoading(false); return; }
     getPortalData(token)
       .then(setData)
-      .catch((e) => setError(e?.message?.includes("expired") ? "This link has expired. Please contact your lawyer for a new link." : "Invalid or expired link."))
+      .catch((e) => {
+        const msg = String(e?.message || "");
+        if (msg.includes("expired") || msg.includes("410")) {
+          setError("This link has expired. Please contact your lawyer for a new link.");
+        } else {
+          setError("Invalid or expired link.");
+        }
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
-        Loading your case informationâ€¦
+        Loading your case information…
       </div>
     );
   }
@@ -65,21 +170,27 @@ export default function ClientPortalPage() {
     );
   }
 
+  const hasMessages = data.portalNotes && data.portalNotes.length > 0;
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <FileText className="h-5 w-5 text-primary" />
-          <div>
-            <div className="font-semibold text-sm">Dafku Law Firm â€” Case Portal</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">Dafku Law Firm — Case Portal</div>
             <div className="text-xs text-muted-foreground">Read-only view for {data.client.name}</div>
           </div>
+          {data.expiresAt && (
+            <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Expires {formatDate(data.expiresAt)}
+            </div>
+          )}
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        {/* Client card */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{data.client.name}</CardTitle>
@@ -93,59 +204,36 @@ export default function ClientPortalPage() {
           </CardContent>
         </Card>
 
-        {/* Cases */}
-        <div className="space-y-3">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Your Cases ({data.cases.length})</h2>
-          {data.cases.length === 0 && (
-            <Card><CardContent className="py-4 text-sm text-muted-foreground text-center">No cases found.</CardContent></Card>
-          )}
-          {data.cases.map((c) => {
-            const stateLabel = STATE_LABELS[c.state] || c.state;
-            const isWaitingClient = c.state === "WAITING_CUSTOMER" || c.state === "WAITING_RESPONSE_P" || c.state === "WAITING_RESPONSE_C";
-            return (
-              <Card key={c.caseId} className={isWaitingClient ? "border-amber-400 dark:border-amber-500" : ""}>
-                <CardContent className="pt-4 pb-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <span className="font-mono text-xs text-muted-foreground">{c.caseId}</span>
-                      {c.title && <div className="font-semibold text-sm mt-0.5">{c.title}</div>}
-                      <div className="text-sm text-muted-foreground">{c.category}{c.subcategory ? ` â€” ${c.subcategory}` : ""}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${stateColor(c.state)}`}>{stateLabel}</span>
-                      {isWaitingClient && (
-                        <span className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> Action required
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-4 text-xs text-muted-foreground">
-                    {c.deadline && (
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Deadline: {formatDate(c.deadline)}</span>
-                    )}
-                    <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Updated: {formatDate(c.lastStateChange)}</span>
-                  </div>
-
-                  {/* Case history */}
-                  {data.history.filter((h) => h.caseId === c.caseId).length > 0 && (
-                    <div className="mt-3 border-t pt-3">
-                      <div className="text-xs font-semibold text-muted-foreground mb-2">Status Timeline</div>
-                      <div className="space-y-1">
-                        {data.history.filter((h) => h.caseId === c.caseId).slice(0, 5).map((h) => (
-                          <div key={h.historyId} className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="font-mono">{formatDate(h.date)}</span>
-                            <span className="text-muted-foreground/60">â†’</span>
-                            <span>{STATE_LABELS[h.stateIn] || h.stateIn}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+        {hasMessages && (
+          <div className="space-y-2">
+            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" /> Messages from Your Lawyer
+            </h2>
+            {data.portalNotes.map((note) => (
+              <Card key={note.noteId} className="border-primary/30 bg-primary/5">
+                <CardContent className="py-3 px-4">
+                  <p className="text-sm">{note.text}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{formatDate(note.createdAt)}</p>
                 </CardContent>
               </Card>
-            );
-          })}
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+            Your Cases ({data.cases.length})
+          </h2>
+          {data.cases.length === 0 && (
+            <Card>
+              <CardContent className="py-6 text-sm text-muted-foreground text-center">
+                No active cases at this time.
+              </CardContent>
+            </Card>
+          )}
+          {data.cases.map((c) => (
+            <CaseCard key={c.caseId} c={c} history={data.history} />
+          ))}
         </div>
 
         <div className="text-center text-xs text-muted-foreground pt-4 border-t">

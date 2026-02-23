@@ -299,8 +299,27 @@ export interface SearchResult {
   cases: Array<{ caseId: string; title?: string; customerId: string; state: string; caseType?: string; type: "case" }>;
 }
 
+export interface PortalNote {
+  noteId: string;
+  text: string;
+  createdAt: string;
+  createdBy: string;
+}
+
 export interface PortalData {
   client: { name: string; customerId: string; services: ServiceType[]; status: string };
-  cases: Array<{ caseId: string; title?: string; category: string; subcategory: string; state: string; deadline?: string | null; lastStateChange: string }>;
+  cases: Array<{
+    caseId: string;
+    title?: string;
+    category: string;
+    subcategory: string;
+    state: string;
+    priority?: string;
+    deadline?: string | null;
+    lastStateChange: string;
+    generalNote?: string | null;
+  }>;
   history: HistoryRecord[];
+  portalNotes: PortalNote[];
+  expiresAt?: string;
 }

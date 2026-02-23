@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Phone, Mail, MapPin, StickyNote, Trash2, Link2, Copy, RefreshCw } from "lucide-react";
+import { Phone, Mail, MapPin, StickyNote, Trash2, Link2, Copy, RefreshCw, XCircle, Loader2, SendHorizonal } from "lucide-react";
 import {
   Customer,
   CustomerHistoryRecord,
@@ -25,6 +25,7 @@ import {
   SERVICE_LABELS,
   LAWYERS,
   CLIENT_LAWYERS,
+  PortalNote,
 } from "@/lib/types";
 import {
   deleteConfirmedClient,
@@ -39,6 +40,10 @@ import {
   StoredDocument,
   createMeeting,
   generatePortalToken,
+  revokePortalToken,
+  getPortalNotes,
+  addPortalNote,
+  deletePortalNote,
 } from "@/lib/case-store";
 import { CaseDetail } from "@/components/CaseDetail";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
@@ -89,6 +94,10 @@ const ClientsPage = () => {
   const [form, setForm] = useState<Partial<Customer>>({});
   const [portalLink, setPortalLink] = useState<string | null>(null);
   const [isGeneratingPortal, setIsGeneratingPortal] = useState(false);
+  const [isRevokingPortal, setIsRevokingPortal] = useState(false);
+  const [portalNotes, setPortalNotes] = useState<PortalNote[]>([]);
+  const [portalNoteText, setPortalNoteText] = useState("");
+  const [isSavingPortalNote, setIsSavingPortalNote] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -125,6 +134,13 @@ const ClientsPage = () => {
     setSelectedCases(cases);
     setStatusHistoryRows(history);
     setClientDocuments(docs);
+    // Load portal notes for admin
+    try {
+      const notes = await getPortalNotes(client.customerId);
+      setPortalNotes(notes);
+    } catch {
+      setPortalNotes([]);
+    }
   };
 
   const openEdit = (client: Customer) => {
@@ -376,7 +392,7 @@ const ClientsPage = () => {
                             } finally { setIsGeneratingPortal(false); }
                           }}
                         >
-                          <RefreshCw className="h-4 w-4 mr-1" />
+                          {isGeneratingPortal ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                           {portalLink ? "Regenerate Link" : "Generate Link"}
                         </Button>
                         {portalLink && (
@@ -390,12 +406,100 @@ const ClientsPage = () => {
                             <Copy className="h-4 w-4 mr-1" />Copy Link
                           </Button>
                         )}
+                        {portalLink && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={isRevokingPortal}
+                            onClick={async () => {
+                              if (!selectedClient) return;
+                              if (!window.confirm("Revoke this portal link? The client will no longer be able to access the portal with this link.")) return;
+                              setIsRevokingPortal(true);
+                              try {
+                                await revokePortalToken(selectedClient.customerId);
+                                setPortalLink(null);
+                                toast({ title: "Link revoked", description: "The portal link has been destroyed." });
+                              } catch (err) {
+                                toast({ title: "Error", description: String(err), variant: "destructive" });
+                              } finally { setIsRevokingPortal(false); }
+                            }}
+                          >
+                            {isRevokingPortal ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <XCircle className="h-4 w-4 mr-1" />}
+                            Revoke Link
+                          </Button>
+                        )}
                       </div>
                       {portalLink && (
                         <div className="rounded-md bg-muted px-3 py-2 text-xs font-mono break-all select-all">{portalLink}</div>
                       )}
                     </CardContent>
                   </Card>
+
+                  {isAdmin && (
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><StickyNote className="h-4 w-4" />Messages to Client (visible on portal)</CardTitle></CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Type a message for your client…"
+                            value={portalNoteText}
+                            onChange={(e) => setPortalNoteText(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter" && !e.shiftKey && portalNoteText.trim() && selectedClient) {
+                                e.preventDefault();
+                                setIsSavingPortalNote(true);
+                                try {
+                                  const note = await addPortalNote(selectedClient.customerId, portalNoteText.trim());
+                                  setPortalNotes((prev) => [note, ...prev]);
+                                  setPortalNoteText("");
+                                } catch { toast({ title: "Failed to save note", variant: "destructive" }); }
+                                finally { setIsSavingPortalNote(false); }
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            disabled={!portalNoteText.trim() || isSavingPortalNote}
+                            onClick={async () => {
+                              if (!selectedClient || !portalNoteText.trim()) return;
+                              setIsSavingPortalNote(true);
+                              try {
+                                const note = await addPortalNote(selectedClient.customerId, portalNoteText.trim());
+                                setPortalNotes((prev) => [note, ...prev]);
+                                setPortalNoteText("");
+                              } catch { toast({ title: "Failed to save note", variant: "destructive" }); }
+                              finally { setIsSavingPortalNote(false); }
+                            }}
+                          >
+                            {isSavingPortalNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        {portalNotes.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No messages yet. Messages will be visible to the client on their portal page.</p>
+                        )}
+                        {portalNotes.map((note) => (
+                          <div key={note.noteId} className="flex items-start justify-between gap-2 rounded-md border p-2 text-sm">
+                            <div className="flex-1 min-w-0">
+                              <p>{note.text}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{formatDate(note.createdAt)} · {note.createdBy}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-destructive shrink-0"
+                              onClick={async () => {
+                                if (!selectedClient) return;
+                                await deletePortalNote(selectedClient.customerId, note.noteId).catch(() => {});
+                                setPortalNotes((prev) => prev.filter((n) => n.noteId !== note.noteId));
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Overview</CardTitle></CardHeader>

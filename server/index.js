@@ -70,6 +70,7 @@ let tasksCol;
 let meetingsCol;
 let usersCol;
 let auditLogsCol;
+let portalNotesCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -114,6 +115,7 @@ async function connectDb() {
   invoicesCol = db.collection("invoices");
   commsLogCol = db.collection("commsLog");
   portalTokensCol = db.collection("portalTokens");
+  portalNotesCol = db.collection("portalNotes");
 }
 
 async function seedIfEmpty() {
@@ -1840,6 +1842,34 @@ app.get('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
   res.json(existing || null);
 });
 
+app.delete('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  await portalTokensCol.deleteMany({ customerId: String(req.params.customerId).trim() });
+  res.json({ ok: true });
+});
+
+// Portal notes — visible to client on their portal page
+app.get('/api/portal-notes/:customerId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const notes = await portalNotesCol.find({ customerId: String(req.params.customerId).trim() }).sort({ createdAt: -1 }).toArray();
+  res.json(notes);
+});
+
+app.post('/api/portal-notes/:customerId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const { text } = req.body;
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
+  const note = { noteId: genShortId('PN'), customerId: String(req.params.customerId).trim(), text: String(text).trim(), createdAt: new Date().toISOString(), createdBy: req.user?.username };
+  await portalNotesCol.insertOne(note);
+  res.status(201).json(note);
+});
+
+app.delete('/api/portal-notes/:customerId/:noteId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  await portalNotesCol.deleteOne({ customerId: String(req.params.customerId).trim(), noteId: String(req.params.noteId) });
+  res.json({ ok: true });
+});
+
 // Public portal data — no staff auth needed, uses portal token instead
 app.get('/api/portal/:token', async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
@@ -1847,13 +1877,28 @@ app.get('/api/portal/:token', async (req, res) => {
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
   const client = await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
   if (!client) return res.status(404).json({ error: 'Client not found' });
-  const cases = await casesCol.find({ customerId: tokenDoc.customerId }).sort({ lastStateChange: -1 }).toArray();
+  // Only show confirmed-client cases (caseType: 'client'), not intake/customer cases
+  const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: 'client' }).sort({ lastStateChange: -1 }).toArray();
   const caseIds = cases.map(c => c.caseId);
-  const history = caseIds.length ? await historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [];
-  // Return safe subset — no internal notes, no assignedTo details
+  const [history, portalNotes] = await Promise.all([
+    caseIds.length ? historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [],
+    portalNotesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
+  ]);
   res.json({
     client: { name: client.name, customerId: client.customerId, services: client.services, status: client.status },
-    cases: cases.map(c => ({ caseId: c.caseId, title: c.title, category: c.category, subcategory: c.subcategory, state: c.state, deadline: c.deadline, lastStateChange: c.lastStateChange })),
+    cases: cases.map(c => ({
+      caseId: c.caseId,
+      title: c.title,
+      category: c.category,
+      subcategory: c.subcategory,
+      state: c.state,
+      priority: c.priority,
+      deadline: c.deadline,
+      lastStateChange: c.lastStateChange,
+      generalNote: c.generalNote || null,
+    })),
     history,
+    portalNotes: portalNotes.map(n => ({ noteId: n.noteId, text: n.text, createdAt: n.createdAt, createdBy: n.createdBy })),
+    expiresAt: tokenDoc.expiresAt,
   });
 });

@@ -1,4 +1,4 @@
-import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Invoice, Meeting, Note, PortalData, SearchResult, TeamSummary } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Invoice, Meeting, Note, PortalData, PortalNote, SearchResult, TeamSummary } from "./types";
 
 export type PagedResult<T> = {
   items: T[];
@@ -411,4 +411,20 @@ export async function getPortalToken(customerId: string): Promise<{ token: strin
 
 export async function getPortalData(token: string): Promise<PortalData> {
   return api<PortalData>(`/api/portal/${token}`);
+}
+
+export async function revokePortalToken(customerId: string): Promise<void> {
+  await api(`/api/portal/tokens/${customerId}`, { method: "DELETE" });
+}
+
+export async function getPortalNotes(customerId: string): Promise<PortalNote[]> {
+  return api<PortalNote[]>(`/api/portal-notes/${customerId}`);
+}
+
+export async function addPortalNote(customerId: string, text: string): Promise<PortalNote> {
+  return api<PortalNote>(`/api/portal-notes/${customerId}`, { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export async function deletePortalNote(customerId: string, noteId: string): Promise<void> {
+  await api(`/api/portal-notes/${customerId}/${noteId}`, { method: "DELETE" });
 }

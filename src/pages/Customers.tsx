@@ -212,7 +212,8 @@ const Customers = () => {
     try {
       const existing = await getPortalToken(id);
       if (existing?.token) {
-        setPortalLink(`${window.location.origin}/portal/${existing.token}`);
+        const base = window.location.href.split('#')[0];
+        setPortalLink(`${base}#/portal/${existing.token}`);
       }
     } catch {
       // ignore
@@ -616,7 +617,8 @@ const Customers = () => {
     setPortalLinkLoading(true);
     try {
       const { token } = await generatePortalToken(selectedCustomer.customerId, 30);
-      const link = `${window.location.origin}/portal/${token}`;
+      const base = window.location.href.split('#')[0];
+      const link = `${base}#/portal/${token}`;
       setPortalLink(link);
     } catch {
       toast({ title: "Failed to generate portal link", variant: "destructive" });
