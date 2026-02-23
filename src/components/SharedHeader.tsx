@@ -7,15 +7,17 @@ import {
 } from "@/components/ui/drawer";
 import Nav from "./Nav";
 import { DrawerContentLeft } from "./ui/drawer";
-import { Menu } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import CaseAlerts from "./CaseAlerts";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "next-themes";
 
 const GLOBAL_COLUMNS_MODE_KEY = "lm:show-more-columns";
 const GLOBAL_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 
 export const SharedHeader = ({ title, right }: { title?: string; right?: React.ReactNode }) => {
   const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
   const canSeeAlerts = Boolean(user);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -91,6 +93,14 @@ export const SharedHeader = ({ title, right }: { title?: string; right?: React.R
               {showMoreColumns ? "Show fewer columns" : "Show more columns"}
             </Button>
           )}
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
           {canSeeAlerts && <CaseAlerts />}
           {right}
         </div>
