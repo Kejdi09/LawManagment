@@ -18,6 +18,7 @@ import {
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
   LAWYERS,
+  CLIENT_LAWYERS,
   Customer,
   CustomerHistoryRecord,
   ContactChannel,
@@ -545,7 +546,7 @@ const Customers = () => {
   // Confirm-assign dialog state
   const [showConfirmAssign, setShowConfirmAssign] = useState(false);
   const [confirmAssignCustomerId, setConfirmAssignCustomerId] = useState<string | null>(null);
-  const [confirmAssignSelected, setConfirmAssignSelected] = useState<string>(LAWYERS[0] || "");
+  const [confirmAssignSelected, setConfirmAssignSelected] = useState<string>(CLIENT_LAWYERS[0] || "");
 
   const handleConfirmAssign = async () => {
     if (!confirmAssignCustomerId) return;
@@ -1074,7 +1075,7 @@ const Customers = () => {
                 <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
-                  {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {CLIENT_LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                 </SelectContent>
               </Select>
               {form.status !== 'CLIENT' && (
@@ -1157,7 +1158,7 @@ const Customers = () => {
                 <SelectValue placeholder="Select consultant" />
               </SelectTrigger>
               <SelectContent>
-                {LAWYERS.map((l) => (
+                {CLIENT_LAWYERS.map((l) => (
                   <SelectItem key={l} value={l}>{l}</SelectItem>
                 ))}
               </SelectContent>

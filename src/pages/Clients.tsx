@@ -24,6 +24,7 @@ import {
   ServiceType,
   SERVICE_LABELS,
   LAWYERS,
+  CLIENT_LAWYERS,
 } from "@/lib/types";
 import {
   deleteConfirmedClient,
@@ -265,6 +266,15 @@ const ClientsPage = () => {
       toast({ title: "Download failed", description: err instanceof Error ? err.message : "Unable to download document", variant: "destructive" });
     }
   };
+
+  // Only admin and consultants manage confirmed clients
+  if (user && user.role !== 'admin' && user.role !== 'consultant') {
+    return (
+      <MainLayout title="Clients">
+        <div className="py-12 text-center text-sm text-muted-foreground">Access restricted. Only client consultants can view confirmed clients.</div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Confirmed Clients">
@@ -523,7 +533,7 @@ const ClientsPage = () => {
                     <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
-                      {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                      {CLIENT_LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 ) : (

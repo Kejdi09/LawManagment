@@ -247,6 +247,12 @@ export const ALL_STATES: CaseState[] = [
 
 export const LAWYERS = ["Kejdi", "Albert", "Kejdi 1", "Kejdi 2", "Kejdi 3"];
 
+/** Consultants who handle confirmed clients (after intake) */
+export const CLIENT_LAWYERS = ["Kejdi", "Albert"];
+
+/** Intake team who handle customers before confirmation */
+export const INTAKE_LAWYERS = ["Lenci", "Kejdi 1", "Kejdi 2", "Kejdi 3"];
+
 export interface CustomerNotification {
   notificationId: string;
   customerId: string;

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers, getConfirmedClients } from "@/lib/case-store";
-import { ALL_STAGES, Priority, LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
+import { ALL_STAGES, Priority, LAWYERS, CLIENT_LAWYERS, INTAKE_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
@@ -64,7 +64,9 @@ const Index = () => {
     assignedTo: LAWYERS[0],
   });
   const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
   const currentLawyer = user?.consultantName || user?.lawyerName || "";
+  const availableLawyers = isAdmin ? LAWYERS : isManager ? INTAKE_LAWYERS : [];
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -297,7 +299,7 @@ const Index = () => {
       generalNote: "",
       priority: "medium",
       deadline: "",
-      assignedTo: isAdmin ? LAWYERS[0] : (currentLawyer || LAWYERS[0]),
+      assignedTo: isAdmin ? LAWYERS[0] : isManager ? (currentLawyer || INTAKE_LAWYERS[0]) : (currentLawyer || LAWYERS[0]),
     });
     setShowCaseForm(true);
   };
@@ -312,7 +314,7 @@ const Index = () => {
       const mappedState = mapStageToState(caseForm.state);
       const payload = {
         ...caseForm,
-        assignedTo: isAdmin ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
+        assignedTo: (isAdmin || isManager) ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
         state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
       };
@@ -547,11 +549,11 @@ const Index = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Assigned Consultant</label>
-              {isAdmin ? (
+              {(isAdmin || isManager) ? (
                 <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    {availableLawyers.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               ) : (

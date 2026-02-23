@@ -26,13 +26,13 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   return (
     <nav className="flex flex-col h-full">
       <div className="flex flex-col p-2 gap-2">
-        {!isAuthLoading && user?.role !== "intake" && (
+        {!isAuthLoading && (
           <Button className={itemClass} variant={onCases ? "default" : "ghost"} onClick={() => go("/")}>Cases</Button>
         )}
         {!isAuthLoading && (user?.role === "intake" || user?.role === "manager" || user?.role === "admin") && (
           <Button className={itemClass} variant={onCustomers ? "default" : "ghost"} onClick={() => go("/customers")}>Customers</Button>
         )}
-        {!isAuthLoading && user?.role !== "intake" && (
+        {!isAuthLoading && (user?.role === "admin" || user?.role === "consultant") && (
           <Button className={itemClass} variant={onClients ? "default" : "ghost"} onClick={() => go("/clients")}>Clients</Button>
         )}
         {!isAuthLoading && (

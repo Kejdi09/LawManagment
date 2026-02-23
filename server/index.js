@@ -217,8 +217,13 @@ function buildCaseScopeFilter(user) {
       ],
     };
   }
-  // Users with role 'intake' should not access cases
-  if (user?.role === "intake") return { _id: { $exists: false } };
+  // Intake users (kejdi1/2/3) see only their own cases (proposal/document prep work)
+  if (user?.role === "intake") {
+    const lawyerName = getUserLawyerName(user);
+    if (!lawyerName) return { _id: { $exists: false } };
+    const matcher = buildAssignedToMatcher(lawyerName);
+    return matcher ? { assignedTo: matcher } : { assignedTo: lawyerName };
+  }
   const lawyerName = getUserLawyerName(user);
   if (!lawyerName) return { _id: { $exists: false } };
   const matcher = buildAssignedToMatcher(lawyerName);
@@ -228,6 +233,8 @@ function buildCaseScopeFilter(user) {
 function buildCustomerScopeFilter(user) {
   if (isAdminUser(user)) return {};
   if (isManagerUser(user)) return {};
+  // Consultants (albert/kejdi) handle confirmed clients only — block pre-confirmation customers
+  if (user?.role === "consultant") return { _id: { $exists: false } };
   const lawyerName = getUserLawyerName(user);
   // Allow creators to see their own customers. Intake users may not have a lawyerName,
   // so include a createdBy clause so they can see customers they created.
@@ -282,6 +289,17 @@ function buildMeetingScopeFilter(user) {
       { createdBy: user.username || "" },
     ],
   };
+}
+
+// Confirmed clients are only for admin and consultants (albert/kejdi).
+// Manager (lenci) and intake (kejdi1/2/3) handle pre-confirmation customers only.
+function buildClientScopeFilter(user) {
+  if (isAdminUser(user)) return {};
+  if (isManagerUser(user) || user?.role === "intake") return { _id: { $exists: false } };
+  const lawyerName = getUserLawyerName(user);
+  if (!lawyerName) return { _id: { $exists: false } };
+  const matcher = buildAssignedToMatcher(lawyerName);
+  return matcher ? { assignedTo: matcher } : { assignedTo: lawyerName };
 }
 
 function getLastStatusChangeAt(customer) {
@@ -565,9 +583,9 @@ async function seedDemoUser() {
       { username: "albert", password: "alb33", role: "consultant", consultantName: "Albert" },
       { username: "kejdi", password: "kej33", role: "consultant", consultantName: "Kejdi" },
       { username: "lenci", password: "len33", role: "manager", consultantName: "Lenci" },
-      { username: "kejdi1", password: "kej331", role: "consultant", consultantName: "Kejdi 1", managerUsername: "lenci" },
-      { username: "kejdi2", password: "kej332", role: "consultant", consultantName: "Kejdi 2", managerUsername: "lenci" },
-      { username: "kejdi3", password: "kej333", role: "consultant", consultantName: "Kejdi 3", managerUsername: "lenci" },
+      { username: "kejdi1", password: "kej331", role: "intake", consultantName: "Kejdi 1", managerUsername: "lenci" },
+      { username: "kejdi2", password: "kej332", role: "intake", consultantName: "Kejdi 2", managerUsername: "lenci" },
+      { username: "kejdi3", password: "kej333", role: "intake", consultantName: "Kejdi 3", managerUsername: "lenci" },
     ];
 
     for (const demoUser of demoUsers) {
@@ -826,8 +844,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   delete update._id;
   delete update.customerId;
 
-  // Find current customer. Intake may view any non-confirmed customer; others respect scope.
-  const customerScope = req.user?.role === 'intake' ? {} : buildCustomerScopeFilter(req.user);
+  // Find current customer within the user's scope.
+  const customerScope = buildCustomerScopeFilter(req.user);
   const current = await customersCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: 'Not found' });
 
@@ -841,10 +859,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     return res.status(400).json({ error: 'must_assign_confirmed_client' });
   }
 
-  // If remaining non-CLIENT, ensure assignedTo is cleared
-  if (!update.status || update.status !== 'CLIENT') {
-    update.assignedTo = "";
-  }
+  // assignedTo on customers = their intake consultant assignment; preserved on non-CLIENT status changes.
 
   // Track status history
   if (current.status !== update.status) {
@@ -889,17 +904,13 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/confirmed-clients", verifyAuth, async (req, res) => {
-  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
-  // Intake users should not see confirmed clients
-  if (req.user?.role === 'intake') return res.json([]);
+  const scope = buildClientScopeFilter(req.user);
   const docs = await confirmedClientsCol.find(scope).sort({ customerId: 1 }).toArray();
   res.json(docs);
 });
 
 app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
-  // Intake users should not access confirmed client records
-  if (req.user?.role === 'intake') return res.status(404).json({ error: "Not found" });
-  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
+  const scope = buildClientScopeFilter(req.user);
   const doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...scope });
   if (!doc) return res.status(404).json({ error: "Not found" });
   res.json(doc);
@@ -961,12 +972,12 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   if (update.assignedTo) update.assignedTo = stripProfessionalTitle(update.assignedTo);
   delete update._id;
   delete update.customerId;
-  const scope = isManagerUser(req.user) ? {} : buildCustomerScopeFilter(req.user);
+  const scope = buildClientScopeFilter(req.user);
   const current = await confirmedClientsCol.findOne({ customerId: id, ...scope });
   if (!current) return res.status(404).json({ error: "Not found" });
 
-  // Admins/managers may assign within their visibility.
-  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+  // Only admin can freely reassign clients; consultants are locked to their own name
+  if (!isAdminUser(req.user)) {
     const lawyerName = getUserLawyerName(req.user);
     if (lawyerName) update.assignedTo = lawyerName;
   }
@@ -1020,10 +1031,7 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
 app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const customerScope = buildCustomerScopeFilter(req.user);
-  // Intake users may delete any non-confirmed customer
-  const current = req.user?.role === 'intake'
-    ? await customersCol.findOne({ customerId: id })
-    : await customersCol.findOne({ customerId: id, ...customerScope });
+  const current = await customersCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: "Not found" });
   const caseScope = buildCaseScopeFilter(req.user);
   const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
@@ -1547,7 +1555,7 @@ app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) =>
 
 app.get('/api/team/summary', verifyAuth, requireRole('admin'), async (req, res) => {
   try {
-    const users = await usersCol.find({ role: { $in: ['consultant', 'manager'] } }).project({ username: 1, consultantName: 1, role: 1 }).toArray();
+    const users = await usersCol.find({ role: { $in: ['consultant', 'manager', 'intake'] } }).project({ username: 1, consultantName: 1, role: 1 }).toArray();
     const summaries = [];
     const now = new Date();
     const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
