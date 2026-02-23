@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { createMeeting, deleteMeeting, getAllCustomers, getConfirmedClients, getMeetings, updateMeeting } from "@/lib/case-store";
-import { LAWYERS, Meeting } from "@/lib/types";
+import { LAWYERS, INTAKE_LAWYERS, Meeting } from "@/lib/types";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -45,7 +45,10 @@ const MeetingsCalendarPage = () => {
     assignedTo: stripProfessionalTitle(user?.consultantName || user?.lawyerName || LAWYERS[0]) || LAWYERS[0],
   });
 
-  const isAdminLike = user?.role === "admin" || user?.role === "manager";
+  // Admin picks from all lawyers; manager picks from their intake team; others are locked to themselves
+  const isAdmin = user?.role === 'admin';
+  const isAdminLike = isAdmin || user?.role === 'manager';
+  const meetingAssigneePicker = isAdmin ? LAWYERS : user?.role === 'manager' ? INTAKE_LAWYERS : [];
 
   const load = async () => {
     const [rows, customers, confirmed] = await Promise.all([
@@ -209,7 +212,7 @@ const MeetingsCalendarPage = () => {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {LAWYERS.map((name) => (
+                    {meetingAssigneePicker.map((name) => (
                       <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}
                   </SelectContent>

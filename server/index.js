@@ -1182,9 +1182,14 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   const requestedCustomerId = String(req.body?.customerId || "").trim();
   if (!requestedCustomerId) return res.status(400).json({ error: "customerId is required" });
 
-  const customer = await confirmedClientsCol.findOne({ customerId: requestedCustomerId, ...buildCustomerScopeFilter(req.user) });
+  // For manager/intake: cases link to pre-confirmation customers.
+  // For admin/consultant: cases link to confirmed clients.
+  const isIntakeUser = req.user?.role === 'intake' || isManagerUser(req.user);
+  const customerSource = isIntakeUser ? customersCol : confirmedClientsCol;
+  const customerScopeForCase = isIntakeUser ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
+  const customer = await customerSource.findOne({ customerId: requestedCustomerId, ...customerScopeForCase });
   if (!customer) {
-    return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+    return res.status(400).json({ error: isIntakeUser ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
   }
 
   const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null };
@@ -1218,9 +1223,12 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
     update.assignedTo = getUserLawyerName(req.user);
   }
   if (update.customerId) {
-    const targetCustomer = await confirmedClientsCol.findOne({ customerId: String(update.customerId).trim(), ...buildCustomerScopeFilter(req.user) });
+    const isIntakeUser2 = req.user?.role === 'intake' || isManagerUser(req.user);
+    const customerSource2 = isIntakeUser2 ? customersCol : confirmedClientsCol;
+    const customerScopeForCase2 = isIntakeUser2 ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
+    const targetCustomer = await customerSource2.findOne({ customerId: String(update.customerId).trim(), ...customerScopeForCase2 });
     if (!targetCustomer) {
-      return res.status(400).json({ error: "Case customerId must belong to a confirmed client you can access" });
+      return res.status(400).json({ error: isIntakeUser2 ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
     }
   }
   // Guarantee caseId stays consistent and create if missing to avoid 404 edits

@@ -24,6 +24,7 @@ import {
   ContactChannel,
   LeadStatus,
   ServiceType,
+  INTAKE_LAWYERS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -367,7 +368,7 @@ const Customers = () => {
   const handleSave = async () => {
     try {
       // UI-level validation: intake must choose assignee when confirming
-      if (form.status === 'CLIENT' && user?.role === 'intake' && !form.assignedTo) {
+      if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && !form.assignedTo) {
         toast({ title: 'Assign required', description: 'Please select someone to assign the confirmed client', variant: 'destructive' });
         return;
       }
@@ -381,7 +382,7 @@ const Customers = () => {
         serviceDescription: form.serviceDescription || "",
         notes: form.notes ?? "",
       };
-      // Intake users are not allowed to change assignment except when confirming to CLIENT.
+      // Intake users cannot change assignment; managers can always assign
       if (user?.role === 'intake') {
         if (form.status === 'CLIENT') {
           // keep assignedTo from form (already mapped above)
@@ -511,7 +512,9 @@ const Customers = () => {
     }
     try {
       const current = customers.find((c) => c.customerId === consultScheduleCustomerId);
-      const assignedTo = stripProfessionalTitle(user?.consultantName || user?.lawyerName || LAWYERS[0]) || LAWYERS[0];
+      // Assign the meeting to whoever the customer is assigned to (the intake member),
+      // falling back to the current user if unassigned.
+      const assignedTo = stripProfessionalTitle(current?.assignedTo || user?.consultantName || user?.lawyerName || LAWYERS[0]) || LAWYERS[0];
       await Promise.all([
         updateCustomer(consultScheduleCustomerId, { status: 'CONSULTATION_SCHEDULED', expectedVersion: current?.version ?? 1 }),
         createMeeting({
@@ -1067,19 +1070,29 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Assigned Consultant</Label>
-              <Select
-                value={form.assignedTo || UNASSIGNED_CONSULTANT}
-                onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}
-                disabled={form.status !== 'CLIENT'}
-              >
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
-                  {CLIENT_LAWYERS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {form.status !== 'CLIENT' && (
-                <p className="text-xs text-muted-foreground">Assignment can only be changed when confirming to a client.</p>
+              {/* Admin and manager can assign at any status; intake users cannot change assignment */}
+              {user?.role === 'admin' || user?.role === 'manager' ? (
+                <Select
+                  value={form.assignedTo || UNASSIGNED_CONSULTANT}
+                  onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
+                    {/* When confirming to CLIENT, assign to consultants (Kejdi/Albert); otherwise assign within intake team */}
+                    {(form.status === 'CLIENT' ? CLIENT_LAWYERS : INTAKE_LAWYERS).map((l) => (
+                      <SelectItem key={l} value={l}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={stripProfessionalTitle(form.assignedTo) || form.assignedTo || "Unassigned"}
+                  disabled
+                />
+              )}
+              {form.status === 'CLIENT' && (
+                <p className="text-xs text-muted-foreground">Confirming as client — will be assigned to Kejdi or Albert.</p>
               )}
             </div>
             <div className="space-y-2">

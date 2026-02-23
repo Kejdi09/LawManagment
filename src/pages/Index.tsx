@@ -161,12 +161,14 @@ const Index = () => {
 
   useEffect(() => {
     (async () => {
-      const [customers, confirmedClients] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
-      const map = [...customers, ...confirmedClients].reduce<Record<string, string>>((acc, c) => {
+      const [allCustomers, confirmedClients] = await Promise.all([getAllCustomers(), getConfirmedClients()]);
+      const map = [...allCustomers, ...confirmedClients].reduce<Record<string, string>>((acc, c) => {
         acc[c.customerId] = c.name;
         return acc;
       }, {});
-      setCustomers(confirmedClients);
+      // Manager and intake work with pre-confirmation customers; admin/consultant work with confirmed clients
+      const isIntakeSide = user?.role === 'manager' || user?.role === 'intake';
+      setCustomers(isIntakeSide ? allCustomers : confirmedClients);
       setCustomerNames(map);
     })();
   }, []);
