@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+﻿import { useState, useCallback, useMemo, useEffect } from "react";
 import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
 import { ALL_STAGES, Priority, INTAKE_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
@@ -76,6 +76,20 @@ const CustomerCases = () => {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
+  const [caseList, setCaseList] = useState<Awaited<ReturnType<typeof getAllCases>>>([]);
+  const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
+  const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
+  const [newViewName, setNewViewName] = useState("");
+  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(true);
+  const [dashboardOpen, setDashboardOpen] = useState(() => {
+    try { return localStorage.getItem(DASHBOARD_OPEN_KEY) !== "0"; } catch { return true; }
+  });
+  const [listPage, setListPage] = useState(1);
+  const listPageSize = 30;
+  const { toast } = useToast();
+
   const exportCSV = useCallback(() => {
     const header = ["Case ID", "Customer", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Priority", "Deadline"];
     const rows = caseList.map((c) => [
@@ -95,20 +109,6 @@ const CustomerCases = () => {
     const a = document.createElement("a"); a.href = url; a.download = "customer-cases.csv"; a.click();
     URL.revokeObjectURL(url);
   }, [caseList, customerNames]);
-
-  const [caseList, setCaseList] = useState<Awaited<ReturnType<typeof getAllCases>>>([]);
-  const [stageFilter, setStageFilter] = useState<"all" | CaseStage>("all");
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
-  const [savedViews, setSavedViews] = useState<SavedCaseView[]>([]);
-  const [newViewName, setNewViewName] = useState("");
-  const [showMoreCaseColumns, setShowMoreCaseColumns] = useState(true);
-  const [dashboardOpen, setDashboardOpen] = useState(() => {
-    try { return localStorage.getItem(DASHBOARD_OPEN_KEY) !== "0"; } catch { return true; }
-  });
-  const [listPage, setListPage] = useState(1);
-  const listPageSize = 30;
-  const { toast } = useToast();
 
   useEffect(() => {
     try {
@@ -430,7 +430,7 @@ const CustomerCases = () => {
                   >
                     <div>
                       <div className="text-sm font-medium">{item.caseId}</div>
-                      <div className="text-xs text-muted-foreground">{customerNames[item.customerId] ?? item.customerId} • {item.category}</div>
+                      <div className="text-xs text-muted-foreground">{customerNames[item.customerId] ?? item.customerId} â€¢ {item.category}</div>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       <Badge variant="outline">{STAGE_LABELS[mapCaseStateToStage(item.state)]}</Badge>
@@ -481,7 +481,7 @@ const CustomerCases = () => {
                   {savedViews.map((view) => (
                     <div key={view.name} className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1">
                       <button type="button" onClick={() => applySavedView(view)} className="text-xs font-medium hover:underline">{view.name}</button>
-                      <button type="button" onClick={() => deleteSavedView(view.name)} className="text-xs text-muted-foreground hover:text-foreground" aria-label={`Delete view ${view.name}`}>×</button>
+                      <button type="button" onClick={() => deleteSavedView(view.name)} className="text-xs text-muted-foreground hover:text-foreground" aria-label={`Delete view ${view.name}`}>Ã—</button>
                     </div>
                   ))}
                 </div>
@@ -634,7 +634,7 @@ const CustomerCases = () => {
             <Button onClick={handleCreateCase}>Create Case</Button>
           </div>
           <datalist id="cc-customer-ids">
-            {customerOptions.map((o) => <option key={o.id} value={o.id}>{`${o.id} — ${o.name}`}</option>)}
+            {customerOptions.map((o) => <option key={o.id} value={o.id}>{`${o.id} â€” ${o.name}`}</option>)}
           </datalist>
           <datalist id="cc-category-options">
             {categoryOptions.map((c) => <option key={c} value={c} />)}
