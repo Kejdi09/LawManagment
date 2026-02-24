@@ -23,6 +23,8 @@ interface PortalChatPanelProps {
   linkExpired?: boolean;
   /** Whether messages are still loading */
   loading?: boolean;
+  /** When true the panel fills its flex parent instead of using a fixed 340 px height */
+  fillHeight?: boolean;
 }
 
 function countTrailingClient(messages: PortalMessage[]): number {
@@ -46,6 +48,7 @@ export function PortalChatPanel({
   maxConsecutive = 3,
   linkExpired = false,
   loading = false,
+  fillHeight = false,
 }: PortalChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +61,10 @@ export function PortalChatPanel({
   const canSend = !sending && !clientCapped && !linkExpired && text.trim().length > 0;
 
   return (
-    <div className="flex flex-col border rounded-lg overflow-hidden bg-background" style={{ height: 340 }}>
+    <div
+      className={`flex flex-col border rounded-lg overflow-hidden bg-background${fillHeight ? " flex-1" : ""}`}
+      style={fillHeight ? undefined : { height: 340 }}
+    >
       {/* Message list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {loading && (

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Phone, Mail, MapPin, StickyNote, Trash2, Link2, Copy, RefreshCw, XCircle, Loader2, SendHorizonal } from "lucide-react";
+import { Phone, Mail, MapPin, StickyNote, Trash2, Loader2 } from "lucide-react";
 import {
   Customer,
   CustomerHistoryRecord,
@@ -25,8 +25,6 @@ import {
   SERVICE_LABELS,
   LAWYERS,
   CLIENT_LAWYERS,
-  PortalNote,
-  PortalMessage,
 } from "@/lib/types";
 import {
   deleteConfirmedClient,
@@ -40,17 +38,7 @@ import {
   fetchDocumentBlob,
   StoredDocument,
   createMeeting,
-  generatePortalToken,
-  revokePortalToken,
-  getPortalNotes,
-  addPortalNote,
-  deletePortalNote,
-  getAdminChat,
-  sendAdminMessage,
-  markChatRead,
-  deletePortalChatMessage,
 } from "@/lib/case-store";
-import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { CaseDetail } from "@/components/CaseDetail";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -98,17 +86,6 @@ const ClientsPage = () => {
   const [clientDocuments, setClientDocuments] = useState<StoredDocument[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<Partial<Customer>>({});
-  const [portalLink, setPortalLink] = useState<string | null>(null);
-  const [isGeneratingPortal, setIsGeneratingPortal] = useState(false);
-  const [isRevokingPortal, setIsRevokingPortal] = useState(false);
-  const [portalNotes, setPortalNotes] = useState<PortalNote[]>([]);
-  const [portalNoteText, setPortalNoteText] = useState("");
-  const [isSavingPortalNote, setIsSavingPortalNote] = useState(false);
-  // Live chat state
-  const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
-  const [chatText, setChatText] = useState("");
-  const [chatSending, setChatSending] = useState(false);
-  const [chatLoading, setChatLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -148,19 +125,6 @@ const ClientsPage = () => {
     setSelectedCases(cases);
     setStatusHistoryRows(history);
     setClientDocuments(docs);
-    // Load portal notes + chat
-    try {
-      const [notes, msgs] = await Promise.all([
-        getPortalNotes(client.customerId),
-        getAdminChat(client.customerId).catch(() => [] as PortalMessage[]),
-      ]);
-      setPortalNotes(notes);
-      setChatMessages(msgs);
-      // Mark all client messages as read
-      markChatRead(client.customerId).catch(() => {});
-    } catch {
-      setPortalNotes([]);
-    }
   };
 
   const openEdit = (client: Customer) => {
@@ -390,111 +354,6 @@ const ClientsPage = () => {
                 </DialogHeader>
 
                 <div className="grid gap-4">
-                  <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Link2 className="h-4 w-4" />Client Portal Link</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      <p className="text-xs text-muted-foreground">Generate a secure read-only link your client can use to view their case status. The link expires in 30 days.</p>
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isGeneratingPortal}
-                          onClick={async () => {
-                            if (!selectedClient) return;
-                            setIsGeneratingPortal(true);
-                            try {
-                              const result = await generatePortalToken(selectedClient.customerId, 30);
-                              const base = window.location.href.split('#')[0];
-                              const link = `${base}#/portal/${result.token}`;
-                              setPortalLink(link);
-                            } catch (err) {
-                              toast({ title: "Error", description: String(err), variant: "destructive" });
-                            } finally { setIsGeneratingPortal(false); }
-                          }}
-                        >
-                          {isGeneratingPortal ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                          {portalLink ? "Regenerate Link" : "Generate Link"}
-                        </Button>
-                        {portalLink && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              navigator.clipboard.writeText(portalLink);
-                              toast({ title: "Copied!", description: "Portal link copied to clipboard." });
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />Copy Link
-                          </Button>
-                        )}
-                        {portalLink && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={isRevokingPortal}
-                            onClick={async () => {
-                              if (!selectedClient) return;
-                              if (!window.confirm("Revoke this portal link? The client will no longer be able to access the portal with this link.")) return;
-                              setIsRevokingPortal(true);
-                              try {
-                                await revokePortalToken(selectedClient.customerId);
-                                setPortalLink(null);
-                                toast({ title: "Link revoked", description: "The portal link has been destroyed." });
-                              } catch (err) {
-                                toast({ title: "Error", description: String(err), variant: "destructive" });
-                              } finally { setIsRevokingPortal(false); }
-                            }}
-                          >
-                            {isRevokingPortal ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <XCircle className="h-4 w-4 mr-1" />}
-                            Revoke Link
-                          </Button>
-                        )}
-                      </div>
-                      {portalLink && (
-                        <div className="rounded-md bg-muted px-3 py-2 text-xs font-mono break-all select-all">{portalLink}</div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <SendHorizonal className="h-4 w-4" />Live Chat with Client
-                        {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length > 0 && (
-                          <span className="ml-auto inline-flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                            {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length} new
-                          </span>
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <PortalChatPanel
-                        messages={chatMessages}
-                        text={chatText}
-                        onTextChange={setChatText}
-                        onSend={async () => {
-                          if (!selectedClient || !chatText.trim() || chatSending) return;
-                          setChatSending(true);
-                          try {
-                            const msg = await sendAdminMessage(selectedClient.customerId, chatText.trim());
-                            setChatMessages((prev) => [...prev, msg]);
-                            setChatText('');
-                          } catch (e) {
-                            toast({ title: 'Failed to send', description: String(e), variant: 'destructive' });
-                          } finally { setChatSending(false); }
-                        }}
-                        sending={chatSending}
-                        isAdmin
-                        onDelete={async (messageId) => {
-                          if (!selectedClient) return;
-                          await deletePortalChatMessage(selectedClient.customerId, messageId).catch(() => {});
-                          setChatMessages((prev) => prev.filter((m) => m.messageId !== messageId));
-                        }}
-                        trailingClientCount={countTrailingClient(chatMessages)}
-                        loading={chatLoading}
-                      />
-                    </CardContent>
-                  </Card>
-
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Overview</CardTitle></CardHeader>
                     <CardContent className="grid gap-2 text-sm">

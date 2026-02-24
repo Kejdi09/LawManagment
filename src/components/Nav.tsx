@@ -13,7 +13,8 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onActivity = location.pathname.startsWith("/activity");
   const onCustomerCases = location.pathname.startsWith("/customer-cases");
   const onInvoices = location.pathname.startsWith("/invoices");
-  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices);
+  const onChat = location.pathname.startsWith("/chat");
+  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat);
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -50,6 +51,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         )}
         {user?.role === "admin" && (
           <Button className={itemClass} variant={onInvoices ? "default" : "ghost"} onClick={() => go("/invoices")}>Invoices</Button>
+        )}
+        {!isAuthLoading && (
+          <Button className={itemClass} variant={onChat ? "default" : "ghost"} onClick={() => go("/chat")}>Chat</Button>
         )}
       </div>
       {showAccount && (

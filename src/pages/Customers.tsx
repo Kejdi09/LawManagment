@@ -12,14 +12,7 @@ import {
   StoredDocument,
   getCustomerHistory,
   createMeeting,
-  generatePortalToken,
-  getPortalToken,
-  getAdminChat,
-  sendAdminMessage,
-  markChatRead,
-  deletePortalChatMessage,
 } from "@/lib/case-store";
-import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import {
   SERVICE_LABELS,
   CONTACT_CHANNEL_LABELS,
@@ -32,7 +25,6 @@ import {
   LeadStatus,
   ServiceType,
   INTAKE_LAWYERS,
-  PortalMessage,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, Link2, Copy, Loader2, MessageSquare } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -148,13 +140,6 @@ const Customers = () => {
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [portalLink, setPortalLink] = useState<string | null>(null);
-  const [portalLinkLoading, setPortalLinkLoading] = useState(false);
-  const [portalLinkCopied, setPortalLinkCopied] = useState(false);
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
-  const [chatText, setChatText] = useState("");
-  const [chatSending, setChatSending] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -202,16 +187,10 @@ const Customers = () => {
     if (!id) {
       setSelectedCustomer(null);
       setCustomerStatusLog([]);
-      setPortalLink(null);
-      setPortalLinkCopied(false);
       return;
     }
     const customer = customers.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
-    setPortalLink(null);
-    setPortalLinkCopied(false);
-    setChatMessages([]);
-    setChatText("");
     const history = await getCustomerHistory(id).catch(() => []);
     setCustomerStatusLog(history);
     try {
@@ -219,24 +198,6 @@ const Customers = () => {
       setCustomerDocuments(docs);
     } catch (e) {
       setCustomerDocuments([]);
-    }
-    // Load existing portal token if any
-    try {
-      const existing = await getPortalToken(id);
-      if (existing?.token) {
-        const base = window.location.href.split('#')[0];
-        setPortalLink(`${base}#/portal/${existing.token}`);
-      }
-    } catch {
-      // ignore
-    }
-    // Load chat messages
-    try {
-      const msgs = await getAdminChat(id);
-      setChatMessages(msgs);
-      markChatRead(id).catch(() => {});
-    } catch {
-      setChatMessages([]);
     }
   }, [customers]);
 
@@ -630,29 +591,6 @@ const Customers = () => {
         toast({ title: 'Confirm failed', description: message, variant: 'destructive' });
       }
     }
-  };
-
-  const handleGeneratePortalLink = async () => {
-    if (!selectedCustomer) return;
-    setPortalLinkLoading(true);
-    try {
-      const { token } = await generatePortalToken(selectedCustomer.customerId, 30);
-      const base = window.location.href.split('#')[0];
-      const link = `${base}#/portal/${token}`;
-      setPortalLink(link);
-    } catch {
-      toast({ title: "Failed to generate portal link", variant: "destructive" });
-    } finally {
-      setPortalLinkLoading(false);
-    }
-  };
-
-  const handleCopyPortalLink = () => {
-    if (!portalLink) return;
-    navigator.clipboard.writeText(portalLink).then(() => {
-      setPortalLinkCopied(true);
-      setTimeout(() => setPortalLinkCopied(false), 2000);
-    });
   };
 
   const handleUploadCustomerDocument = async (file?: File) => {
@@ -1331,30 +1269,7 @@ const Customers = () => {
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
-                        {/* Client Portal Link */}
-                        <div className="pt-1 border-t mt-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground flex items-center gap-1"><Link2 className="h-3 w-3" />Client Portal</span>
-                            {portalLink ? (
-                              <>
-                                <span className="font-mono text-[11px] truncate max-w-[220px] text-muted-foreground border rounded px-1.5 py-0.5">{portalLink}</span>
-                                <Button size="sm" variant="outline" className="h-6 px-2 text-xs gap-1" onClick={handleCopyPortalLink}>
-                                  <Copy className="h-3 w-3" />
-                                  {portalLinkCopied ? "Copied!" : "Copy"}
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={handleGeneratePortalLink} disabled={portalLinkLoading}>
-                                  Regenerate
-                                </Button>
-                              </>
-                            ) : (
-                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs gap-1" onClick={handleGeneratePortalLink} disabled={portalLinkLoading}>
-                                {portalLinkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
-                                Generate Link
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
+                        </CardContent>
                     </Card>
 
                 <Card>
@@ -1435,44 +1350,6 @@ const Customers = () => {
                       </Card>
                     )}
 
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4" />Live Chat
-                          {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length > 0 && (
-                            <span className="ml-auto inline-flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                              {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length} new
-                            </span>
-                          )}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <PortalChatPanel
-                          messages={chatMessages}
-                          text={chatText}
-                          onTextChange={setChatText}
-                          onSend={async () => {
-                            if (!selectedCustomer || !chatText.trim() || chatSending) return;
-                            setChatSending(true);
-                            try {
-                              const msg = await sendAdminMessage(selectedCustomer.customerId, chatText.trim());
-                              setChatMessages((prev) => [...prev, msg]);
-                              setChatText('');
-                            } catch (e) {
-                              toast({ title: 'Failed to send', description: String(e), variant: 'destructive' });
-                            } finally { setChatSending(false); }
-                          }}
-                          sending={chatSending}
-                          isAdmin
-                          onDelete={async (messageId) => {
-                            if (!selectedCustomer) return;
-                            await deletePortalChatMessage(selectedCustomer.customerId, messageId).catch(() => {});
-                            setChatMessages((prev) => prev.filter((m) => m.messageId !== messageId));
-                          }}
-                          trailingClientCount={countTrailingClient(chatMessages)}
-                        />
-                      </CardContent>
-                    </Card>
                     
               </div>
             </>
