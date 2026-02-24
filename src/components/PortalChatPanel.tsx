@@ -74,23 +74,24 @@ export function PortalChatPanel({
         )}
         {!loading &&
           messages.map((m) => {
-            const byClient = m.senderType === "client";
+            // isMyMessage: lawyer's messages are "mine" when in admin mode; client's messages are "mine" on the portal
+            const isMyMessage = isAdmin ? m.senderType === "lawyer" : m.senderType === "client";
             return (
               <div
                 key={m.messageId}
-                className={`flex items-end gap-2 ${byClient ? "justify-start" : "justify-end"} group`}
+                className={`flex items-end gap-2 ${!isMyMessage ? "justify-start" : "justify-end"} group`}
               >
-                {/* Avatar initial */}
-                {byClient && (
+                {/* Avatar — other person's side (left) */}
+                {!isMyMessage && (
                   <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground shrink-0 mb-4">
-                    {m.senderName?.[0]?.toUpperCase() ?? "C"}
+                    {m.senderName?.[0]?.toUpperCase() ?? "?"}
                   </div>
                 )}
 
                 <div className="flex flex-col max-w-[72%]">
                   <div
                     className={`rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      byClient
+                      !isMyMessage
                         ? "bg-muted text-foreground rounded-bl-sm"
                         : "bg-primary text-primary-foreground rounded-br-sm"
                     }`}
@@ -99,7 +100,7 @@ export function PortalChatPanel({
                   </div>
                   <div
                     className={`flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground ${
-                      byClient ? "pl-1" : "justify-end pr-1"
+                      !isMyMessage ? "pl-1" : "justify-end pr-1"
                     }`}
                   >
                     <span>{m.senderName}</span>
@@ -118,10 +119,10 @@ export function PortalChatPanel({
                   </div>
                 </div>
 
-                {/* Avatar initial (lawyer side) */}
-                {!byClient && (
+                {/* Avatar — my side (right) */}
+                {isMyMessage && (
                   <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0 mb-4">
-                    {m.senderName?.[0]?.toUpperCase() ?? "L"}
+                    {m.senderName?.[0]?.toUpperCase() ?? "?"}
                   </div>
                 )}
               </div>

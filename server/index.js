@@ -10,8 +10,35 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { seedCustomers, seedCases, seedHistory, seedNotes, seedTasks } from "./seed-data.js";
+import nodemailer from "nodemailer";
 
 dotenv.config();
+
+// ── Email notification helper (opt-in via env vars) ──────────────────────────────────────────────────────────────────────────────────
+// Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, and ADMIN_EMAIL in your .env to enable.
+const STATE_EMAIL_LABELS = {
+  NEW: 'New', IN_PROGRESS: 'In Progress', WAITING_CUSTOMER: 'Waiting — Your Input Needed',
+  WAITING_AUTHORITIES: 'Waiting — Authorities', FINALIZED: 'Completed', INTAKE: 'Under Review',
+  SEND_PROPOSAL: 'Proposal Sent', WAITING_RESPONSE_P: 'Waiting for Your Response',
+  DISCUSSING_Q: 'Under Discussion', SEND_CONTRACT: 'Contract Sent',
+  WAITING_RESPONSE_C: 'Waiting for Your Response',
+};
+async function sendEmail({ to, subject, text }) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !to) return;
+  try {
+    const transport = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT) || 587,
+      secure: Number(SMTP_PORT) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+    await transport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
+    console.log(`[email] Sent to ${to}: ${subject}`);
+  } catch (e) {
+    console.warn('[email] Failed to send notification:', e.message);
+  }
+}
 
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -1326,6 +1353,19 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
   const record = { historyId, caseId: id, stateFrom, stateIn, date: new Date().toISOString() };
   await historyCol.insertOne(record);
   await casesCol.updateOne({ caseId: id }, { $set: { state: stateIn, lastStateChange: record.date } });
+  // Notify client about the status change
+  const theCase = await casesCol.findOne({ caseId: id }, { projection: { customerId: 1, title: 1 } });
+  if (theCase) {
+    const [cust, cli] = await Promise.all([
+      customersCol.findOne({ customerId: theCase.customerId }, { projection: { email: 1, name: 1 } }),
+      confirmedClientsCol.findOne({ customerId: theCase.customerId }, { projection: { email: 1, name: 1 } }),
+    ]);
+    const clientRecord = cust || cli;
+    if (clientRecord?.email) {
+      const newStateLabel = STATE_EMAIL_LABELS[stateIn] || stateIn;
+      sendEmail({ to: clientRecord.email, subject: `Case update: ${theCase.title || id}`, text: `Dear ${clientRecord.name || 'Client'},\n\nYour case "${theCase.title || id}" has been updated.\n\nNew status: ${newStateLabel}\n\nVisit your client portal for the latest details.` });
+    }
+  }
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case-history', resourceId: historyId, details: { caseId: id, stateFrom, stateIn } });
   res.status(201).json(record);
 });
@@ -1950,6 +1990,8 @@ app.post('/api/portal/chat/:token', async (req, res) => {
   }
   const msg = { messageId: genShortId('PM'), customerId: tokenDoc.customerId, text: String(text).trim(), senderType: 'client', senderName: tokenDoc.clientName || 'Client', createdAt: new Date().toISOString(), readByLawyer: false };
   await portalMessagesCol.insertOne(msg);
+  // Notify lawyer via email
+  sendEmail({ to: process.env.ADMIN_EMAIL, subject: `New portal message from ${msg.senderName}`, text: `You have a new message from ${msg.senderName}:\n\n"${msg.text}"\n\nLog in to the admin panel to respond.` });
   res.status(201).json({ messageId: msg.messageId, text: msg.text, senderType: msg.senderType, senderName: msg.senderName, createdAt: msg.createdAt });
 });
 
@@ -1979,6 +2021,15 @@ app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   const senderName = req.user?.lawyerName || req.user?.consultantName || req.user?.username || 'Lawyer';
   const msg = { messageId: genShortId('PM'), customerId: String(req.params.customerId).trim(), text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true };
   await portalMessagesCol.insertOne(msg);
+  // Notify client via email
+  const [cust, cli] = await Promise.all([
+    customersCol.findOne({ customerId: msg.customerId }, { projection: { email: 1, name: 1 } }),
+    confirmedClientsCol.findOne({ customerId: msg.customerId }, { projection: { email: 1, name: 1 } }),
+  ]);
+  const clientRecord = cust || cli;
+  if (clientRecord?.email) {
+    sendEmail({ to: clientRecord.email, subject: 'New message from your lawyer', text: `Dear ${clientRecord.name || 'Client'},\n\nYour lawyer sent you a new message:\n\n"${msg.text}"\n\nVisit your client portal to reply.` });
+  }
   res.status(201).json(msg);
 });
 

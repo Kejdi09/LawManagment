@@ -142,6 +142,7 @@ export default function ClientPortalPage() {
   const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevMsgCountRef = useRef(0);
 
   // Load portal data
   useEffect(() => {
@@ -150,7 +151,10 @@ export default function ClientPortalPage() {
       .then((d) => {
         setData(d);
         // Initialise chat from the portal data payload (avoids an extra round-trip)
-        if (d.chatMessages) setChatMessages(d.chatMessages);
+        if (d.chatMessages) {
+          setChatMessages(d.chatMessages);
+          prevMsgCountRef.current = d.chatMessages.length;
+        }
       })
       .catch((e) => {
         const msg = String(e?.message || "");
@@ -164,12 +168,29 @@ export default function ClientPortalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // Request browser notification permission so we can alert on new messages
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   // Poll for new chat messages every 12 seconds (client-visible only)
   useEffect(() => {
     if (!token) return;
     const fetchChat = () => {
       getPortalChatByToken(token)
         .then(({ expired, messages }) => {
+          // Detect new lawyer messages and fire a browser notification
+          const prev = prevMsgCountRef.current;
+          const newLawyerMsgs = messages.slice(prev).filter((m) => m.senderType === 'lawyer');
+          if (newLawyerMsgs.length > 0 && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('New message from your lawyer', {
+              body: newLawyerMsgs[newLawyerMsgs.length - 1].text.slice(0, 100),
+              icon: '/favicon.ico',
+            });
+          }
+          prevMsgCountRef.current = messages.length;
           setChatMessages(messages);
           if (expired) setLinkExpired(true);
         })
