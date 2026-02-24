@@ -500,6 +500,7 @@ const CustomerCases = () => {
               customerNames={customerNames}
               showMoreColumns={showMoreCaseColumns}
               onSelectCase={setSelectedCaseId}
+              personLabel="Customer"
             />
           );
         })}

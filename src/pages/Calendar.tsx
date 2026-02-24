@@ -205,11 +205,11 @@ const MeetingsCalendarPage = () => {
                 <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Customer</Label>
+                <Label>Client / Customer</Label>
                 <Select value={form.customerId || "none"} onValueChange={(value) => setForm((f) => ({ ...f, customerId: value === "none" ? "" : value }))}>
-                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select person" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No customer</SelectItem>
+                    <SelectItem value="none">No one linked</SelectItem>
                     {Object.entries(customerNames).map(([id, name]) => (
                       <SelectItem key={id} value={id}>{name} ({id})</SelectItem>
                     ))}
@@ -284,7 +284,7 @@ const MeetingsCalendarPage = () => {
                 <div>
                   <div className="font-medium">{meeting.title}</div>
                   <div className="text-sm text-muted-foreground">{formatDate(meeting.startsAt, true)} • {meeting.assignedTo}</div>
-                  <div className="text-sm text-muted-foreground">{meeting.customerId ? `${customerNames[meeting.customerId] || "Customer"} (${meeting.customerId})` : "No customer linked"}</div>
+                  <div className="text-sm text-muted-foreground">{meeting.customerId ? `${customerNames[meeting.customerId] || meeting.customerId}` : "No client/customer linked"}</div>
                   {meeting.notes && <div className="text-sm mt-1">{meeting.notes}</div>}
                 </div>
                 <div className="flex items-center gap-2">

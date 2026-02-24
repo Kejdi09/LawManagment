@@ -14,9 +14,10 @@ interface CaseTableProps {
   onSelectCase: (caseId: string) => void;
   customerNames?: Record<string, string>;
   showMoreColumns?: boolean;
+  personLabel?: string;
 }
 
-export function CaseTable({ state, cases, onSelectCase, customerNames = {}, showMoreColumns = false }: CaseTableProps) {
+export function CaseTable({ state, cases, onSelectCase, customerNames = {}, showMoreColumns = false, personLabel = "Person" }: CaseTableProps) {
   if (cases.length === 0) return null;
 
   return (
@@ -34,7 +35,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
-                <TableHead className="w-[160px]">Customer</TableHead>
+                <TableHead className="w-[160px]">{personLabel}</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="w-[110px]">Assigned</TableHead>

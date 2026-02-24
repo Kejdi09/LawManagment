@@ -611,7 +611,7 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
             {customer && (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2"><User className="h-4 w-4" /> Customer</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2"><User className="h-4 w-4" /> {caseData?.caseType === 'client' ? 'Client' : 'Customer'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="font-medium text-base">{customer.name}</div>

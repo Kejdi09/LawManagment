@@ -1547,6 +1547,23 @@ function isValidOwnerId(value) {
   return /^[A-Za-z0-9\-]{2,40}$/.test(String(value || ""));
 }
 
+// Returns true if the current user is allowed to access a document owner (case or customer).
+async function verifyDocumentOwnerAccess(user, ownerType, ownerId) {
+  if (isAdminUser(user)) return true;
+  if (ownerType === 'case') {
+    const c = await casesCol.findOne({ caseId: ownerId, ...buildCaseScopeFilter(user) });
+    return !!c;
+  }
+  if (ownerType === 'customer') {
+    const [cust, cli] = await Promise.all([
+      customersCol.findOne({ customerId: ownerId, ...buildCustomerScopeFilter(user) }),
+      confirmedClientsCol.findOne({ customerId: ownerId, ...buildClientScopeFilter(user) }),
+    ]);
+    return !!(cust || cli);
+  }
+  return false;
+}
+
 app.post('/api/documents/upload', verifyAuth, upload.single('file'), async (req, res) => {
   try {
     const ownerType = String(req.body.ownerType || "").trim(); // 'case' or 'customer'
@@ -1585,6 +1602,8 @@ app.get('/api/documents', verifyAuth, async (req, res) => {
   const ownerId = String(req.query.ownerId || "").trim();
   if (!ownerType || !ownerId) return res.status(400).json({ error: 'missing' });
   if (!isValidOwnerType(ownerType) || !isValidOwnerId(ownerId)) return res.status(400).json({ error: 'invalid_owner' });
+  const allowed = await verifyDocumentOwnerAccess(req.user, ownerType, ownerId);
+  if (!allowed) return res.status(403).json({ error: 'forbidden' });
   const docs = await documentsCol.find({ ownerType, ownerId }).sort({ uploadedAt: -1 }).toArray();
   res.json(docs);
 });
@@ -1593,6 +1612,8 @@ app.get('/api/documents/:docId', verifyAuth, async (req, res) => {
   const { docId } = req.params;
   const doc = await documentsCol.findOne({ docId });
   if (!doc) return res.status(404).json({ error: 'not_found' });
+  const allowed = await verifyDocumentOwnerAccess(req.user, doc.ownerType, doc.ownerId);
+  if (!allowed) return res.status(403).json({ error: 'forbidden' });
   return res.sendFile(path.resolve(doc.path));
 });
 
@@ -1601,7 +1622,8 @@ app.delete('/api/documents/:docId', verifyAuth, async (req, res) => {
     const { docId } = req.params;
     const doc = await documentsCol.findOne({ docId });
     if (!doc) return res.status(404).json({ error: 'not_found' });
-    // remove file
+    const allowed = await verifyDocumentOwnerAccess(req.user, doc.ownerType, doc.ownerId);
+    if (!allowed) return res.status(403).json({ error: 'forbidden' });
     try { await fs.promises.unlink(doc.path); } catch (e) { /* ignore */ }
     await documentsCol.deleteOne({ docId });
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'document', resourceId: docId, details: { ownerType: doc.ownerType, ownerId: doc.ownerId } });
@@ -1784,9 +1806,10 @@ app.get('/api/search', verifyAuth, async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q || q.length < 2) return res.json({ customers: [], clients: [], cases: [] });
   const regex = new RegExp(escapeRegex(q), 'i');
+  const textMatch = { $or: [{ name: regex }, { customerId: regex }, { phone: regex }, { email: regex }] };
   const [customers, clients, cases] = await Promise.all([
-    customersCol.find({ $or: [{ name: regex }, { customerId: regex }, { phone: regex }, { email: regex }] }).limit(8).toArray(),
-    confirmedClientsCol.find({ $or: [{ name: regex }, { customerId: regex }, { phone: regex }, { email: regex }] }).limit(8).toArray(),
+    customersCol.find({ ...textMatch, ...buildCustomerScopeFilter(req.user) }).limit(8).toArray(),
+    confirmedClientsCol.find({ ...textMatch, ...buildClientScopeFilter(req.user) }).limit(8).toArray(),
     casesCol.find({ $or: [{ caseId: regex }, { title: regex }, { category: regex }, { customerId: regex }], ...buildCaseScopeFilter(req.user) }).limit(8).toArray(),
   ]);
   res.json({
@@ -1833,11 +1856,21 @@ app.post('/api/invoices', verifyAuth, async (req, res) => {
 
 app.put('/api/invoices/:id', verifyAuth, async (req, res) => {
   const id = String(req.params.id || '').trim();
+  // Scope: mirrors GET /api/invoices — admin/manager see all; consultant/intake only their own
+  const invoiceFilter = { invoiceId: id };
+  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+    const lawyerName = getUserLawyerName(req.user);
+    if (lawyerName) invoiceFilter.assignedTo = lawyerName;
+    else return res.status(403).json({ error: 'forbidden' });
+  }
+  const existing = await invoicesCol.findOne(invoiceFilter);
+  if (!existing) return res.status(404).json({ error: 'not_found' });
   const update = { ...req.body };
   delete update._id;
   delete update.invoiceId;
   delete update.createdAt;
   delete update.createdBy;
+  delete update.assignedTo; // prevent reassigning
   await invoicesCol.updateOne({ invoiceId: id }, { $set: update });
   const updated = await invoicesCol.findOne({ invoiceId: id });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'invoice', resourceId: id, details: { update } });
@@ -1877,6 +1910,13 @@ app.post('/api/cases/:id/comms', verifyAuth, async (req, res) => {
 });
 
 app.delete('/api/comms/:id', verifyAuth, async (req, res) => {
+  const entry = await commsLogCol.findOne({ commId: String(req.params.id) });
+  if (!entry) return res.status(404).json({ error: 'not_found' });
+  // Only admin or the case owner may delete comms entries
+  if (!isAdminUser(req.user)) {
+    const caseAllowed = await casesCol.findOne({ caseId: entry.caseId, ...buildCaseScopeFilter(req.user) });
+    if (!caseAllowed) return res.status(403).json({ error: 'forbidden' });
+  }
   await commsLogCol.deleteOne({ commId: String(req.params.id) });
   res.json({ ok: true });
 });
@@ -2027,18 +2067,32 @@ app.get('/api/portal-chat/unread-counts', verifyAuth, async (req, res) => {
   res.json(results.map(r => ({ customerId: r._id, unreadCount: r.count })));
 });
 
-// Get all messages for a customer (admin)
+// Helper: verify caller can access a given customerId's chat (admin always yes; others only their own customer/client)
+async function verifyPortalChatAccess(user, customerId) {
+  if (isAdminUser(user)) return true;
+  const [cust, cli] = await Promise.all([
+    customersCol.findOne({ customerId, ...buildCustomerScopeFilter(user) }),
+    confirmedClientsCol.findOne({ customerId, ...buildClientScopeFilter(user) }),
+  ]);
+  return !!(cust || cli);
+}
+
+// Get all messages for a customer (admin/scoped)
 app.get('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
-  const messages = await portalMessagesCol.find({ customerId: String(req.params.customerId).trim() }).sort({ createdAt: 1 }).toArray();
+  const customerId = String(req.params.customerId).trim();
+  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
+  const messages = await portalMessagesCol.find({ customerId }).sort({ createdAt: 1 }).toArray();
   res.json(messages);
 });
 
-// Lawyer sends a message to client (admin)
+// Lawyer sends a message to client (admin/scoped)
 app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   const { text } = req.body;
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
+  const customerId = String(req.params.customerId).trim();
+  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
   const senderName = req.user?.lawyerName || req.user?.consultantName || req.user?.username || 'Lawyer';
-  const msg = { messageId: genShortId('PM'), customerId: String(req.params.customerId).trim(), text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true };
+  const msg = { messageId: genShortId('PM'), customerId, text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true };
   await portalMessagesCol.insertOne(msg);
   // Notify client via email
   const [cust, cli] = await Promise.all([
@@ -2052,17 +2106,21 @@ app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   res.status(201).json(msg);
 });
 
-// Mark all client messages as read (admin opened the chat)
+// Mark all client messages as read (scoped)
 app.put('/api/portal-chat/:customerId/read', verifyAuth, async (req, res) => {
+  const customerId = String(req.params.customerId).trim();
+  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
   await portalMessagesCol.updateMany(
-    { customerId: String(req.params.customerId).trim(), senderType: 'client', readByLawyer: false },
+    { customerId, senderType: 'client', readByLawyer: false },
     { $set: { readByLawyer: true } }
   );
   res.json({ ok: true });
 });
 
-// Delete a single message (admin)
+// Delete a single message (scoped)
 app.delete('/api/portal-chat/:customerId/:messageId', verifyAuth, async (req, res) => {
-  await portalMessagesCol.deleteOne({ customerId: String(req.params.customerId).trim(), messageId: String(req.params.messageId) });
+  const customerId = String(req.params.customerId).trim();
+  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
+  await portalMessagesCol.deleteOne({ customerId, messageId: String(req.params.messageId) });
   res.json({ ok: true });
 });

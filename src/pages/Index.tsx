@@ -90,7 +90,7 @@ const Index = () => {
   const { toast } = useToast();
 
   const exportCSV = useCallback(() => {
-    const header = ["Case ID", "Customer", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Priority", "Deadline"];
+    const header = ["Case ID", "Client", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Priority", "Deadline"];
     const rows = caseList.map((c) => [
       c.caseId,
       customerNames[c.customerId] || c.customerId,
@@ -542,6 +542,7 @@ const Index = () => {
               customerNames={customerNames}
               showMoreColumns={showMoreCaseColumns}
               onSelectCase={setSelectedCaseId}
+              personLabel="Client"
             />
           );
         })}
