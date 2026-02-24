@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData } from "@/lib/case-store";
-import { PortalData, ServiceType, SERVICE_LABELS } from "@/lib/types";
+import { getPortalData, getPortalChatByToken, sendPortalMessage } from "@/lib/case-store";
+import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
+import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
   MessageSquare, CalendarClock, StickyNote,
@@ -13,8 +14,8 @@ import {
 const STATE_LABELS: Record<string, string> = {
   NEW: "New",
   IN_PROGRESS: "In Progress",
-  WAITING_CUSTOMER: "Waiting — Your Input Needed",
-  WAITING_AUTHORITIES: "Waiting — Authorities",
+  WAITING_CUSTOMER: "Waiting ï¿½ Your Input Needed",
+  WAITING_AUTHORITIES: "Waiting ï¿½ Authorities",
   FINALIZED: "Completed",
   INTAKE: "Under Review",
   SEND_PROPOSAL: "Proposal Sent",
@@ -64,7 +65,7 @@ function CaseCard({ c, history }: {
             <span className="font-mono text-xs text-muted-foreground">{c.caseId}</span>
             {c.title && <div className="font-semibold text-sm mt-0.5">{c.title}</div>}
             <div className="text-sm text-muted-foreground">
-              {c.category}{c.subcategory ? ` — ${c.subcategory}` : ""}
+              {c.category}{c.subcategory ? ` ï¿½ ${c.subcategory}` : ""}
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
@@ -135,15 +136,27 @@ export default function ClientPortalPage() {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [linkExpired, setLinkExpired] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Load portal data
   useEffect(() => {
     if (!token) { setError("Invalid link"); setLoading(false); return; }
     getPortalData(token)
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        // Initialise chat from the portal data payload (avoids an extra round-trip)
+        if (d.chatMessages) setChatMessages(d.chatMessages);
+      })
       .catch((e) => {
         const msg = String(e?.message || "");
         if (msg.includes("expired") || msg.includes("410")) {
           setError("This link has expired. Please contact your lawyer for a new link.");
+          setLinkExpired(true);
         } else {
           setError("Invalid or expired link.");
         }
@@ -151,10 +164,41 @@ export default function ClientPortalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // Poll for new chat messages every 12 seconds (client-visible only)
+  useEffect(() => {
+    if (!token) return;
+    const fetchChat = () => {
+      getPortalChatByToken(token)
+        .then(({ expired, messages }) => {
+          setChatMessages(messages);
+          if (expired) setLinkExpired(true);
+        })
+        .catch(() => {});
+    };
+    pollRef.current = setInterval(fetchChat, 12_000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [token]);
+
+  const handleSendChat = async () => {
+    if (!token || !chatText.trim() || chatSending) return;
+    setChatSending(true);
+    try {
+      const msg = await sendPortalMessage(token, chatText.trim());
+      setChatMessages((prev) => [...prev, msg]);
+      setChatText("");
+    } catch (e) {
+      alert(String((e as Error)?.message ?? "Failed to send message."));
+    } finally {
+      setChatSending(false);
+    }
+  };
+
+  const trailingClientCount = countTrailingClient(chatMessages);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
-        Loading your case information…
+        Loading your case informationï¿½
       </div>
     );
   }
@@ -178,7 +222,7 @@ export default function ClientPortalPage() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <FileText className="h-5 w-5 text-primary" />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Dafku Law Firm — Case Portal</div>
+            <div className="font-semibold text-sm">Dafku Law Firm ï¿½ Case Portal</div>
             <div className="text-xs text-muted-foreground">Read-only view for {data.client.name}</div>
           </div>
           {data.expiresAt && (
@@ -234,6 +278,26 @@ export default function ClientPortalPage() {
           {data.cases.map((c) => (
             <CaseCard key={c.caseId} c={c} history={data.history} />
           ))}
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" /> Chat with Your Lawyer
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            You can send up to 3 consecutive messages. After that, you must wait for your lawyer to reply.
+            {linkExpired && " Your link has expired â€” message history is shown but new messages are disabled."}
+          </p>
+          <PortalChatPanel
+            messages={chatMessages}
+            text={chatText}
+            onTextChange={setChatText}
+            onSend={handleSendChat}
+            sending={chatSending}
+            isAdmin={false}
+            trailingClientCount={trailingClientCount}
+            linkExpired={linkExpired}
+          />
         </div>
 
         <div className="text-center text-xs text-muted-foreground pt-4 border-t">

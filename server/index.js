@@ -71,6 +71,7 @@ let meetingsCol;
 let usersCol;
 let auditLogsCol;
 let portalNotesCol;
+let portalMessagesCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -116,6 +117,7 @@ async function connectDb() {
   commsLogCol = db.collection("commsLog");
   portalTokensCol = db.collection("portalTokens");
   portalNotesCol = db.collection("portalNotes");
+  portalMessagesCol = db.collection("portalMessages");
 }
 
 async function seedIfEmpty() {
@@ -1825,13 +1827,19 @@ app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
   if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
   const { customerId, expiresInDays = 30 } = req.body;
   if (!customerId) return res.status(400).json({ error: 'customerId required' });
-  const client = await confirmedClientsCol.findOne({ customerId: String(customerId).trim() });
-  if (!client) return res.status(404).json({ error: 'Confirmed client not found' });
+  // Support both confirmed clients AND leads (customers)
+  let person = await confirmedClientsCol.findOne({ customerId: String(customerId).trim() });
+  let personType = 'client';
+  if (!person) {
+    person = await customersCol.findOne({ customerId: String(customerId).trim() });
+    personType = 'customer';
+  }
+  if (!person) return res.status(404).json({ error: 'Client or customer not found' });
   // Revoke any existing token for this client
   await portalTokensCol.deleteMany({ customerId: String(customerId).trim() });
   const rawToken = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
-  const doc = { token: rawToken, customerId: String(customerId).trim(), createdAt: new Date().toISOString(), expiresAt, createdBy: req.user?.username };
+  const doc = { token: rawToken, customerId: String(customerId).trim(), clientName: person.name, clientType: personType, createdAt: new Date().toISOString(), expiresAt, createdBy: req.user?.username };
   await portalTokensCol.insertOne(doc);
   res.json({ token: rawToken, expiresAt });
 });
@@ -1875,17 +1883,22 @@ app.get('/api/portal/:token', async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
-  const client = await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
+  // Support both confirmed clients and leads/customers
+  let client = await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
+  const isConfirmedClient = !!client;
+  if (!client) client = await customersCol.findOne({ customerId: tokenDoc.customerId });
   if (!client) return res.status(404).json({ error: 'Client not found' });
-  // Only show confirmed-client cases (caseType: 'client'), not intake/customer cases
-  const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: 'client' }).sort({ lastStateChange: -1 }).toArray();
+  // Show matching case type: client cases for confirmed clients, customer cases for leads
+  const caseTypeFilter = isConfirmedClient ? 'client' : 'customer';
+  const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: caseTypeFilter }).sort({ lastStateChange: -1 }).toArray();
   const caseIds = cases.map(c => c.caseId);
-  const [history, portalNotes] = await Promise.all([
+  const [history, portalNotes, chatMessages] = await Promise.all([
     caseIds.length ? historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [],
     portalNotesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
+    portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray(),
   ]);
   res.json({
-    client: { name: client.name, customerId: client.customerId, services: client.services, status: client.status },
+    client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status },
     cases: cases.map(c => ({
       caseId: c.caseId,
       title: c.title,
@@ -1899,6 +1912,87 @@ app.get('/api/portal/:token', async (req, res) => {
     })),
     history,
     portalNotes: portalNotes.map(n => ({ noteId: n.noteId, text: n.text, createdAt: n.createdAt, createdBy: n.createdBy })),
+    chatMessages: chatMessages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt, readByLawyer: m.readByLawyer })),
     expiresAt: tokenDoc.expiresAt,
+    linkExpired: false,
   });
+});
+
+// ── Portal Chat (client side — token-based, no auth) ─────────────────────────────────────────────────────────
+// Returns messages even if link is expired (read-only mode)
+app.get('/api/portal/chat/:token', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  const messages = await portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray();
+  const expired = new Date(tokenDoc.expiresAt) < new Date();
+  res.json({
+    expired,
+    messages: messages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt })),
+  });
+});
+
+// Client sends a message (token-based, public)
+app.post('/api/portal/chat/:token', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'This link has expired. Contact your lawyer for a new link.' });
+  const { text } = req.body;
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
+  // Enforce 3-message cap: count consecutive trailing client messages
+  const allMessages = await portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray();
+  let trailingClientCount = 0;
+  for (let i = allMessages.length - 1; i >= 0; i--) {
+    if (allMessages[i].senderType === 'client') trailingClientCount++;
+    else break;
+  }
+  if (trailingClientCount >= 3) {
+    return res.status(429).json({ error: 'You have sent 3 messages in a row. Please wait for your lawyer to reply before sending more.' });
+  }
+  const msg = { messageId: genShortId('PM'), customerId: tokenDoc.customerId, text: String(text).trim(), senderType: 'client', senderName: tokenDoc.clientName || 'Client', createdAt: new Date().toISOString(), readByLawyer: false };
+  await portalMessagesCol.insertOne(msg);
+  res.status(201).json({ messageId: msg.messageId, text: msg.text, senderType: msg.senderType, senderName: msg.senderName, createdAt: msg.createdAt });
+});
+
+// ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────
+// IMPORTANT: specific routes (/unread-counts) must come BEFORE parameterised routes (/:customerId)
+
+// Get unread counts for all customers (for sidebar badges)
+app.get('/api/portal-chat/unread-counts', verifyAuth, async (req, res) => {
+  const pipeline = [
+    { $match: { senderType: 'client', readByLawyer: false } },
+    { $group: { _id: '$customerId', count: { $sum: 1 } } },
+  ];
+  const results = await portalMessagesCol.aggregate(pipeline).toArray();
+  res.json(results.map(r => ({ customerId: r._id, unreadCount: r.count })));
+});
+
+// Get all messages for a customer (admin)
+app.get('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
+  const messages = await portalMessagesCol.find({ customerId: String(req.params.customerId).trim() }).sort({ createdAt: 1 }).toArray();
+  res.json(messages);
+});
+
+// Lawyer sends a message to client (admin)
+app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
+  const { text } = req.body;
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
+  const senderName = req.user?.lawyerName || req.user?.consultantName || req.user?.username || 'Lawyer';
+  const msg = { messageId: genShortId('PM'), customerId: String(req.params.customerId).trim(), text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true };
+  await portalMessagesCol.insertOne(msg);
+  res.status(201).json(msg);
+});
+
+// Mark all client messages as read (admin opened the chat)
+app.put('/api/portal-chat/:customerId/read', verifyAuth, async (req, res) => {
+  await portalMessagesCol.updateMany(
+    { customerId: String(req.params.customerId).trim(), senderType: 'client', readByLawyer: false },
+    { $set: { readByLawyer: true } }
+  );
+  res.json({ ok: true });
+});
+
+// Delete a single message (admin)
+app.delete('/api/portal-chat/:customerId/:messageId', verifyAuth, async (req, res) => {
+  await portalMessagesCol.deleteOne({ customerId: String(req.params.customerId).trim(), messageId: String(req.params.messageId) });
+  res.json({ ok: true });
 });

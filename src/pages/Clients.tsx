@@ -26,6 +26,7 @@ import {
   LAWYERS,
   CLIENT_LAWYERS,
   PortalNote,
+  PortalMessage,
 } from "@/lib/types";
 import {
   deleteConfirmedClient,
@@ -44,7 +45,12 @@ import {
   getPortalNotes,
   addPortalNote,
   deletePortalNote,
+  getAdminChat,
+  sendAdminMessage,
+  markChatRead,
+  deletePortalChatMessage,
 } from "@/lib/case-store";
+import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { CaseDetail } from "@/components/CaseDetail";
 import { mapCaseStateToStage, formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -98,6 +104,11 @@ const ClientsPage = () => {
   const [portalNotes, setPortalNotes] = useState<PortalNote[]>([]);
   const [portalNoteText, setPortalNoteText] = useState("");
   const [isSavingPortalNote, setIsSavingPortalNote] = useState(false);
+  // Live chat state
+  const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -125,6 +136,9 @@ const ClientsPage = () => {
   const openDetail = async (client: Customer) => {
     setSelectedClient(client);
     setPortalLink(null);
+    setPortalNotes([]);
+    setChatMessages([]);
+    setChatText("");
     setSelectedCases([]);
     const [cases, history, docs] = await Promise.all([
       getCasesByCustomer(client.customerId),
@@ -134,10 +148,16 @@ const ClientsPage = () => {
     setSelectedCases(cases);
     setStatusHistoryRows(history);
     setClientDocuments(docs);
-    // Load portal notes for admin
+    // Load portal notes + chat
     try {
-      const notes = await getPortalNotes(client.customerId);
+      const [notes, msgs] = await Promise.all([
+        getPortalNotes(client.customerId),
+        getAdminChat(client.customerId).catch(() => [] as PortalMessage[]),
+      ]);
       setPortalNotes(notes);
+      setChatMessages(msgs);
+      // Mark all client messages as read
+      markChatRead(client.customerId).catch(() => {});
     } catch {
       setPortalNotes([]);
     }
@@ -500,6 +520,46 @@ const ClientsPage = () => {
                       </CardContent>
                     </Card>
                   )}
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <SendHorizonal className="h-4 w-4" />Live Chat with Client
+                        {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length > 0 && (
+                          <span className="ml-auto inline-flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                            {chatMessages.filter((m) => m.senderType === 'client' && m.readByLawyer === false).length} new
+                          </span>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <PortalChatPanel
+                        messages={chatMessages}
+                        text={chatText}
+                        onTextChange={setChatText}
+                        onSend={async () => {
+                          if (!selectedClient || !chatText.trim() || chatSending) return;
+                          setChatSending(true);
+                          try {
+                            const msg = await sendAdminMessage(selectedClient.customerId, chatText.trim());
+                            setChatMessages((prev) => [...prev, msg]);
+                            setChatText('');
+                          } catch (e) {
+                            toast({ title: 'Failed to send', description: String(e), variant: 'destructive' });
+                          } finally { setChatSending(false); }
+                        }}
+                        sending={chatSending}
+                        isAdmin
+                        onDelete={async (messageId) => {
+                          if (!selectedClient) return;
+                          await deletePortalChatMessage(selectedClient.customerId, messageId).catch(() => {});
+                          setChatMessages((prev) => prev.filter((m) => m.messageId !== messageId));
+                        }}
+                        trailingClientCount={countTrailingClient(chatMessages)}
+                        loading={chatLoading}
+                      />
+                    </CardContent>
+                  </Card>
 
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Overview</CardTitle></CardHeader>

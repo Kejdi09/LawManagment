@@ -306,6 +306,16 @@ export interface PortalNote {
   createdBy: string;
 }
 
+export interface PortalMessage {
+  messageId: string;
+  customerId?: string;
+  text: string;
+  senderType: 'client' | 'lawyer';
+  senderName: string;
+  createdAt: string;
+  readByLawyer?: boolean;
+}
+
 export interface PortalData {
   client: { name: string; customerId: string; services: ServiceType[]; status: string };
   cases: Array<{
@@ -321,5 +331,6 @@ export interface PortalData {
   }>;
   history: HistoryRecord[];
   portalNotes: PortalNote[];
+  chatMessages: PortalMessage[];
   expiresAt?: string;
 }
