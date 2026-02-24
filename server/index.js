@@ -23,20 +23,42 @@ const STATE_EMAIL_LABELS = {
   DISCUSSING_Q: 'Under Discussion', SEND_CONTRACT: 'Contract Sent',
   WAITING_RESPONSE_C: 'Waiting for Your Response',
 };
+// Log SMTP config status at startup (after dotenv.config() is called)
+function logEmailConfig() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    console.warn('[email] SMTP NOT configured — emails disabled. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.');
+  } else {
+    console.log(`[email] SMTP configured: ${SMTP_USER}@${SMTP_HOST}:${SMTP_PORT || 587} | FROM=${SMTP_FROM || SMTP_USER} | ADMIN_EMAIL=${ADMIN_EMAIL || '(not set)'}`);
+  }
+}
+logEmailConfig();
+
 async function sendEmail({ to, subject, text }) {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !to) return;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    console.warn('[email] Skipping — SMTP not configured.');
+    return;
+  }
+  if (!to) {
+    console.warn(`[email] Skipping "${subject}" — no recipient address.`);
+    return;
+  }
+  const port = Number(SMTP_PORT) || 587;
   try {
     const transport = nodemailer.createTransport({
       host: SMTP_HOST,
-      port: Number(SMTP_PORT) || 587,
-      secure: Number(SMTP_PORT) === 465,
+      port,
+      secure: port === 465,
+      requireTLS: port !== 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      tls: { rejectUnauthorized: true },
     });
+    await transport.verify();
     await transport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
-    console.log(`[email] Sent to ${to}: ${subject}`);
+    console.log(`[email] ✓ Sent "${subject}" → ${to}`);
   } catch (e) {
-    console.warn('[email] Failed to send notification:', e.message);
+    console.error(`[email] ✗ Failed to send "${subject}" → ${to}:`, e.message, e.code || '');
   }
 }
 
