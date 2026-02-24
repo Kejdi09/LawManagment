@@ -235,8 +235,6 @@ export default function ClientPortalPage() {
     );
   }
 
-  const hasMessages = data.portalNotes && data.portalNotes.length > 0;
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
@@ -268,22 +266,6 @@ export default function ClientPortalPage() {
             </div>
           </CardContent>
         </Card>
-
-        {hasMessages && (
-          <div className="space-y-2">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" /> Messages from Your Lawyer
-            </h2>
-            {data.portalNotes.map((note) => (
-              <Card key={note.noteId} className="border-primary/30 bg-primary/5">
-                <CardContent className="py-3 px-4">
-                  <p className="text-sm">{note.text}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">{formatDate(note.createdAt)}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
 
         <div className="space-y-3">
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
