@@ -515,26 +515,23 @@ async function syncCustomerNotifications() {
     }
   }
 }
-async function genCustomerId() {
-  const last = await customersCol
-    .find({})
-    .project({ customerId: 1 })
-    .sort({ customerId: -1 })
-    .limit(1)
-    .toArray();
-  const num = last.length ? Number((last[0].customerId || "0").replace(/\D/g, "")) : 0;
-  return `C${pad3(num + 1)}`;
+// Generate a globally-unique customer ID tagged with the creating user's initials.
+// Format: C-<USER>-<base36-timestamp><4-digit-random>
+// e.g. C-KEJ-lv2k9c3721  — no DB round-trip needed, no race conditions.
+function genCustomerId(username = '') {
+  const tag = (username || 'XX').replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase();
+  const ts  = Date.now().toString(36).toUpperCase().slice(-6);
+  const rnd = Math.floor(Math.random() * 9000 + 1000);
+  return `C-${tag}-${ts}${rnd}`;
 }
-// prefix: 'CC' for customer cases, 'CL' for client cases (legacy 'CASE' still works for old records)
-async function genCaseId(prefix = "CASE") {
-  const last = await casesCol
-    .find({ caseId: { $regex: `^${escapeRegex(prefix)}-` } })
-    .project({ caseId: 1 })
-    .sort({ caseId: -1 })
-    .limit(1)
-    .toArray();
-  const num = last.length ? Number((last[0].caseId || "0").replace(/\D/g, "")) : 0;
-  return `${prefix}-${pad3(num + 1)}`;
+// Generate a globally-unique case ID tagged with the creating user's initials.
+// prefix: 'CC' for customer cases, 'CL' for client cases
+// Format: CC-<USER>-<base36-timestamp><4-digit-random>
+function genCaseId(prefix = 'CASE', username = '') {
+  const tag = (username || 'XX').replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase();
+  const ts  = Date.now().toString(36).toUpperCase().slice(-6);
+  const rnd = Math.floor(Math.random() * 9000 + 1000);
+  return `${prefix}-${tag}-${ts}${rnd}`;
 }
 
 function buildCaseFilters(query) {
@@ -884,7 +881,7 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
 app.post("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users can create new (non-confirmed) customers
   if (req.user?.role !== 'intake' && !isManagerUser(req.user) && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
-  const customerId = await genCustomerId();
+  const customerId = genCustomerId(req.user?.username);
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null, version: 1 };
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
   // Require assignedTo for confirmed clients regardless of role
@@ -1278,7 +1275,7 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   // CC- prefix for customer cases, CL- prefix for client cases
   const caseTypeValue = useCustomerCol ? 'customer' : 'client';
   const caseIdPrefix = useCustomerCol ? 'CC' : 'CL';
-  const caseId = await genCaseId(caseIdPrefix);
+  const caseId = genCaseId(caseIdPrefix, req.user?.username);
 
   const payload = { ...req.body, customerId: requestedCustomerId, caseId, lastStateChange: now, version: 1, createdBy: req.user?.username || null, caseType: caseTypeValue };
   // Strip internal routing hint before storing
