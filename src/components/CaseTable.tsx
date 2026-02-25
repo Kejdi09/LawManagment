@@ -40,7 +40,6 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                 <TableHead>Category</TableHead>
                 <TableHead className="w-[110px]">Assigned</TableHead>
                 <TableHead className="w-[160px]">Due</TableHead>
-                {showMoreColumns && <TableHead className="w-[80px]">Priority</TableHead>}
                 {showMoreColumns && <TableHead className="w-[90px]">Docs</TableHead>}
               </TableRow>
             </TableHeader>
@@ -91,9 +90,6 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                         <span className="text-muted-foreground">No deadline</span>
                       )}
                     </TableCell>
-                    {showMoreColumns && (
-                      <TableCell className="text-xs capitalize text-muted-foreground">{c.priority || "—"}</TableCell>
-                    )}
                     {showMoreColumns && (
                       <TableCell>
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.documentState === "missing" ? "bg-destructive/10 text-destructive" : "bg-green-100 text-green-700"}`}>

@@ -97,6 +97,8 @@ export interface Customer {
   nationality?: string;
   /** Country of origin / current residence */
   country?: string;
+  /** When true, the portal intake bot is forced to restart (staff-triggered reset) */
+  intakeBotReset?: boolean;
 }
 
 export interface HistoryRecord {
@@ -379,4 +381,5 @@ export interface PortalData {
   expiresAt?: string;
   proposalSentAt?: string | null;
   proposalSnapshot?: ProposalFields | null;
+  intakeBotReset?: boolean;
 }

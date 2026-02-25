@@ -42,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2 } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -142,6 +142,7 @@ const Customers = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [resetBotLoading, setResetBotLoading] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -1271,8 +1272,8 @@ const Customers = () => {
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
-                        {/* Proposal button – only shown when status is SEND_PROPOSAL or a proposal was already sent */}
-                        {(selectedCustomer.status === "SEND_PROPOSAL" || !!selectedCustomer.proposalSentAt) && (
+                        {/* Proposal button – only shown when status is SEND_PROPOSAL and no proposal sent yet */}
+                        {selectedCustomer.status === "SEND_PROPOSAL" && !selectedCustomer.proposalSentAt && (
                           <div className="flex flex-wrap gap-2 pt-1">
                             <Button
                               size="sm"
@@ -1281,16 +1282,44 @@ const Customers = () => {
                               onClick={() => setShowProposalModal(true)}
                             >
                               <FileText className="h-3.5 w-3.5" />
-                              {selectedCustomer.proposalSentAt ? "Edit / Resend Proposal" : "Generate Proposal"}
+                              Generate Proposal
                             </Button>
-                            {selectedCustomer.proposalSentAt && (
-                              <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Sent {safeFormatDate(selectedCustomer.proposalSentAt)}
-                              </div>
-                            )}
                           </div>
                         )}
+                        {/* Reset intake bot button */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1"
+                                disabled={resetBotLoading || !!selectedCustomer.intakeBotReset}
+                                onClick={async () => {
+                                  setResetBotLoading(true);
+                                  try {
+                                    const updated = await updateCustomer(selectedCustomer.customerId, { intakeBotReset: true });
+                                    setSelectedCustomer(updated);
+                                    setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+                                    toast({ title: "Intake form reset", description: "The client will be prompted to fill in the intake form again." });
+                                  } catch {
+                                    toast({ title: "Error", description: "Could not reset intake form.", variant: "destructive" });
+                                  } finally {
+                                    setResetBotLoading(false);
+                                  }
+                                }}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                {selectedCustomer.intakeBotReset ? "Reset Pending…" : "Reset Intake Form"}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {selectedCustomer.intakeBotReset
+                                ? "Waiting for client to re-submit the intake form"
+                                : "Force the client to fill in the intake form again (e.g. if they gave wrong answers)"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                         </CardContent>
                     </Card>
 

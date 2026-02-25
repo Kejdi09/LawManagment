@@ -3,27 +3,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Priority } from "@/lib/types";
 
 interface SearchFilterBarProps {
   query: string;
   onQueryChange: (q: string) => void;
-  priorityFilter: Priority | "all";
-  onPriorityChange: (p: Priority | "all") => void;
   docFilter: "all" | "ok" | "missing";
   onDocFilterChange: (d: "all" | "ok" | "missing") => void;
 }
 
 export function SearchFilterBar({
   query, onQueryChange,
-  priorityFilter, onPriorityChange,
   docFilter, onDocFilterChange,
 }: SearchFilterBarProps) {
-  const hasFilters = query || priorityFilter !== "all" || docFilter !== "all";
+  const hasFilters = query || docFilter !== "all";
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const activeFilters = [
     query ? { key: "query", label: `Search: ${query}`, onClear: () => onQueryChange("") } : null,
-    priorityFilter !== "all" ? { key: "priority", label: `Priority: ${priorityFilter}`, onClear: () => onPriorityChange("all") } : null,
     docFilter !== "all" ? { key: "docs", label: `Docs: ${docFilter}`, onClear: () => onDocFilterChange("all") } : null,
   ].filter(Boolean) as Array<{ key: string; label: string; onClear: () => void }>;
 
@@ -35,7 +30,7 @@ export function SearchFilterBar({
           {showMobileFilters ? "Close" : "Filters"}
         </Button>
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { onQueryChange(""); onPriorityChange("all"); onDocFilterChange("all"); }}>
+          <Button variant="ghost" size="sm" onClick={() => { onQueryChange(""); onDocFilterChange("all"); }}>
             <X className="h-4 w-4 mr-1" /> Clear
           </Button>
         )}
@@ -51,21 +46,6 @@ export function SearchFilterBar({
           className="pl-9"
         />
       </div>
-        <div className="w-full sm:w-[130px]">
-          <Select value={priorityFilter} onValueChange={(v) => onPriorityChange(v as Priority | "all")}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         <div className="w-full sm:w-[140px]">
           <Select value={docFilter} onValueChange={(v) => onDocFilterChange(v as "all" | "ok" | "missing")}>
             <SelectTrigger className="w-full">
@@ -87,7 +67,6 @@ export function SearchFilterBar({
               size="sm"
               onClick={() => {
                 onQueryChange("");
-                onPriorityChange("all");
                 onDocFilterChange("all");
               }}
             >

@@ -14,6 +14,8 @@ import { useAuth } from "@/lib/auth-context";
 
 const AdminActivity = () => {
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [resourceFilter, setResourceFilter] = useState("all");
@@ -26,8 +28,19 @@ const AdminActivity = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    getAuditLogs().then(setLogs).catch(() => setLogs([]));
-    getTeamSummary().then(setTeamSummary).catch(() => setTeamSummary([]));
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([
+      getAuditLogs().catch(() => []),
+      getTeamSummary().catch(() => []),
+    ]).then(([logsData, teamData]) => {
+      setLogs(logsData);
+      setTeamSummary(teamData);
+    }).catch((err) => {
+      setLoadError(err instanceof Error ? err.message : "Failed to load activity data");
+    }).finally(() => {
+      setLoading(false);
+    });
   }, []);
 
   const actionOptions = useMemo(
@@ -74,16 +87,38 @@ const AdminActivity = () => {
 
   const formatDetailsPreview = (details?: Record<string, unknown>) => {
     if (!details || Object.keys(details).length === 0) return "-";
-    const entries = Object.entries(details)
-      .slice(0, 3)
-      .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
-    return entries.join(" • ");
+    try {
+      const entries = Object.entries(details)
+        .slice(0, 3)
+        .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+      return entries.join(" • ");
+    } catch {
+      return "(details)"
+    }
   };
 
   if (user?.role !== "admin") {
     return (
       <MainLayout title="Activity">
         <div className="text-sm text-muted-foreground">Only admin can view activity logs.</div>
+      </MainLayout>
+    );
+  }
+
+  if (loading) {
+    return (
+      <MainLayout title="Admin Activity">
+        <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">Loading activity data…</div>
+      </MainLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <MainLayout title="Admin Activity">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Failed to load activity: {loadError}. Please refresh the page.
+        </div>
       </MainLayout>
     );
   }

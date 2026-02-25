@@ -36,7 +36,6 @@ type CaseFormState = {
 type SavedCaseView = {
   name: string;
   query: string;
-  priorityFilter: Priority | "all";
   docFilter: "all" | "ok" | "missing";
   stageFilter: "all" | CaseStage;
 };
@@ -51,7 +50,6 @@ const Index = () => {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [query, setQuery] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [docFilter, setDocFilter] = useState<"all" | "ok" | "missing">("all");
   const [showCaseForm, setShowCaseForm] = useState(false);
   const [caseForm, setCaseForm] = useState<CaseFormState>({
@@ -90,7 +88,7 @@ const Index = () => {
   const { toast } = useToast();
 
   const exportCSV = useCallback(() => {
-    const header = ["Case ID", "Client", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Priority", "Deadline"];
+    const header = ["Case ID", "Client", "Title", "Category", "Subcategory", "Stage", "Assigned To", "Deadline"];
     const rows = caseList.map((c) => [
       c.caseId,
       customerNames[c.customerId] || c.customerId,
@@ -99,7 +97,6 @@ const Index = () => {
       c.subcategory || "",
       c.state,
       c.assignedTo || "",
-      c.priority || "",
       c.deadline || "",
     ]);
     const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -160,16 +157,15 @@ const Index = () => {
       toast({ title: "Name required", description: "Enter a name for this view", variant: "destructive" });
       return;
     }
-    const nextView: SavedCaseView = { name, query, priorityFilter, docFilter, stageFilter };
+    const nextView: SavedCaseView = { name, query, docFilter, stageFilter };
     const withoutSameName = savedViews.filter((v) => v.name.toLowerCase() !== name.toLowerCase());
     persistSavedViews([nextView, ...withoutSameName].slice(0, 8));
     setNewViewName("");
     toast({ title: "View saved" });
-  }, [newViewName, query, priorityFilter, docFilter, stageFilter, savedViews, persistSavedViews, toast]);
+  }, [newViewName, query, docFilter, stageFilter, savedViews, persistSavedViews, toast]);
 
   const applySavedView = useCallback((view: SavedCaseView) => {
     setQuery(view.query);
-    setPriorityFilter(view.priorityFilter);
     setDocFilter(view.docFilter);
     setStageFilter(view.stageFilter);
   }, []);
@@ -183,12 +179,11 @@ const Index = () => {
     const base = query ? await searchCases(query, 'client') : all;
 
     const filtered = base.filter((c) => {
-      if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
       if (docFilter !== "all" && c.documentState !== docFilter) return false;
       return true;
     });
     setCaseList(filtered);
-  }, [query, priorityFilter, docFilter]);
+  }, [query, docFilter]);
 
   useEffect(() => {
     (async () => {
@@ -263,7 +258,7 @@ const Index = () => {
 
   useEffect(() => {
     setListPage(1);
-  }, [query, priorityFilter, docFilter, stageFilter]);
+  }, [query, docFilter, stageFilter]);
 
   const todaysQueue = useMemo(() => {
     const now = Date.now();
@@ -490,8 +485,6 @@ const Index = () => {
             <SearchFilterBar
               query={query}
               onQueryChange={setQuery}
-              priorityFilter={priorityFilter}
-              onPriorityChange={setPriorityFilter}
               docFilter={docFilter}
               onDocFilterChange={setDocFilter}
             />
@@ -551,7 +544,7 @@ const Index = () => {
           <div className="py-12 text-center text-muted-foreground">
             <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
               <p>No cases match your filters.</p>
-              <Button variant="outline" size="sm" onClick={() => { setQuery(""); setPriorityFilter("all"); setDocFilter("all"); setStageFilter("all"); }}>
+              <Button variant="outline" size="sm" onClick={() => { setQuery(""); setDocFilter("all"); setStageFilter("all"); }}>
                 Clear filters
               </Button>
             </div>

@@ -417,6 +417,7 @@ export function IntakeBotSection({
   onSendSummaryMessage,
   storageKey,
   onComplete,
+  forceReset,
 }: {
   services: ServiceType[];
   clientName?: string;
@@ -425,6 +426,8 @@ export function IntakeBotSection({
   storageKey?: string;
   /** Called when intake is finished, receives the collected proposal fields */
   onComplete?: (fields: Partial<ProposalFields>) => void;
+  /** When true, clears any stored completion and restarts the bot */
+  forceReset?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const lsKey = storageKey ? `portal_intake_done_${storageKey}` : null;
@@ -432,6 +435,14 @@ export function IntakeBotSection({
     if (!lsKey) return false;
     try { return localStorage.getItem(lsKey) === "1"; } catch { return false; }
   });
+
+  // When staff triggers a reset, clear local storage and restart the bot
+  useEffect(() => {
+    if (forceReset && lsKey) {
+      try { localStorage.removeItem(lsKey); } catch {}
+      setCompleted(false);
+    }
+  }, [forceReset, lsKey]);
 
   return (
     <div className="rounded-lg border overflow-hidden">

@@ -355,6 +355,7 @@ export default function ClientPortalPage() {
                 services={data.client.services || []}
                 clientName={data.client.name}
                 storageKey={token}
+                forceReset={!!data.intakeBotReset}
                 onSendSummaryMessage={async (text) => {
                   if (!token) return;
                   try {

@@ -2016,6 +2016,7 @@ app.get('/api/portal/:token', async (req, res) => {
     linkExpired: false,
     proposalSentAt: client.proposalSentAt || null,
     proposalSnapshot: client.proposalSnapshot || null,
+    intakeBotReset: !!client.intakeBotReset,
   });
 });
 
@@ -2063,7 +2064,7 @@ app.post('/api/portal/:token/intake', async (req, res) => {
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
   const { proposalFields } = req.body;
   if (!proposalFields || typeof proposalFields !== 'object') return res.status(400).json({ error: 'proposalFields required' });
-  const setFields = { proposalFields };
+  const setFields = { proposalFields, intakeBotReset: false };
   if (proposalFields.nationality) setFields.nationality = proposalFields.nationality;
   if (proposalFields.country) setFields.country = proposalFields.country;
   // Try customers collection first, then confirmed clients
