@@ -11,7 +11,7 @@ import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPan
 import { IntakeBotSection } from "@/components/IntakeBotPanel";
 import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
 import {
-  FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
+  FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
   MessageSquare, CalendarClock, StickyNote, ClipboardList,
 } from "lucide-react";
 
@@ -239,7 +239,7 @@ export default function ClientPortalPage() {
   }
 
   const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
-  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
+  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
   const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
   const defaultTab = showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: any lawyer messages newer than the last visit
@@ -323,6 +323,12 @@ export default function ClientPortalPage() {
 
           {/* ── STATUS TAB ── */}
           <TabsContent value="status" className="space-y-4 mt-0">
+            {data.client.status === 'CLIENT' && (
+              <div className="rounded-md border border-green-300 bg-green-50/60 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-center space-y-0.5">
+                <p className="font-semibold text-green-800 dark:text-green-300">✓ You are a confirmed DAFKU client</p>
+                <p className="text-xs text-muted-foreground">Your lawyer will be in touch regarding next steps. Use the Messages tab to reach them directly.</p>
+              </div>
+            )}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">{data.client.name}</CardTitle>
@@ -356,7 +362,7 @@ export default function ClientPortalPage() {
             </div>
 
             <p className="text-center text-xs text-muted-foreground pt-2 border-t">
-              For questions, use the Messages tab or contact us on WhatsApp: +355 69 62 71 692
+              For questions, use the Messages tab or contact us on WhatsApp: +355 69 69 52 989
             </p>
           </TabsContent>
 
@@ -393,14 +399,14 @@ export default function ClientPortalPage() {
               <p className="text-xs text-muted-foreground text-center">
                 Need immediate help?{" "}
                 <a
-                  href="https://wa.me/355696271692"
+                  href="https://wa.me/355696952989"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline decoration-dotted hover:text-foreground"
                 >
                   Contact us on WhatsApp
                 </a>
-                {" "}(+355 69 62 71 692)
+                {" "}(+355 69 69 52 989)
               </p>
             </TabsContent>
           )}
@@ -408,6 +414,12 @@ export default function ClientPortalPage() {
           {/* ── PROPOSAL TAB ── */}
           {showProposalTab && snap && pServiceContent && (
             <TabsContent value="proposal" className="mt-0 space-y-3">
+              {data.proposalExpiresAt && new Date(data.proposalExpiresAt) < new Date() && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span><strong>This proposal has expired.</strong> Please contact your lawyer to request an updated proposal.</span>
+                </div>
+              )}
               <div
                 className="bg-white text-gray-900 rounded-lg border shadow-sm p-8 font-serif text-[13px] leading-relaxed"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
@@ -433,7 +445,7 @@ export default function ClientPortalPage() {
                 </div>
 
                 <div className="border rounded p-4 mb-8 bg-gray-50 text-xs text-gray-700 flex flex-wrap gap-4">
-                  <span>☎ +355 69 62 71 692</span>
+                  <span>☎ +355 69 69 52 989</span>
                   <span>✉ info@dafkulawfirm.al</span>
                   <span>🌐 www.dafkulawfirm.al</span>
                   <span className="ml-auto font-semibold">Date: {pDisplayDate}</span>
@@ -535,20 +547,27 @@ export default function ClientPortalPage() {
 
               <p className="text-xs text-muted-foreground text-center">
                 Questions about this proposal?{" "}
-                <a href="https://wa.me/355696271692" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-foreground">
+                <a href="https://wa.me/355696952989" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-foreground">
                   Contact us on WhatsApp
                 </a>
-                {" "}(+355 69 62 71 692)
+                {" "}(+355 69 69 52 989)
               </p>
             </TabsContent>
           )}
 
           {/* ── MESSAGES TAB ── */}
           <TabsContent value="messages" className="mt-0 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Send a message directly to your lawyer. You can send up to 3 messages in a row before waiting for a reply.
-              {linkExpired && " This link has expired — message history is preserved but you cannot send new messages."}
-            </p>
+            {data.client.status === 'CLIENT' ? (
+              <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+                <p className="font-medium mb-0.5">Direct line to your lawyer</p>
+                <p className="text-xs text-muted-foreground">As a confirmed client, you can message your lawyer here any time. We typically reply within one business day.</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Send a message directly to your lawyer. You can send up to 3 messages in a row before waiting for a reply.
+                {linkExpired && " This link has expired — message history is preserved but you cannot send new messages."}
+              </p>
+            )}
             <PortalChatPanel
               messages={chatMessages}
               text={chatText}
@@ -563,12 +582,12 @@ export default function ClientPortalPage() {
             <p className="text-xs text-muted-foreground text-center">
               For urgent matters, reach us directly on WhatsApp:{" "}
               <a
-                href="https://wa.me/355696271692"
+                href="https://wa.me/355696952989"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-dotted hover:text-foreground"
               >
-                +355 69 62 71 692
+                +355 69 69 52 989
               </a>
             </p>
           </TabsContent>

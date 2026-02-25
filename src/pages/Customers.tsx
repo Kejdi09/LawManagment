@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import {
   getAllCustomers,
@@ -12,6 +13,9 @@ import {
   StoredDocument,
   getCustomerHistory,
   createMeeting,
+  generatePortalToken,
+  getChatUnreadCounts,
+  markChatRead,
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
@@ -42,7 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -148,6 +152,10 @@ const Customers = () => {
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const selectedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -204,7 +212,30 @@ const Customers = () => {
     }
   }, [customers]);
 
+  const loadUnreadCounts = useCallback(async () => {
+    try {
+      const data = await getChatUnreadCounts();
+      setUnreadCounts(Object.fromEntries(data.map((d) => [d.customerId, d.unreadCount])));
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
+
+  // Auto-refresh unread portal message counts every 30s
+  useEffect(() => {
+    loadUnreadCounts();
+    const id = setInterval(() => loadUnreadCounts(), 30_000);
+    return () => clearInterval(id);
+  }, [loadUnreadCounts]);
+
+  // Mark portal messages as read when staff opens a customer
+  useEffect(() => {
+    if (!selectedId) return;
+    if ((unreadCounts[selectedId] ?? 0) > 0) {
+      markChatRead(selectedId).catch(() => {});
+      setUnreadCounts((prev) => ({ ...prev, [selectedId]: 0 }));
+    }
+  }, [selectedId]);
 
   // Real-time polling: refresh customers every 30s
   useEffect(() => {
@@ -319,7 +350,7 @@ const Customers = () => {
     ON_HOLD: "bg-amber-50 text-amber-800",
   };
 
-  const customerTableColumns = showMoreCustomerColumns ? 6 : 5;
+  const customerTableColumns = showMoreCustomerColumns ? 7 : 6;
 
   const hasCustomerFilters = Boolean(search) || sectionView !== "main" || statusView !== "all" || selectedCategories.length !== CATEGORY_OPTIONS.length;
 
@@ -446,7 +477,10 @@ const Customers = () => {
         const toCreate: Partial<Customer> = { ...(rest as Partial<Customer>) };
         toCreate.status = form.status as LeadStatus;
         toCreate.statusHistory = [{ status: form.status as LeadStatus, date: new Date().toISOString() }];
-        await createCustomer(toCreate as Omit<Customer, "customerId">);
+        const created = await createCustomer(toCreate as Omit<Customer, "customerId">);
+        if (created?.customerId && form.status !== 'CLIENT') {
+          generatePortalToken(created.customerId, 30).catch(() => {});
+        }
         toast({ title: "Created", description: "Customer created successfully" });
       }
       setShowForm(false);
@@ -477,6 +511,23 @@ const Customers = () => {
       const errorMessage = err instanceof Error ? err.message : "Unable to delete customer";
       toast({ title: "Delete failed", description: errorMessage, variant: "destructive" });
     });
+  };
+
+  const handleBulkApplyStatus = async (newStatus: LeadStatus) => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const count = ids.length;
+    setBulkUpdating(true);
+    try {
+      await Promise.all(ids.map((id) => updateCustomer(id, { status: newStatus })));
+      setSelectedIds(new Set());
+      await loadCustomers();
+      toast({ title: "Bulk update", description: `Updated ${count} customer${count > 1 ? "s" : ""} to ${LEAD_STATUS_LABELS[newStatus]}.` });
+    } catch {
+      toast({ title: "Bulk update failed", description: "Some updates may not have applied.", variant: "destructive" });
+    } finally {
+      setBulkUpdating(false);
+    }
   };
 
   // ── Consultation scheduling state ──
@@ -816,9 +867,39 @@ const Customers = () => {
         <Card>
           <CardContent className="p-0">
             <div className="hidden md:block overflow-x-auto">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 bg-primary/10 border-b px-4 py-2 text-sm">
+                <span className="font-medium">{selectedIds.size} selected</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="default" size="sm" disabled={bulkUpdating}>
+                      Change Status <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {ALLOWED_CUSTOMER_STATUSES.map((s) => (
+                      <DropdownMenuItem key={s} onSelect={() => handleBulkApplyStatus(s)}>
+                        {LEAD_STATUS_LABELS[s]}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+              </div>
+            )}
             <Table className="min-w-[860px]">
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10 pl-4">
+                    <Checkbox
+                      checked={selectedIds.size > 0 && groupedCustomers.flatMap((g) => g.items).every((c) => selectedIds.has(c.customerId))}
+                      onCheckedChange={(checked) => {
+                        const all = groupedCustomers.flatMap((g) => g.items).map((c) => c.customerId);
+                        setSelectedIds(checked ? new Set(all) : new Set());
+                      }}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead className="w-[80px]">ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Assigned</TableHead>
@@ -855,7 +936,21 @@ const Customers = () => {
                     ? []
                     : group.items.map((c) => {
                       return (
-                        <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
+                        <TableRow key={`${group.type}-${c.customerId}`} className="group cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
+                          <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedIds.has(c.customerId)}
+                              onCheckedChange={(chk) => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (chk) next.add(c.customerId);
+                                  else next.delete(c.customerId);
+                                  return next;
+                                });
+                              }}
+                              aria-label={`Select ${c.name}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-1.5">
@@ -866,6 +961,22 @@ const Customers = () => {
                                     <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 shrink-0" />
                                   </TooltipTrigger>
                                   <TooltipContent>Follow-up overdue since {String(c.followUpDate).slice(0, 10)}</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {(unreadCounts[c.customerId] ?? 0) > 0 && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>{unreadCounts[c.customerId]} unread portal message{(unreadCounts[c.customerId] ?? 0) > 1 ? 's' : ''}</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {c.intakeLastSubmittedAt && c.status === 'SEND_PROPOSAL' && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>Intake form submitted — ready to propose</TooltipContent>
                                 </Tooltip>
                               )}
                             </div>
@@ -880,7 +991,15 @@ const Customers = () => {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end items-center gap-2 flex-nowrap opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); navigate('/chat'); }} aria-label="Chat">
+                                    <MessageSquare className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Open Chat</TooltipContent>
+                              </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
@@ -1372,6 +1491,13 @@ const Customers = () => {
                             {selectedCustomer.proposalViewedAt && (
                               <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-1">
                                 · Viewed {safeFormatDate(selectedCustomer.proposalViewedAt)}
+                              </span>
+                            )}
+                            {selectedCustomer.proposalExpiresAt && (
+                              <span className={`text-xs font-normal ml-1 ${new Date(selectedCustomer.proposalExpiresAt) < new Date() ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                                {new Date(selectedCustomer.proposalExpiresAt) < new Date()
+                                  ? "· Expired"
+                                  : `· Expires ${String(selectedCustomer.proposalExpiresAt).slice(0, 10)}`}
                               </span>
                             )}
                           </CardTitle>

@@ -947,7 +947,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       sendEmail({
         to: current.email,
         subject: 'Your Service Proposal — DAFKU Law Firm',
-        text: `Dear ${current.name || 'Client'},\n\nYour personalised service proposal is now ready for you to review in your client portal.\n\nIf you have any questions, please reply to this email or reach us on WhatsApp: +355 69 62 71 692\n\nBest regards,\n${senderLabel}\nDAFKU Law Firm`,
+        text: `Dear ${current.name || 'Client'},\n\nYour personalised service proposal is now ready for you to review in your client portal.\n\nIf you have any questions, please reply to this email or reach us on WhatsApp: +355 69 69 52 989\n\nBest regards,\n${senderLabel}\nDAFKU Law Firm`,
       });
     }
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'proposal_sent', resource: 'customer', resourceId: id, details: { proposalSentAt: update.proposalSentAt } });
@@ -2046,6 +2046,7 @@ app.get('/api/portal/:token', async (req, res) => {
     expiresAt: tokenDoc.expiresAt,
     linkExpired: false,
     proposalSentAt: client.proposalSentAt || null,
+    proposalExpiresAt: client.proposalExpiresAt || null,
     proposalSnapshot: client.proposalSnapshot || null,
     proposalViewedAt: client.proposalViewedAt || null,
     intakeBotReset: !!client.intakeBotReset,
@@ -2101,7 +2102,7 @@ app.post('/api/portal/:token/intake', async (req, res) => {
   const currentRecord = await customersCol.findOne({ customerId: tokenDoc.customerId })
     || await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
 
-  const setFields = { proposalFields, intakeBotReset: false };
+  const setFields = { proposalFields, intakeBotReset: false, intakeLastSubmittedAt: new Date().toISOString() };
   if (proposalFields.nationality) setFields.nationality = proposalFields.nationality;
   if (proposalFields.country) setFields.country = proposalFields.country;
 

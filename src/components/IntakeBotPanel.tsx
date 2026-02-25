@@ -14,8 +14,8 @@ import { ServiceType, SERVICE_LABELS, ProposalFields } from "@/lib/types";
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
 
-const WHATSAPP_NUMBER = "+355 69 62 71 692";
-const WHATSAPP_LINK = "https://wa.me/355696271692";
+const WHATSAPP_NUMBER = "+355 69 69 52 989";
+const WHATSAPP_LINK = "https://wa.me/355696952989";
 
 // ── Question definitions ──
 interface BotQuestion {

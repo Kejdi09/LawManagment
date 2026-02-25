@@ -428,6 +428,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
       const updated = await updateCustomer(customer.customerId, {
         proposalFields: fields,
         proposalSentAt: new Date().toISOString(),
+        proposalExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         proposalSnapshot: fields,
       });
       toast({ title: "Proposal sent", description: "The proposal has been marked as sent and saved to the customer record." });
@@ -688,7 +689,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               </div>
 
               <div className="border rounded p-4 mb-8 bg-gray-50 text-xs text-gray-700 flex flex-wrap gap-4">
-                <span>☎ +355 69 62 71 692</span>
+                <span>☎ +355 69 69 52 989</span>
                 <span>✉ info@dafkulawfirm.al</span>
                 <span>🌐 www.dafkulawfirm.al</span>
                 <span className="ml-auto font-semibold">Date: {displayDate}</span>

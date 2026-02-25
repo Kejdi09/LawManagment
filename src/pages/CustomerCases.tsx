@@ -45,6 +45,25 @@ const CASE_COLUMNS_MODE_KEY = "lm:show-more-columns";
 const CASE_COLUMNS_MODE_EVENT = "lm-columns-mode-change";
 const DASHBOARD_OPEN_KEY = "lm:dashboard-open";
 
+const CASE_TEMPLATES: Array<{
+  label: string;
+  category: string;
+  subcategory: string;
+  communicationMethod: string;
+  priority: Priority;
+}> = [
+  { label: "Property Purchase", category: "Real Estate", subcategory: "Property Transfer", communicationMethod: "Email", priority: "medium" },
+  { label: "Property Sale", category: "Real Estate", subcategory: "Property Sale", communicationMethod: "Email", priority: "medium" },
+  { label: "Residency Application", category: "Immigration", subcategory: "Residency Permit", communicationMethod: "Email", priority: "medium" },
+  { label: "Citizenship Application", category: "Immigration", subcategory: "Citizenship", communicationMethod: "Email", priority: "medium" },
+  { label: "Company Formation", category: "Business", subcategory: "Company Registration", communicationMethod: "Email", priority: "medium" },
+  { label: "Contract Drafting / Review", category: "Contract Law", subcategory: "Contract Review", communicationMethod: "Email", priority: "medium" },
+  { label: "Divorce Case", category: "Family Law", subcategory: "Divorce", communicationMethod: "Email", priority: "medium" },
+  { label: "Inheritance / Estate", category: "Family Law", subcategory: "Inheritance", communicationMethod: "Email", priority: "medium" },
+  { label: "Criminal Defense", category: "Criminal Law", subcategory: "Defense", communicationMethod: "Email", priority: "urgent" },
+  { label: "Visa Application", category: "Immigration", subcategory: "Visa", communicationMethod: "Email", priority: "medium" },
+];
+
 const CustomerCases = () => {
   const { user } = useAuth();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -539,6 +558,32 @@ const CustomerCases = () => {
             <DialogDescription>Create a case for a pre-confirmation customer. Additional details can be edited later.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Load Template (optional)</label>
+              <Select
+                value=""
+                onValueChange={(v) => {
+                  const tpl = CASE_TEMPLATES.find((t) => t.label === v);
+                  if (tpl) {
+                    setCaseForm((prev) => ({
+                      ...prev,
+                      category: tpl.category,
+                      subcategory: tpl.subcategory,
+                      communicationMethod: tpl.communicationMethod,
+                      priority: tpl.priority,
+                      title: prev.title || tpl.label,
+                    }));
+                  }
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="— Pick a template to pre-fill —" /></SelectTrigger>
+                <SelectContent>
+                  {CASE_TEMPLATES.map((t) => (
+                    <SelectItem key={t.label} value={t.label}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-medium">Case Title</label>
               <Input

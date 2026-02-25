@@ -95,6 +95,10 @@ export interface Customer {
   proposalSnapshot?: ProposalFields;
   /** ISO timestamp of when the client first viewed the proposal in the portal */
   proposalViewedAt?: string;
+  /** ISO timestamp of when the proposal expires (default: 14 days after sent) */
+  proposalExpiresAt?: string;
+  /** ISO timestamp of when the client last submitted the intake form via the portal */
+  intakeLastSubmittedAt?: string;
   /** Nationality – synced from proposalFields for convenience */
   nationality?: string;
   /** Country of origin / current residence */
@@ -384,5 +388,6 @@ export interface PortalData {
   proposalSentAt?: string | null;
   proposalSnapshot?: ProposalFields | null;
   proposalViewedAt?: string | null;
+  proposalExpiresAt?: string | null;
   intakeBotReset?: boolean;
 }
