@@ -347,6 +347,14 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
 
   const handleSaveEdit = async () => {
     if (isLoading) return;
+    if (!editForm.title?.trim()) {
+      toast({ title: "Title required", description: "Please enter a case title.", variant: "destructive" });
+      return;
+    }
+    if (!editForm.category?.trim()) {
+      toast({ title: "Category required", description: "Please enter a category.", variant: "destructive" });
+      return;
+    }
     try {
       setIsLoading(true);
       const targetId = c.caseId;
@@ -495,12 +503,12 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                 {editMode && (
                   <div className="space-y-2">
                     <div className="space-y-1">
-                      <span className="text-xs text-muted-foreground">Title</span>
+                      <span className="text-xs text-muted-foreground">Title <span className="text-destructive">*</span></span>
                       <Input value={editForm.title} onChange={(e) => updateEditForm({ title: e.target.value })} placeholder="e.g. Residence Permit Application" />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">Category</span>
+                        <span className="text-xs text-muted-foreground">Category <span className="text-destructive">*</span></span>
                         <Input value={editForm.category} onChange={(e) => updateEditForm({ category: e.target.value })} />
                       </div>
                       <div className="space-y-1">

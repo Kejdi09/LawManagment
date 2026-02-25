@@ -65,6 +65,9 @@ export default function InvoicesPage() {
 
   const handleSave = async () => {
     if (!form.customerId) { toast({ title: "Customer required", variant: "destructive" }); return; }
+    if (!form.description.trim()) { toast({ title: "Description required", description: "Please enter a description for this invoice.", variant: "destructive" }); return; }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) { toast({ title: "Amount required", description: "Please enter a valid amount greater than 0.", variant: "destructive" }); return; }
     try {
       const payload = {
         customerId: form.customerId,
@@ -213,7 +216,7 @@ export default function InvoicesPage() {
             <div className="text-sm font-medium mb-3">{editingId ? "Edit Invoice" : "New Invoice"}</div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-1">
-                <Label>Client</Label>
+                <Label>Client <span className="text-destructive">*</span></Label>
                 <Select value={form.customerId} onValueChange={(v) => setForm((f) => ({ ...f, customerId: v }))}>
                   <SelectTrigger className="text-sm"><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
@@ -228,11 +231,11 @@ export default function InvoicesPage() {
                 <Input value={form.caseId} onChange={(e) => setForm((f) => ({ ...f, caseId: e.target.value }))} placeholder="CL-001" />
               </div>
               <div className="space-y-1">
-                <Label>Description</Label>
+                <Label>Description <span className="text-destructive">*</span></Label>
                 <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Legal services…" />
               </div>
               <div className="space-y-1">
-                <Label>Amount</Label>
+                <Label>Amount <span className="text-destructive">*</span></Label>
                 <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="1500" />
               </div>
               <div className="space-y-1">

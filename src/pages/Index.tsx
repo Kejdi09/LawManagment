@@ -333,6 +333,10 @@ const Index = () => {
   };
 
   const handleCreateCase = async () => {
+    if (!caseForm.title?.trim()) {
+      toast({ title: "Title required", description: "Please enter a case title.", variant: "destructive" });
+      return;
+    }
     if (!caseForm.customerId || !caseForm.category) {
       toast({ title: "Validation", description: "Customer and Category are required", variant: "destructive" });
       return;
@@ -586,7 +590,7 @@ const Index = () => {
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2 space-y-2">
-              <label className="text-sm font-medium">Case Title</label>
+              <label className="text-sm font-medium">Case Title <span className="text-destructive">*</span></label>
               <Input
                 value={caseForm.title}
                 onChange={(e) => setCaseForm({ ...caseForm, title: e.target.value })}
