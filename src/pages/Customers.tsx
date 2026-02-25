@@ -221,10 +221,10 @@ const Customers = () => {
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
 
-  // Auto-refresh unread portal message counts every 30s
+  // Auto-refresh unread portal message counts every 5s
   useEffect(() => {
     loadUnreadCounts();
-    const id = setInterval(() => loadUnreadCounts(), 30_000);
+    const id = setInterval(() => loadUnreadCounts(), 5_000);
     return () => clearInterval(id);
   }, [loadUnreadCounts]);
 
@@ -237,11 +237,11 @@ const Customers = () => {
     }
   }, [selectedId]);
 
-  // Real-time polling: refresh customers every 30s
+  // Real-time polling: refresh customers every 5s
   useEffect(() => {
     const id = setInterval(() => {
       loadCustomers().catch(() => {});
-    }, 30_000);
+    }, 5_000);
     return () => clearInterval(id);
   }, [loadCustomers]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
@@ -963,14 +963,7 @@ const Customers = () => {
                                   <TooltipContent>Follow-up overdue since {String(c.followUpDate).slice(0, 10)}</TooltipContent>
                                 </Tooltip>
                               )}
-                              {(unreadCounts[c.customerId] ?? 0) > 0 && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>{unreadCounts[c.customerId]} unread portal message{(unreadCounts[c.customerId] ?? 0) > 1 ? 's' : ''}</TooltipContent>
-                                </Tooltip>
-                              )}
+
                               {c.intakeLastSubmittedAt && c.status === 'SEND_PROPOSAL' && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>

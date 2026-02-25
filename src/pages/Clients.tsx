@@ -108,6 +108,8 @@ const ClientsPage = () => {
 
   useEffect(() => {
     load();
+    const id = setInterval(() => load(), 5_000);
+    return () => clearInterval(id);
   }, []);
 
   const openDetail = async (client: Customer) => {

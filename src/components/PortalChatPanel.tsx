@@ -45,7 +45,7 @@ export function PortalChatPanel({
   isAdmin = false,
   onDelete,
   trailingClientCount,
-  maxConsecutive = 3,
+  maxConsecutive = 10,
   linkExpired = false,
   loading = false,
   fillHeight = false,

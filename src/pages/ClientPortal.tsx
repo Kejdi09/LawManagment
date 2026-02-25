@@ -271,7 +271,7 @@ export default function ClientPortalPage() {
           <FileText className="h-5 w-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">DAFKU Law Firm — Client Portal</div>
-            <div className="text-xs text-muted-foreground truncate">{data.client.name}</div>
+            <div className="text-xs text-muted-foreground truncate">Welcome, {data.client.name} 👋</div>
           </div>
           {data.expiresAt && (
             <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
@@ -323,10 +323,14 @@ export default function ClientPortalPage() {
 
           {/* ── STATUS TAB ── */}
           <TabsContent value="status" className="space-y-4 mt-0">
+            <div className="rounded-md border bg-primary/5 px-4 py-3 text-sm text-center space-y-0.5">
+              <p className="font-semibold">Hello, {data.client.name}! We're glad you're here.</p>
+              <p className="text-xs text-muted-foreground">This is your personal portal where you can track your case, review proposals, and message your lawyer directly.</p>
+            </div>
             {data.client.status === 'CLIENT' && (
               <div className="rounded-md border border-green-300 bg-green-50/60 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-center space-y-0.5">
                 <p className="font-semibold text-green-800 dark:text-green-300">✓ You are a confirmed DAFKU client</p>
-                <p className="text-xs text-muted-foreground">Your lawyer will be in touch regarding next steps. Use the Messages tab to reach them directly.</p>
+                <p className="text-xs text-muted-foreground">We're committed to providing you with the best legal support. Your lawyer will be in touch regarding next steps — feel free to send a message any time.</p>
               </div>
             )}
             <Card>
@@ -362,7 +366,7 @@ export default function ClientPortalPage() {
             </div>
 
             <p className="text-center text-xs text-muted-foreground pt-2 border-t">
-              For questions, use the Messages tab or contact us on WhatsApp: +355 69 69 52 989
+              Have a question? Use the Messages tab or reach us on WhatsApp: <strong>+355 69 69 52 989</strong> — we're here to help.
             </p>
           </TabsContent>
 
@@ -371,8 +375,7 @@ export default function ClientPortalPage() {
             <TabsContent value="intake" className="mt-0 space-y-3">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Please answer the questions below so our team can prepare a personalised proposal for you.
-                  This only takes a few minutes and you only need to do it once.
+                  Please take a few minutes to answer the questions below. Your answers help us prepare a personalised proposal tailored to your situation — you only need to do this once.
                 </p>
                 <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex flex-col gap-1">
                   <span className="font-medium text-foreground">Have a question first?</span>
@@ -564,7 +567,7 @@ export default function ClientPortalPage() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Send a message directly to your lawyer. You can send up to 3 messages in a row before waiting for a reply.
+                Send a message directly to your lawyer. You can send up to 10 messages in a row before waiting for a reply.
                 {linkExpired && " This link has expired — message history is preserved but you cannot send new messages."}
               </p>
             )}

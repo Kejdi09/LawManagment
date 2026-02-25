@@ -23,6 +23,7 @@ import {
   sendAdminMessage,
   markChatRead,
   deletePortalChatMessage,
+  getChatUnreadCounts,
 } from "@/lib/case-store";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { Customer, LEAD_STATUS_LABELS, PortalMessage } from "@/lib/types";
@@ -59,6 +60,9 @@ const Chat = () => {
   const [chatText, setChatText] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+
+  // Unread counts per person
+  const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
 
   // ── Load people list ────────────────────────────────────────────────────────
   const loadPeople = useCallback(async () => {
@@ -118,6 +122,7 @@ const Chat = () => {
       setPortalToken(token);
       setChatMessages(msgs);
       markChatRead(customerId).catch(() => {});
+      setChatUnreadCounts((prev) => ({ ...prev, [customerId]: 0 }));
     } finally {
       setChatLoading(false);
     }
@@ -136,7 +141,20 @@ const Chat = () => {
     }, 8000);
     return () => clearInterval(id);
   }, [selectedId]);
-
+  // ── Poll unread counts every 10s ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const loadUnread = async () => {
+      try {
+        const data = await getChatUnreadCounts();
+        setChatUnreadCounts(
+          Object.fromEntries(data.map((d) => [d.customerId, d.unreadCount]))
+        );
+      } catch { /* ignore */ }
+    };
+    loadUnread();
+    const id = setInterval(loadUnread, 10_000);
+    return () => clearInterval(id);
+  }, []);
   // ── Derived portal link URL ──────────────────────────────────────────────────
   const portalLink = portalToken
     ? `${window.location.href.split("#")[0]}#/portal/${portalToken.token}`
@@ -200,9 +218,14 @@ const Chat = () => {
   };
 
   // ── Filtered list ────────────────────────────────────────────────────────────
-  const filteredPeople = people.filter(
-    (p) => !search || p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredPeople = people
+    .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aUnread = (chatUnreadCounts[a.customerId] ?? 0) > 0;
+      const bUnread = (chatUnreadCounts[b.customerId] ?? 0) > 0;
+      if (aUnread !== bUnread) return aUnread ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
   const selectedPerson = people.find((p) => p.customerId === selectedId);
   const unreadCount = chatMessages.filter(
     (m) => m.senderType === "client" && !m.readByLawyer
@@ -255,6 +278,11 @@ const Chat = () => {
                       {p.type} · {LEAD_STATUS_LABELS[p.status] || p.status}
                     </div>
                   </div>
+                  {(chatUnreadCounts[p.customerId] ?? 0) > 0 && (
+                    <span className="h-5 w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {chatUnreadCounts[p.customerId]}
+                    </span>
+                  )}
                 </button>
               ))}
           </div>
