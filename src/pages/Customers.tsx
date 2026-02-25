@@ -42,13 +42,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
+import ProposalModal from "@/components/ProposalModal";
+import IntakeBotPanel from "@/components/IntakeBotPanel";
 
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined) {
@@ -140,6 +142,8 @@ const Customers = () => {
   const [customerDocuments, setCustomerDocuments] = useState<StoredDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [intakeBotOpen, setIntakeBotOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -1263,14 +1267,54 @@ const Customers = () => {
                         <div className="flex items-center gap-2"><Phone className="h-3 w-3 text-muted-foreground" />{selectedCustomer.phone}</div>
                         <div className="flex items-center gap-2"><Mail className="h-3 w-3 text-muted-foreground" />{selectedCustomer.email}</div>
                         <div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-muted-foreground" />{selectedCustomer.address}</div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[selectedCustomer.status]}`}>
                             {LEAD_STATUS_LABELS[selectedCustomer.status]}
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
+                        {/* Proposal generation — available for any status, highlighted for SEND_PROPOSAL */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant={selectedCustomer.status === "SEND_PROPOSAL" ? "default" : "outline"}
+                            className="h-7 text-xs gap-1"
+                            onClick={() => setShowProposalModal(true)}
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            Generate Proposal
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => setIntakeBotOpen((v) => !v)}
+                          >
+                            <Bot className="h-3.5 w-3.5" />
+                            {intakeBotOpen ? "Hide Intake Bot" : "Intake Bot"}
+                          </Button>
+                        </div>
                         </CardContent>
                     </Card>
+
+                {intakeBotOpen && selectedCustomer && (
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Bot className="h-4 w-4 text-primary" />Intake Bot — Staff Mode</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <IntakeBotPanel
+                        services={selectedCustomer.services || []}
+                        clientName={selectedCustomer.name}
+                        mode="staff"
+                        customerId={selectedCustomer.customerId}
+                        fillHeight={false}
+                        onComplete={(fields) => {
+                          setSelectedCustomer((prev) => prev ? { ...prev, proposalFields: { ...prev.proposalFields, ...fields } } : prev);
+                          setIntakeBotOpen(false);
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                       <CardHeader className="pb-2"><CardTitle className="text-sm">Services</CardTitle></CardHeader>
@@ -1356,6 +1400,19 @@ const Customers = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Proposal generator modal */}
+      {selectedCustomer && showProposalModal && (
+        <ProposalModal
+          customer={selectedCustomer}
+          open={showProposalModal}
+          onOpenChange={setShowProposalModal}
+          onSaved={(updated) => {
+            setSelectedCustomer(updated);
+            setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+          }}
+        />
+      )}
     </MainLayout>
   );
 };

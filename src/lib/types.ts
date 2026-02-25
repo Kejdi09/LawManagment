@@ -34,6 +34,40 @@ export interface Case {
   assignedTo: string;
 }
 
+/** Fields collected via the intake bot and used to populate the proposal template */
+export interface ProposalFields {
+  /** Title of the proposal, e.g. "Legal Assistance for Real Estate Investment in Albania" */
+  proposalTitle?: string;
+  /** Date shown on the proposal (ISO string) */
+  proposalDate?: string;
+  /** Short description of what/where, e.g. "residential house and garage located in Durrës, Albania" */
+  propertyDescription?: string;
+  /** Transaction / investment value in EUR */
+  transactionValueEUR?: number;
+  /** Consultation fee in ALL (0 = free) */
+  consultationFeeALL?: number;
+  /** Main service fee in ALL */
+  serviceFeeALL?: number;
+  /** Alternative: use a percentage of transaction value instead of fixed fee (1–3) */
+  serviceFeePct?: number;
+  /** Power of Attorney fee in ALL */
+  poaFeeALL?: number;
+  /** Translation / notarisation costs in ALL */
+  translationFeeALL?: number;
+  /** Any other additional fees in ALL */
+  otherFeesALL?: number;
+  /** Free-text note on additional costs breakdown */
+  additionalCostsNote?: string;
+  /** Custom payment terms (overrides the default 50/50 split) */
+  paymentTermsNote?: string;
+  /** Nationality – used in the required-documents section */
+  nationality?: string;
+  /** Client's country of origin / current residence */
+  country?: string;
+  /** ID or passport number for documents section */
+  idPassportNumber?: string;
+}
+
 export interface Customer {
   customerId: string;
   version?: number;
@@ -53,6 +87,12 @@ export interface Customer {
   statusHistory?: Array<{ status: LeadStatus; date: string }>;
   expectedVersion?: number;
   notes?: string;
+  /** Proposal-specific fields filled via intake bot or manually by staff */
+  proposalFields?: ProposalFields;
+  /** Nationality – synced from proposalFields for convenience */
+  nationality?: string;
+  /** Country of origin / current residence */
+  country?: string;
 }
 
 export interface HistoryRecord {

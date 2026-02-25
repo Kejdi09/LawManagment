@@ -1,0 +1,883 @@
+/**
+ * ProposalModal
+ * Opens when staff clicks "Generate Proposal" on a SEND_PROPOSAL customer.
+ * Two tabs: Edit (fee form) and Preview (rendered proposal + print).
+ */
+import { useRef, useState } from "react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Printer, Save } from "lucide-react";
+import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/types";
+import { updateCustomer } from "@/lib/case-store";
+import { useToast } from "@/hooks/use-toast";
+
+// ── Fixed conversion approximation (shown as indicative, source: xe.com) ──
+const EUR_RATE = 0.01037032; // 1 ALL → EUR
+const USD_RATE = 0.01212463;
+const GBP_RATE = 0.00902409;
+
+function fmt(n: number, decimals = 2) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// ── Service-specific content generators ──
+interface ServiceContent {
+  scopeParagraph: string;
+  servicesSections: Array<{ heading: string; bullets: string[] }>;
+  requiredDocs: string[];
+  timeline: string[];
+  nextSteps: string[];
+}
+
+function getServiceContent(services: ServiceType[], propertyDescription?: string): ServiceContent {
+  // Use the primary (first) service to determine the main template
+  const primary = services[0] ?? "residency_permit";
+
+  if (primary === "real_estate") {
+    const desc = propertyDescription || "the property";
+    return {
+      scopeParagraph: `This proposal outlines the provision of full legal assistance in connection with the purchase of ${desc} in Albania. The objective of the service is to ensure full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
+      servicesSections: [
+        {
+          heading: "2.1 Legal Due Diligence",
+          bullets: [
+            "Verification of ownership title with the Albanian State Cadastre (ASHK)",
+            "Confirmation that the property is properly registered",
+            "Verification of encumbrances (mortgages, liens, seizures, restrictions)",
+            "Review of ownership history and seller's legal authority",
+            "Consistency check between legal documentation and factual status",
+          ],
+        },
+        {
+          heading: "2.2 Contractual Documentation",
+          bullets: [
+            "Review and/or drafting of the final Sale & Purchase Agreement",
+            "Inclusion of buyer-protective clauses",
+            "Coordination with the seller, real estate agent, and notary",
+          ],
+        },
+        {
+          heading: "2.3 Notarial Transaction Assistance",
+          bullets: [
+            "Legal assistance during notarial execution of the transaction",
+            "Verification of seller identity and disposal rights",
+            "Review of the notarial deed prior to execution",
+          ],
+        },
+        {
+          heading: "2.4 Payment Coordination & Legal Guidance",
+          bullets: [
+            "Legal advice on secure payment methods (bank transfer)",
+            "Coordination of payment timing with the notarial transaction",
+            "Legal linkage of payment to ownership transfer",
+          ],
+        },
+        {
+          heading: "2.5 Post-Transaction Registration",
+          bullets: [
+            "Follow-up and registration of ownership with ASHK",
+            "Submission of required documentation",
+            "Monitoring until issuance of the new ownership certificate in the Client's name",
+          ],
+        },
+      ],
+      requiredDocs: [
+        "Valid identification document (ID / Passport)",
+        "Available property-related documentation (if any)",
+        "Payment method details",
+        "Power of Attorney (if required)",
+      ],
+      timeline: [
+        "Legal due diligence & document verification: approx. 3–5 business days (subject to document availability)",
+        "Contract review / finalization & notarial coordination: approx. 3–7 business days",
+        "Notarial execution of the Sale & Purchase Agreement: subject to parties' availability",
+        "Registration of ownership with the Albanian State Cadastre (ASHK): approx. 15–30 business days",
+      ],
+      nextSteps: [
+        "Execution of the legal service engagement agreement",
+        "Payment of the initial portion of the legal fee as agreed",
+        "Commencement of legal due diligence and document verification",
+        "Review and finalization of the Sale & Purchase Agreement",
+        "Coordination with the notary, seller, and real estate agent",
+        "Assistance during notarial signing and payment coordination",
+        "Follow-up and monitoring of ownership registration with ASHK",
+        "Completion of the process upon issuance of the ownership certificate in the Client's name",
+      ],
+    };
+  }
+
+  if (primary === "visa_c" || primary === "visa_d") {
+    const visaLabel = primary === "visa_c" ? "Visa C (Short-Stay)" : "Visa D (Long-Stay)";
+    return {
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a ${visaLabel} for Albania. The objective of the service is to ensure full compliance with Albanian immigration requirements, protection of the Client's interests throughout the application process, and timely submission to the competent authorities.`,
+      servicesSections: [
+        {
+          heading: "2.1 Eligibility Assessment",
+          bullets: [
+            "Review of the Client's personal and professional situation",
+            "Confirmation of visa category and sub-category applicable",
+            "Assessment of supporting documentation requirements",
+          ],
+        },
+        {
+          heading: "2.2 Document Preparation",
+          bullets: [
+            "Review and verification of all required supporting documents",
+            "Assistance with translation and notarisation of foreign-language documents where required",
+            "Preparation of the visa application form and supporting cover letter",
+          ],
+        },
+        {
+          heading: "2.3 Submission & Follow-Up",
+          bullets: [
+            "Submission of the complete application package to the competent Albanian authority",
+            "Ongoing follow-up with the immigration authority on the status of the application",
+            "Communication with the Client regarding any additional requirements or requests from authorities",
+          ],
+        },
+      ],
+      requiredDocs: [
+        "Valid passport (minimum 6 months validity beyond intended stay)",
+        "Proof of purpose of stay (employment contract, invitation letter, enrolment letter, etc.)",
+        "Proof of financial means (bank statements, sponsorship letter)",
+        "Proof of accommodation in Albania (lease agreement, hotel booking, property deed)",
+        "Passport-size photographs",
+        "Any additional documents specific to the visa sub-category",
+      ],
+      timeline: [
+        "Document review and preparation: approx. 3–5 business days",
+        "Application submission: approx. 1–2 business days after document completion",
+        "Authority processing time: approx. 15–30 business days (subject to authority workload)",
+        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
+      ],
+      nextSteps: [
+        "Execution of the legal service engagement agreement",
+        "Payment of the initial portion of the legal fee as agreed",
+        "Collection and review of required documents from the Client",
+        "Submission of the visa application to the competent Albanian authority",
+        "Follow-up with the immigration authority on application status",
+        "Notification to the Client upon decision and next steps",
+      ],
+    };
+  }
+
+  if (primary === "residency_permit") {
+    return {
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a Residence Permit in Albania. The objective of the service is to ensure full compliance with Albanian immigration law, protection of the Client's interests, and successful registration of residence status with the competent authorities.`,
+      servicesSections: [
+        {
+          heading: "2.1 Eligibility & Category Assessment",
+          bullets: [
+            "Review of the Client's personal, professional, and financial situation",
+            "Determination of the most suitable residence permit category",
+            "Legal advice on residency rights and obligations under Albanian law",
+          ],
+        },
+        {
+          heading: "2.2 Document Preparation",
+          bullets: [
+            "Review and verification of all required supporting documents",
+            "Assistance with translation and notarisation of foreign-language documents",
+            "Preparation of the residence permit application and supporting documentation",
+          ],
+        },
+        {
+          heading: "2.3 Submission to Competent Authorities",
+          bullets: [
+            "Submission of the complete application package to the National Registration Centre (QKR) or competent body",
+            "Coordination with relevant Albanian authorities",
+            "Assistance during any required in-person appointments",
+          ],
+        },
+        {
+          heading: "2.4 Monitoring & Completion",
+          bullets: [
+            "Ongoing monitoring of the application status",
+            "Communication with authorities regarding any additional requirements",
+            "Notification to the Client upon approval and collection of the residence permit",
+          ],
+        },
+      ],
+      requiredDocs: [
+        "Valid passport (minimum 12 months validity)",
+        "Lease agreement or property ownership deed",
+        "Proof of financial means or proof of employment / self-employment",
+        "Health insurance (valid for Albania)",
+        "Certificate of no criminal record from country of origin (apostilled / legalised)",
+        "Passport-size photographs",
+        "Power of Attorney (if the Client appoints a representative)",
+      ],
+      timeline: [
+        "Document review and preparation: approx. 5–10 business days",
+        "Application submission: approx. 1–2 business days after document completion",
+        "Authority processing time: approx. 30–60 business days (subject to authority workload and permit category)",
+        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
+      ],
+      nextSteps: [
+        "Execution of the legal service engagement agreement",
+        "Payment of the initial portion of the legal fee as agreed",
+        "Collection and review of required documents from the Client",
+        "Submission of the residence permit application",
+        "Ongoing monitoring and follow-up with authorities",
+        "Notification to the Client upon approval and permit collection",
+      ],
+    };
+  }
+
+  if (primary === "company_formation") {
+    return {
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for the formation and registration of a company in Albania. The objective of the service is to ensure full legal compliance with Albanian commercial law, protection of the Client's interests, and successful registration with the National Registration Centre (QKR).`,
+      servicesSections: [
+        {
+          heading: "2.1 Legal & Structural Advisory",
+          bullets: [
+            "Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)",
+            "Advice on shareholder structure, registered capital, and governance",
+            "Company name availability check with the National Registration Centre (QKR)",
+          ],
+        },
+        {
+          heading: "2.2 Document Preparation",
+          bullets: [
+            "Drafting of the Articles of Association and Company Statute",
+            "Preparation of all registration documents required by QKR",
+            "Assistance with notarisation of required documents",
+          ],
+        },
+        {
+          heading: "2.3 Registration with Authorities",
+          bullets: [
+            "Submission of the complete registration package to QKR",
+            "Coordination with the tax authority for initial tax registration",
+            "Obtaining of the NIPT (Tax Identification Number)",
+          ],
+        },
+        {
+          heading: "2.4 Post-Registration Guidance",
+          bullets: [
+            "Guidance on opening a corporate bank account",
+            "Initial compliance obligations briefing",
+            "Coordination with accountant if required",
+          ],
+        },
+      ],
+      requiredDocs: [
+        "Valid identification document (ID / Passport) for all shareholders and directors",
+        "Proposed company name (at least two options)",
+        "Shareholder structure and ownership percentages",
+        "Registered capital amount and intended business activity",
+        "Registered office address in Albania",
+        "Power of Attorney (if the Client appoints a representative)",
+      ],
+      timeline: [
+        "Advisory and document preparation: approx. 3–5 business days",
+        "Notarisation and submission to QKR: approx. 1–2 business days",
+        "QKR registration processing: approx. 1–3 business days",
+        "Tax registration (NIPT): approx. 2–5 business days",
+        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
+      ],
+      nextSteps: [
+        "Execution of the legal service engagement agreement",
+        "Payment of the initial portion of the legal fee as agreed",
+        "Collection of required documents and information from the Client",
+        "Drafting of Articles of Association and preparation of registration documents",
+        "Notarisation and submission to QKR",
+        "Tax registration and issuance of NIPT",
+        "Post-registration guidance and account opening support",
+      ],
+    };
+  }
+
+  // Default (tax_consulting / compliance / other)
+  return {
+    scopeParagraph: `This proposal outlines the provision of professional legal and ${
+      primary === "tax_consulting" ? "tax consulting" : "compliance advisory"
+    } services. The objective of the service is to protect the Client's interests, ensure full compliance with applicable Albanian law and regulations, and provide expert guidance throughout the engagement.`,
+    servicesSections: [
+      {
+        heading: "2.1 Initial Assessment",
+        bullets: [
+          "Review of the Client's situation, documentation, and objectives",
+          "Identification of applicable legal and regulatory requirements",
+          "Legal advice on available courses of action",
+        ],
+      },
+      {
+        heading: "2.2 Advisory & Documentation",
+        bullets: [
+          "Provision of legal opinions and written advisory notes",
+          "Preparation and review of relevant documentation",
+          "Representation before competent authorities where required",
+        ],
+      },
+      {
+        heading: "2.3 Monitoring & Completion",
+        bullets: [
+          "Ongoing monitoring of the matter",
+          "Communication with the Client and third parties as required",
+          "Provision of a completion report upon conclusion of the engagement",
+        ],
+      },
+    ],
+    requiredDocs: [
+      "Valid identification document (ID / Passport)",
+      "Relevant documentation specific to the matter (to be confirmed upon engagement)",
+      "Power of Attorney (if the Client appoints a representative)",
+    ],
+    timeline: [
+      "Initial review and assessment: approx. 3–7 business days",
+      "Advisory and documentation phase: approx. 5–15 business days",
+      "Authority interaction and monitoring: subject to authority processing times",
+      "NOTE: Indicative timelines may vary depending on the complexity of the matter",
+    ],
+    nextSteps: [
+      "Execution of the legal service engagement agreement",
+      "Payment of the initial portion of the legal fee as agreed",
+      "Collection of required documents and information from the Client",
+      "Commencement of legal review and advisory work",
+      "Ongoing communication and monitoring",
+      "Provision of completion report upon conclusion",
+    ],
+  };
+}
+
+// ── Main component ──
+interface ProposalModalProps {
+  customer: Customer;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved?: (updated: Customer) => void;
+}
+
+export default function ProposalModal({ customer, open, onOpenChange, onSaved }: ProposalModalProps) {
+  const { toast } = useToast();
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Merge stored proposalFields with sensible defaults
+  const initFields = (): ProposalFields => ({
+    proposalTitle:
+      customer.proposalFields?.proposalTitle ||
+      `Legal Assistance — ${(customer.services || []).map((s) => SERVICE_LABELS[s] || s).join(", ")}`,
+    proposalDate: customer.proposalFields?.proposalDate || today,
+    propertyDescription: customer.proposalFields?.propertyDescription || "",
+    transactionValueEUR: customer.proposalFields?.transactionValueEUR ?? undefined,
+    consultationFeeALL: customer.proposalFields?.consultationFeeALL ?? 0,
+    serviceFeeALL: customer.proposalFields?.serviceFeeALL ?? 0,
+    serviceFeePct: customer.proposalFields?.serviceFeePct ?? undefined,
+    poaFeeALL: customer.proposalFields?.poaFeeALL ?? 0,
+    translationFeeALL: customer.proposalFields?.translationFeeALL ?? 0,
+    otherFeesALL: customer.proposalFields?.otherFeesALL ?? 0,
+    additionalCostsNote: customer.proposalFields?.additionalCostsNote || "",
+    paymentTermsNote: customer.proposalFields?.paymentTermsNote || "",
+    nationality: customer.proposalFields?.nationality || customer.nationality || "",
+    country: customer.proposalFields?.country || customer.country || "",
+    idPassportNumber: customer.proposalFields?.idPassportNumber || "",
+  });
+
+  const [fields, setFields] = useState<ProposalFields>(initFields);
+  const [saving, setSaving] = useState(false);
+
+  function setField<K extends keyof ProposalFields>(key: K, value: ProposalFields[K]) {
+    setFields((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Fee calculations
+  const consultationFee = fields.consultationFeeALL ?? 0;
+  const serviceFee = fields.serviceFeeALL ?? 0;
+  const poaFee = fields.poaFeeALL ?? 0;
+  const translationFee = fields.translationFeeALL ?? 0;
+  const otherFees = fields.otherFeesALL ?? 0;
+  const serviceFeeSubtotal = consultationFee + serviceFee;
+  const additionalSubtotal = poaFee + translationFee + otherFees;
+  const totalALL = serviceFeeSubtotal + additionalSubtotal;
+  const totalEUR = totalALL * EUR_RATE;
+  const totalUSD = totalALL * USD_RATE;
+  const totalGBP = totalALL * GBP_RATE;
+
+  const serviceContent = getServiceContent(customer.services || [], fields.propertyDescription);
+
+  const displayDate = fields.proposalDate
+    ? new Date(fields.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
+    : today;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const updated = await updateCustomer(customer.customerId, { proposalFields: fields });
+      toast({ title: "Proposal fields saved", description: "The customer record has been updated." });
+      onSaved?.(updated);
+    } catch {
+      toast({ title: "Save failed", description: "Could not save proposal fields.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handlePrint() {
+    const content = printRef.current;
+    if (!content) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Service Proposal — ${customer.name}</title>
+      <meta charset="utf-8"/>
+      <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
+        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
+        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
+        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
+        .cover-block p { margin: 3px 0; font-size: 13px; }
+        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
+        p, li { font-size: 13px; line-height: 1.7; margin: 4px 0; }
+        ul { padding-left: 20px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border: 1px solid #ccc; }
+        td { padding: 6px 10px; border: 1px solid #ddd; }
+        .total-row td { font-weight: bold; background: #f8f8f8; }
+        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 12px; font-size: 11px; color: #777; text-align: center; }
+        .office-grid { display: flex; gap: 20px; }
+        .office-grid > div { flex: 1; }
+        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
+      </style>
+    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="text-base font-semibold">
+            Generate Proposal — {customer.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <Tabs defaultValue="edit" className="flex flex-col flex-1 overflow-hidden">
+          <TabsList className="mx-6 mt-2 w-fit shrink-0">
+            <TabsTrigger value="edit">Edit Fields</TabsTrigger>
+            <TabsTrigger value="preview">Preview / Print</TabsTrigger>
+          </TabsList>
+
+          {/* ── EDIT TAB ── */}
+          <TabsContent value="edit" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 pt-4">
+              {/* Proposal basics */}
+              <div className="md:col-span-2 space-y-1">
+                <Label>Proposal Title</Label>
+                <Input
+                  value={fields.proposalTitle ?? ""}
+                  onChange={(e) => setField("proposalTitle", e.target.value)}
+                  placeholder="e.g. Legal Assistance for Real Estate Investment in Albania"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Proposal Date</Label>
+                <Input
+                  type="date"
+                  value={fields.proposalDate ?? today}
+                  onChange={(e) => setField("proposalDate", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Nationality</Label>
+                <Input
+                  value={fields.nationality ?? ""}
+                  onChange={(e) => setField("nationality", e.target.value)}
+                  placeholder="e.g. German, French…"
+                />
+              </div>
+
+              {/* Property / subject description */}
+              <div className="md:col-span-2 space-y-1">
+                <Label>Subject / Property Description</Label>
+                <Input
+                  value={fields.propertyDescription ?? ""}
+                  onChange={(e) => setField("propertyDescription", e.target.value)}
+                  placeholder="e.g. a residential house and garage located in Durrës, Albania"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used in the Scope section of the proposal.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Transaction / Investment Value (EUR)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.transactionValueEUR ?? ""}
+                  onChange={(e) => setField("transactionValueEUR", e.target.value ? Number(e.target.value) : undefined)}
+                  placeholder="e.g. 100000"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>ID / Passport Number</Label>
+                <Input
+                  value={fields.idPassportNumber ?? ""}
+                  onChange={(e) => setField("idPassportNumber", e.target.value)}
+                  placeholder="leave blank if not yet collected"
+                />
+              </div>
+
+              {/* Fee section */}
+              <div className="md:col-span-2 border-t pt-4">
+                <p className="text-sm font-semibold mb-3">Fees (in ALL)</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Consultation Fee (ALL)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.consultationFeeALL ?? 0}
+                  onChange={(e) => setField("consultationFeeALL", Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Service Fee (ALL)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.serviceFeeALL ?? 0}
+                  onChange={(e) => setField("serviceFeeALL", Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Power of Attorney Fee (ALL)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.poaFeeALL ?? 0}
+                  onChange={(e) => setField("poaFeeALL", Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Translation / Notarisation Costs (ALL)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.translationFeeALL ?? 0}
+                  onChange={(e) => setField("translationFeeALL", Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Other Fees (ALL)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fields.otherFeesALL ?? 0}
+                  onChange={(e) => setField("otherFeesALL", Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Additional Costs Note (optional)</Label>
+                <Input
+                  value={fields.additionalCostsNote ?? ""}
+                  onChange={(e) => setField("additionalCostsNote", e.target.value)}
+                  placeholder="e.g. Translation costs TBD upon document collection"
+                />
+              </div>
+
+              <div className="md:col-span-2 space-y-1">
+                <Label>Custom Payment Terms Note (optional)</Label>
+                <Textarea
+                  value={fields.paymentTermsNote ?? ""}
+                  onChange={(e) => setField("paymentTermsNote", e.target.value)}
+                  placeholder="Leave blank to use the standard 50/50 payment terms"
+                  rows={3}
+                />
+              </div>
+
+              {/* Fee summary */}
+              <div className="md:col-span-2 rounded-md border bg-muted/40 px-4 py-3 text-sm">
+                <div className="flex justify-between"><span>Service Fees Subtotal</span><span className="font-mono">{fmt(serviceFeeSubtotal, 0)} ALL</span></div>
+                <div className="flex justify-between"><span>Additional Costs Subtotal</span><span className="font-mono">{fmt(additionalSubtotal, 0)} ALL</span></div>
+                <div className="flex justify-between font-semibold border-t mt-1 pt-1">
+                  <span>TOTAL</span>
+                  <span className="font-mono">{fmt(totalALL, 0)} ALL ≈ {fmt(totalEUR)} EUR</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <Button onClick={handleSave} disabled={saving}>
+                <Save className="h-4 w-4 mr-1.5" />
+                {saving ? "Saving…" : "Save to Customer Record"}
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── PREVIEW TAB ── */}
+          <TabsContent value="preview" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
+            <div className="flex justify-end mt-3 mb-4">
+              <Button onClick={handlePrint} variant="outline">
+                <Printer className="h-4 w-4 mr-1.5" />
+                Print / Save as PDF
+              </Button>
+            </div>
+
+            {/* Proposal content */}
+            <div
+              ref={printRef}
+              className="bg-white text-gray-900 rounded-lg border shadow-sm p-10 font-serif text-[13px] leading-relaxed"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {/* Cover */}
+              <h1 className="text-2xl font-bold text-center uppercase tracking-widest mb-1">Service Proposal</h1>
+              <p className="text-center text-sm text-gray-500 mb-8">Presented to: <strong>{customer.name}</strong></p>
+
+              <div className="border rounded p-4 mb-2 bg-gray-50">
+                <p className="text-sm font-semibold mb-1">Services Provided:</p>
+                <p className="text-sm">{fields.proposalTitle}</p>
+              </div>
+
+              {/* Two office columns */}
+              <div className="grid grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Tirana</p>
+                  <p className="text-xs text-gray-700">Gjergj Fishta Blvd, F.G.P Bld. Ent. nr. 2, Office 5, 1001, Tirana, Albania.</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Durrës</p>
+                  <p className="text-xs text-gray-700">Rruga Aleksandër Goga, Lagja 11, 2001, Durrës, Albania.</p>
+                </div>
+              </div>
+
+              <div className="border rounded p-4 mb-8 bg-gray-50 text-xs text-gray-700 flex flex-wrap gap-4">
+                <span>☎ +355 69 62 71 692</span>
+                <span>✉ info@dafkulawfirm.al</span>
+                <span>🌐 www.dafkulawfirm.al</span>
+                <span className="ml-auto font-semibold">Date: {displayDate}</span>
+              </div>
+
+              {/* Section 1 */}
+              <div className="section-divider mb-1">
+                <p className="text-sm font-bold border-b pb-1 mb-2">1 — Scope of the Proposal</p>
+                <p className="text-sm">{serviceContent.scopeParagraph}</p>
+                {fields.transactionValueEUR && (
+                  <p className="text-sm mt-1">
+                    Total estimated transaction value: <strong>EUR {fmt(fields.transactionValueEUR, 0)}</strong>.
+                  </p>
+                )}
+              </div>
+
+              {/* Section 2 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">2 — Scope of Services Provided</p>
+                {serviceContent.servicesSections.map((sec) => (
+                  <div key={sec.heading} className="mt-3">
+                    <p className="text-sm font-semibold mb-1">{sec.heading}</p>
+                    <ul className="list-disc pl-5 space-y-0.5">
+                      {sec.bullets.map((b, i) => <li key={i} className="text-sm">{b}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+
+              {/* Section 3 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">3 — Required Documents</p>
+                <p className="text-sm mb-1">Required Documentation from the Client:</p>
+                <ul className="list-disc pl-5 space-y-0.5">
+                  {serviceContent.requiredDocs.map((d, i) => <li key={i} className="text-sm">{d}</li>)}
+                </ul>
+              </div>
+
+              {/* Section 4 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">4 — Fees & Costs</p>
+
+                <p className="text-sm font-semibold mb-0.5">4.1 General Legal Service Fee</p>
+                <p className="text-sm mb-3">
+                  For this type of service, DAFKU Law Firm applies either a fixed service fee, or a percentage-based fee ranging from 1% to 3% of the transaction value, depending on the complexity of the transaction and the level of legal assistance required. For this specific engagement, the fee is calculated as set out in Section 4.2 below.
+                </p>
+
+                <p className="text-sm font-semibold mb-1">4.2 Fees and Costs Applied to this Specific Case</p>
+                <table className="w-full border-collapse text-sm mb-4">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border px-3 py-1.5 text-left">Description of the Service</th>
+                      <th className="border px-3 py-1.5 text-right">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border px-3 py-1.5">Consultation fee</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(consultationFee, 0)} ALL</td>
+                    </tr>
+                    <tr>
+                      <td className="border px-3 py-1.5">
+                        Service fee for the assistance with {(customer.services || []).map((s) => SERVICE_LABELS[s] || s).join(", ")}
+                        {fields.propertyDescription ? `, including: ${fields.propertyDescription}` : ""}
+                      </td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFee, 0)} ALL</td>
+                    </tr>
+                    <tr className="bg-gray-50 font-semibold">
+                      <td className="border px-3 py-1.5">Service Fees Subtotal</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFeeSubtotal, 0)} ALL</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <table className="w-full border-collapse text-sm mb-4">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border px-3 py-1.5 text-left">Additional Costs</th>
+                      <th className="border px-3 py-1.5 text-right w-24">Unit Cost</th>
+                      <th className="border px-3 py-1.5 text-right w-24">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border px-3 py-1.5">Power of Attorney</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
+                    </tr>
+                    <tr>
+                      <td className="border px-3 py-1.5">
+                        Documents Legal Translation and Notary
+                        {fields.additionalCostsNote ? ` (${fields.additionalCostsNote})` : " (to be specified later upon documents collection)"}
+                      </td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
+                    </tr>
+                    <tr>
+                      <td className="border px-3 py-1.5">Other fees</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
+                    </tr>
+                    <tr className="bg-gray-50 font-semibold">
+                      <td className="border px-3 py-1.5">Additional Costs Subtotal</td>
+                      <td className="border px-3 py-1.5"></td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(additionalSubtotal, 0)} ALL</td>
+                    </tr>
+                    <tr className="bg-gray-100 font-bold">
+                      <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
+                      <td className="border px-3 py-1.5"></td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalALL, 0)} ALL</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <p className="text-sm font-semibold mb-1">4.3 Calculation in Foreign Currencies</p>
+                <table className="w-full border-collapse text-sm mb-4">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border px-3 py-1.5 text-left">Currency</th>
+                      <th className="border px-3 py-1.5 text-right">Conversion Rate</th>
+                      <th className="border px-3 py-1.5 text-right">Value after Conversion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border px-3 py-1.5">EUR</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {EUR_RATE.toFixed(8)} EUR</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalEUR)} EUR</td>
+                    </tr>
+                    <tr>
+                      <td className="border px-3 py-1.5">USD</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {USD_RATE.toFixed(8)} USD</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalUSD)} USD</td>
+                    </tr>
+                    <tr>
+                      <td className="border px-3 py-1.5">GBP</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {GBP_RATE.toFixed(8)} GBP</td>
+                      <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalGBP)} GBP</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-xs text-gray-500 mb-4">Conversion Source: https://www.xe.com/ (indicative rates — subject to change)</p>
+
+                <p className="text-sm font-semibold mb-1">4.4 Costs Not Included</p>
+                <p className="text-sm mb-1">The legal fee does not include:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                  <li>Notary fees related to the execution of agreements and notarization of documents.</li>
+                  <li>Government fees and taxes, including property transfer tax and registration fees.</li>
+                  <li>Real estate agency or third-party professional commissions, if applicable.</li>
+                  <li>Bank charges related to payment transfers (domestic or international).</li>
+                  <li>Translation and sworn translation costs, if documents are issued in a foreign language.</li>
+                  <li>Apostille or legalization costs, where required for foreign documents.</li>
+                  <li>Courier or administrative expenses, including document delivery or official filings.</li>
+                  <li>Any third-party professional fees, such as surveyors, engineers, or technical experts, if required.</li>
+                </ul>
+              </div>
+
+              {/* Section 5 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">5 — Payment Terms</p>
+                {fields.paymentTermsNote ? (
+                  <p className="text-sm">{fields.paymentTermsNote}</p>
+                ) : (
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    <li>50% of the agreed legal service fee is payable upon signing of the engagement agreement and opening of the client file.</li>
+                    <li>50% of the agreed legal service fee is payable prior to the execution of the final notarial act or completion of the engagement.</li>
+                    <li>Government fees, notary fees, and any third-party costs are payable separately and in advance, before the relevant service or submission to the competent authorities.</li>
+                    <li>All legal service fees are non-refundable once the service has commenced and/or once any documentation has been submitted to a notary or public authority.</li>
+                    <li>Payments may be made via bank transfer, cash, card payment, PayPal, or other agreed payment methods.</li>
+                  </ul>
+                )}
+              </div>
+
+              {/* Section 6 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">6 — Timeline Overview</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                  {serviceContent.timeline.map((t, i) => <li key={i}>{t}</li>)}
+                </ul>
+              </div>
+
+              {/* Section 7 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">7 — Important Notes & Legal Disclaimers</p>
+                <p className="text-sm mb-1">It is important for the Client to be aware of the following:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                  <li>All legal services are provided based on the documentation and information made available by the Client and third parties.</li>
+                  <li>Processing times are estimates and may vary due to institutional workload or additional requirements.</li>
+                  <li>Public authorities may request additional documents or clarifications at any stage of the process.</li>
+                  <li>The Firm cannot guarantee timelines or decisions made by notaries, banks, or public authorities.</li>
+                  <li>The Firm is not responsible for delays or refusals caused by incomplete, inaccurate, or late documentation provided by third parties.</li>
+                  <li>Legal fees do not include government fees, notary fees, or any third-party costs unless explicitly stated.</li>
+                </ul>
+              </div>
+
+              {/* Section 8 */}
+              <div className="mt-6">
+                <p className="text-sm font-bold border-b pb-1 mb-2">8 — Next Steps</p>
+                <p className="text-sm mb-1">Upon your approval of this proposal, the following steps will be taken:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                  {serviceContent.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-10 border-t pt-4 text-center text-xs text-gray-400">
+                DAFKU Law Firm · Tirana & Durrës, Albania · info@dafkulawfirm.al · www.dafkulawfirm.al
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}

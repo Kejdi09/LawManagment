@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
+import { IntakeBotSection } from "@/components/IntakeBotPanel";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
   MessageSquare, CalendarClock, StickyNote,
@@ -282,6 +283,31 @@ export default function ClientPortalPage() {
             <CaseCard key={c.caseId} c={c} history={data.history} />
           ))}
         </div>
+
+        {/* Intake bot — shown if the customer is in a proposal-relevant status */}
+        {(data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE") && (
+          <div className="space-y-2">
+            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              📋 Prepare Your Proposal
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Help us prepare a personalised service proposal by answering a few quick questions below.
+            </p>
+            <IntakeBotSection
+              services={data.client.services || []}
+              clientName={data.client.name}
+              onSendSummaryMessage={async (text) => {
+                if (!token) return;
+                try {
+                  const msg = await sendPortalMessage(token, text);
+                  setChatMessages((prev) => [...prev, msg]);
+                } catch {
+                  // non-blocking
+                }
+              }}
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
