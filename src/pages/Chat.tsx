@@ -3,6 +3,7 @@ import MainLayout from "@/components/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  CalendarPlus,
   Copy,
   Link2,
   Loader2,
@@ -16,6 +17,7 @@ import {
   getConfirmedClients,
   generatePortalToken,
   revokePortalToken,
+  extendPortalToken,
   getPortalToken,
   getAdminChat,
   sendAdminMessage,
@@ -50,6 +52,7 @@ const Chat = () => {
   const [portalLinkLoading, setPortalLinkLoading] = useState(false);
   const [portalLinkCopied, setPortalLinkCopied] = useState(false);
   const [revokingPortal, setRevokingPortal] = useState(false);
+  const [extendingPortal, setExtendingPortal] = useState(false);
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
@@ -182,6 +185,20 @@ const Chat = () => {
     }
   };
 
+  const handleExtend = async () => {
+    if (!selectedId) return;
+    setExtendingPortal(true);
+    try {
+      const result = await extendPortalToken(selectedId, 30);
+      setPortalToken(result);
+      toast({ title: "Link extended", description: "+30 days added to portal link." });
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    } finally {
+      setExtendingPortal(false);
+    }
+  };
+
   // ── Filtered list ────────────────────────────────────────────────────────────
   const filteredPeople = people.filter(
     (p) => !search || p.name.toLowerCase().includes(search.toLowerCase())
@@ -303,20 +320,41 @@ const Chat = () => {
                       </Button>
                       {/* Only admin can revoke */}
                       {isAdmin && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-6 px-2 text-xs gap-1"
-                          disabled={revokingPortal}
-                          onClick={handleRevoke}
-                        >
-                          {revokingPortal ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
+                        <>
+                          {portalToken?.expiresAt && (
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              Expires {new Date(portalToken.expiresAt).toLocaleDateString()}
+                            </span>
                           )}
-                          Revoke
-                        </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs gap-1"
+                            disabled={extendingPortal}
+                            onClick={handleExtend}
+                          >
+                            {extendingPortal ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <CalendarPlus className="h-3 w-3" />
+                            )}
+                            +30d
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-xs gap-1"
+                            disabled={revokingPortal}
+                            onClick={handleRevoke}
+                          >
+                            {revokingPortal ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                            Revoke
+                          </Button>
+                        </>
                       )}
                     </>
                   ) : (

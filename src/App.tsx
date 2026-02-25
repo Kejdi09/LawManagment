@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Button } from "@/components/ui/button";
 
 const Index = lazy(() => import("./pages/Index"));
 const CustomerCases = lazy(() => import("./pages/CustomerCases"));
@@ -60,6 +61,52 @@ function LoginRoute() {
   return <Login />;
 }
 
+const TIMEOUT_MS = 30 * 60 * 1000;
+const WARNING_BEFORE_MS = 2 * 60 * 1000;
+
+function SessionTimeoutWatcher() {
+  const { isAuthenticated, logout } = useAuth();
+  const [showWarning, setShowWarning] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    setShowWarning(false);
+    warningTimerRef.current = setTimeout(() => setShowWarning(true), TIMEOUT_MS - WARNING_BEFORE_MS);
+    timerRef.current = setTimeout(() => { logout(); }, TIMEOUT_MS);
+  }, [logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated) { setShowWarning(false); return; }
+    resetTimer();
+    const events = ["mousedown", "keydown", "touchstart", "scroll"] as const;
+    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+    };
+  }, [isAuthenticated, resetTimer]);
+
+  if (!showWarning || !isAuthenticated) return null;
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+      <div className="bg-background border rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+        <h2 className="text-base font-semibold">Session expiring soon</h2>
+        <p className="text-sm text-muted-foreground">
+          You have been inactive for a while. You will be logged out in 2 minutes.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" size="sm" onClick={() => logout()}>Log out now</Button>
+          <Button size="sm" onClick={resetTimer}>Stay logged in</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="dafku-theme">
@@ -68,6 +115,7 @@ const App = () => (
         <Sonner />
         <AuthProvider>
           <HashRouter>
+            <SessionTimeoutWatcher />
             <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>}>
               <Routes>
                 <Route path="/login" element={<LoginRoute />} />

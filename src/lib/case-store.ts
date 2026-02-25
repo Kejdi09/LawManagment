@@ -417,6 +417,26 @@ export async function revokePortalToken(customerId: string): Promise<void> {
   await api(`/api/portal/tokens/${customerId}`, { method: "DELETE" });
 }
 
+export async function extendPortalToken(
+  customerId: string,
+  days = 30
+): Promise<{ token: string; expiresAt: string }> {
+  return api<{ token: string; expiresAt: string }>(
+    `/api/portal/tokens/${customerId}/extend`,
+    { method: "PATCH", body: JSON.stringify({ days }) }
+  );
+}
+
+export async function markProposalViewed(token: string): Promise<void> {
+  try {
+    await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/proposal-viewed`, {
+      method: "POST",
+    });
+  } catch {
+    // non-blocking — ignore errors
+  }
+}
+
 export async function getPortalNotes(customerId: string): Promise<PortalNote[]> {
   return api<PortalNote[]>(`/api/portal-notes/${customerId}`);
 }

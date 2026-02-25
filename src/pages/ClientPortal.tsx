@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields } from "@/lib/case-store";
+import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed } from "@/lib/case-store";
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,7 @@ export default function ClientPortalPage() {
   const [linkExpired, setLinkExpired] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
+  const proposalViewedRef = useRef(false);
 
   // Load portal data
   useEffect(() => {
@@ -166,6 +167,16 @@ export default function ClientPortalPage() {
       Notification.requestPermission();
     }
   }, []);
+
+  // If the proposal tab is the default tab on first load, mark it viewed immediately
+  useEffect(() => {
+    if (!data || !token || proposalViewedRef.current) return;
+    if (!!data.proposalSentAt && !!data.proposalSnapshot) {
+      proposalViewedRef.current = true;
+      markProposalViewed(token);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   // Poll for new chat messages every 12 seconds (client-visible only)
   useEffect(() => {
@@ -282,7 +293,12 @@ export default function ClientPortalPage() {
 
       {/* Tabs */}
       <div className="flex-1 max-w-3xl w-full mx-auto px-4 pt-4 pb-8">
-        <Tabs defaultValue={defaultTab} className="flex flex-col gap-0">
+        <Tabs defaultValue={defaultTab} className="flex flex-col gap-0" onValueChange={(tab) => {
+            if (tab === 'proposal' && !proposalViewedRef.current && token) {
+              proposalViewedRef.current = true;
+              markProposalViewed(token);
+            }
+          }}>
           <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
             <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
               <FileText className="h-3.5 w-3.5" /> Status
@@ -347,10 +363,16 @@ export default function ClientPortalPage() {
           {/* ── INTAKE TAB ── */}
           {showIntakeTab && (
             <TabsContent value="intake" className="mt-0 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Please answer the questions below so our team can prepare a personalised proposal for you.
-                This only takes a few minutes and you only need to do it once.
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Please answer the questions below so our team can prepare a personalised proposal for you.
+                  This only takes a few minutes and you only need to do it once.
+                </p>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex flex-col gap-1">
+                  <span className="font-medium text-foreground">Have a question first?</span>
+                  <span>Use the <strong>Messages</strong> tab to chat with us directly before filling in the form — we're happy to clarify anything.</span>
+                </div>
+              </div>
               <IntakeBotSection
                 services={data.client.services || []}
                 clientName={data.client.name}

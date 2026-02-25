@@ -857,7 +857,19 @@ const Customers = () => {
                       return (
                         <TableRow key={`${group.type}-${c.customerId}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(c.customerId)}>
                           <TableCell className="font-mono text-xs">{c.customerId}</TableCell>
-                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {c.name}
+                              {c.followUpDate && new Date(c.followUpDate) <= new Date() && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>Follow-up overdue since {String(c.followUpDate).slice(0, 10)}</TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
                           {showMoreCustomerColumns && (
                             <TableCell className="text-sm text-muted-foreground">{c.phone || c.email || "—"}</TableCell>
@@ -1348,6 +1360,11 @@ const Customers = () => {
                           <CardTitle className="text-sm flex items-center gap-2 text-green-800 dark:text-green-300">
                             <CheckCircle2 className="h-4 w-4" />
                             Proposal Sent — {safeFormatDate(selectedCustomer.proposalSentAt)}
+                            {selectedCustomer.proposalViewedAt && (
+                              <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-1">
+                                · Viewed {safeFormatDate(selectedCustomer.proposalViewedAt)}
+                              </span>
+                            )}
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2 text-sm">

@@ -937,8 +937,24 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 
   // assignedTo on customers = their intake consultant assignment; preserved on non-CLIENT status changes.
 
-  // Track status history
-  if (current.status !== update.status) {
+  // Auto-advance SEND_PROPOSAL → WAITING_APPROVAL and email client when proposal is first sent
+  if (update.proposalSentAt && !current.proposalSentAt && !update.status) {
+    if (current.status === 'SEND_PROPOSAL') {
+      update.status = 'WAITING_APPROVAL';
+    }
+    if (current.email) {
+      const senderLabel = getUserLawyerName(req.user) || 'the legal team';
+      sendEmail({
+        to: current.email,
+        subject: 'Your Service Proposal — DAFKU Law Firm',
+        text: `Dear ${current.name || 'Client'},\n\nYour personalised service proposal is now ready for you to review in your client portal.\n\nIf you have any questions, please reply to this email or reach us on WhatsApp: +355 69 62 71 692\n\nBest regards,\n${senderLabel}\nDAFKU Law Firm`,
+      });
+    }
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'proposal_sent', resource: 'customer', resourceId: id, details: { proposalSentAt: update.proposalSentAt } });
+  }
+
+  // Track status history (guard: only when status is explicitly part of the update)
+  if (update.status !== undefined && current.status !== update.status) {
     const historyId = genShortId('CH');
     await customerHistoryCol.insertOne({
       historyId,
@@ -1955,6 +1971,21 @@ app.delete('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Extend an existing portal link by N more days (admin only)
+app.patch('/api/portal/tokens/:customerId/extend', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const customerId = String(req.params.customerId).trim();
+  const extraDays = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
+  const existing = await portalTokensCol.findOne({ customerId });
+  if (!existing) return res.status(404).json({ error: 'No portal link found for this customer' });
+  const baseDate = new Date(existing.expiresAt) > new Date() ? new Date(existing.expiresAt) : new Date();
+  const newExpiry = new Date(baseDate.getTime() + extraDays * 24 * 60 * 60 * 1000).toISOString();
+  await portalTokensCol.updateOne({ customerId }, { $set: { expiresAt: newExpiry } });
+  const updated = await portalTokensCol.findOne({ customerId });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'extend', resource: 'portalToken', resourceId: customerId, details: { extraDays, newExpiry } });
+  res.json(updated);
+});
+
 // Portal notes — visible to client on their portal page
 app.get('/api/portal-notes/:customerId', verifyAuth, async (req, res) => {
   if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
@@ -2016,6 +2047,7 @@ app.get('/api/portal/:token', async (req, res) => {
     linkExpired: false,
     proposalSentAt: client.proposalSentAt || null,
     proposalSnapshot: client.proposalSnapshot || null,
+    proposalViewedAt: client.proposalViewedAt || null,
     intakeBotReset: !!client.intakeBotReset,
   });
 });
@@ -2064,9 +2096,19 @@ app.post('/api/portal/:token/intake', async (req, res) => {
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
   const { proposalFields } = req.body;
   if (!proposalFields || typeof proposalFields !== 'object') return res.status(400).json({ error: 'proposalFields required' });
+
+  // Fetch current record to check status for auto-advance
+  const currentRecord = await customersCol.findOne({ customerId: tokenDoc.customerId })
+    || await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
+
   const setFields = { proposalFields, intakeBotReset: false };
   if (proposalFields.nationality) setFields.nationality = proposalFields.nationality;
   if (proposalFields.country) setFields.country = proposalFields.country;
+
+  // Auto-advance status: INTAKE → SEND_PROPOSAL when client submits the intake form
+  const wasIntake = currentRecord?.status === 'INTAKE';
+  if (wasIntake) setFields.status = 'SEND_PROPOSAL';
+
   // Try customers collection first, then confirmed clients
   const custResult = await customersCol.findOneAndUpdate(
     { customerId: tokenDoc.customerId },
@@ -2077,6 +2119,48 @@ app.post('/api/portal/:token/intake', async (req, res) => {
     await confirmedClientsCol.updateOne(
       { customerId: tokenDoc.customerId },
       { $set: setFields }
+    );
+  }
+
+  // Record status history and notify staff if status was auto-advanced
+  if (wasIntake && currentRecord) {
+    const historyId = genShortId('CH');
+    await customerHistoryCol.insertOne({
+      historyId,
+      customerId: tokenDoc.customerId,
+      statusFrom: 'INTAKE',
+      statusTo: 'SEND_PROPOSAL',
+      date: new Date().toISOString(),
+      changedBy: 'portal-client',
+      changedByRole: 'client',
+      changedByConsultant: null,
+      changedByLawyer: null,
+    });
+    sendEmail({
+      to: process.env.ADMIN_EMAIL,
+      subject: `Intake form completed — ${currentRecord.name || tokenDoc.clientName}`,
+      text: `${currentRecord.name || tokenDoc.clientName} has completed their intake form via the client portal.\n\nStatus has been automatically advanced to "Send Proposal".\n\nLog in to the admin panel to review their information and prepare the proposal.`,
+    });
+  }
+
+  res.json({ ok: true });
+});
+
+// Mark proposal as viewed by client (first-view tracking, token-based, no auth)
+app.post('/api/portal/:token/proposal-viewed', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  const viewedAt = new Date().toISOString();
+  // Only record the first view (filter $exists: false prevents overwrite)
+  const custResult = await customersCol.findOneAndUpdate(
+    { customerId: tokenDoc.customerId, proposalViewedAt: { $exists: false } },
+    { $set: { proposalViewedAt: viewedAt } },
+    { returnDocument: 'after' }
+  );
+  if (!custResult) {
+    await confirmedClientsCol.updateOne(
+      { customerId: tokenDoc.customerId, proposalViewedAt: { $exists: false } },
+      { $set: { proposalViewedAt: viewedAt } }
     );
   }
   res.json({ ok: true });
