@@ -410,6 +410,19 @@ const Customers = () => {
 
   const handleSave = async () => {
     try {
+      // Required field validation
+      if (!form.name?.trim()) {
+        toast({ title: 'Name required', description: 'Please enter the customer name.', variant: 'destructive' });
+        return;
+      }
+      if (!form.phone?.trim() && !form.email?.trim()) {
+        toast({ title: 'Contact required', description: 'Please enter at least a phone number or email address.', variant: 'destructive' });
+        return;
+      }
+      if (!form.services || form.services.length === 0) {
+        toast({ title: 'Service required', description: 'Please select at least one service.', variant: 'destructive' });
+        return;
+      }
       // UI-level validation: intake/manager must choose a CLIENT_LAWYER when confirming
       if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && !form.assignedTo) {
         toast({ title: 'Assign required', description: 'Please select someone to assign the confirmed client', variant: 'destructive' });
@@ -1164,8 +1177,8 @@ const Customers = () => {
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Label>Name <span className="text-destructive">*</span></Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
             </div>
             <div className="space-y-2">
               <Label>Contact Type</Label>
@@ -1179,13 +1192,13 @@ const Customers = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <Label>Phone <span className="text-destructive">*</span></Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
             </div>
             {/* Country removed; use Address field to store country if desired */}
             <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email address" />
             </div>
             <div className="space-y-2">
               <Label>Address</Label>
@@ -1267,7 +1280,7 @@ const Customers = () => {
               </div>
             )}
             <div className="md:col-span-2 space-y-2">
-              <Label>Services</Label>
+              <Label>Services <span className="text-destructive">*</span></Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {serviceEntries.map(([key, label]) => {
                   const checked = form.services.includes(key as ServiceType);
@@ -1304,6 +1317,7 @@ const Customers = () => {
             <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editingId ? "Save" : "Create"}</Button>
           </div>
+          {!editingId && <p className="text-xs text-muted-foreground text-right"><span className="text-destructive">*</span> Required fields</p>}
         </DialogContent>
       </Dialog>
 

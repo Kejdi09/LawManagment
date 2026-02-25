@@ -144,6 +144,15 @@ const ClientsPage = () => {
 
   const saveEdit = async () => {
     if (!form.customerId) return;
+    // Required field validation
+    if (!form.name?.trim()) {
+      toast({ title: 'Name required', description: 'Please enter the client name.', variant: 'destructive' });
+      return;
+    }
+    if (!form.phone?.trim() && !form.email?.trim()) {
+      toast({ title: 'Contact required', description: 'Please enter at least a phone number or email address.', variant: 'destructive' });
+      return;
+    }
     const payload: Partial<Customer> = {
       ...form,
       assignedTo: isAdmin
@@ -497,8 +506,8 @@ const ClientsPage = () => {
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <Label>Name <span className="text-destructive">*</span></Label>
+                <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
               </div>
               <div className="space-y-2">
                 <Label>Contact Type</Label>
@@ -512,12 +521,12 @@ const ClientsPage = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                <Label>Phone <span className="text-destructive">*</span></Label>
+                <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                <Label>Email <span className="text-destructive">*</span></Label>
+                <Input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email address" />
               </div>
               <div className="space-y-2">
                 <Label>Address</Label>
