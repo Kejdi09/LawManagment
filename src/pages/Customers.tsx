@@ -42,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, Bot } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth-context";
@@ -50,7 +50,6 @@ import MainLayout from "@/components/MainLayout";
 import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 import ProposalModal from "@/components/ProposalModal";
-import IntakeBotPanel from "@/components/IntakeBotPanel";
 
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined) {
@@ -143,7 +142,6 @@ const Customers = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
-  const [intakeBotOpen, setIntakeBotOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -1273,48 +1271,28 @@ const Customers = () => {
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
-                        {/* Proposal generation — available for any status, highlighted for SEND_PROPOSAL */}
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          <Button
-                            size="sm"
-                            variant={selectedCustomer.status === "SEND_PROPOSAL" ? "default" : "outline"}
-                            className="h-7 text-xs gap-1"
-                            onClick={() => setShowProposalModal(true)}
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            Generate Proposal
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs gap-1"
-                            onClick={() => setIntakeBotOpen((v) => !v)}
-                          >
-                            <Bot className="h-3.5 w-3.5" />
-                            {intakeBotOpen ? "Hide Intake Bot" : "Intake Bot"}
-                          </Button>
-                        </div>
+                        {/* Proposal button – only shown when status is SEND_PROPOSAL or a proposal was already sent */}
+                        {(selectedCustomer.status === "SEND_PROPOSAL" || !!selectedCustomer.proposalSentAt) && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => setShowProposalModal(true)}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              {selectedCustomer.proposalSentAt ? "Edit / Resend Proposal" : "Generate Proposal"}
+                            </Button>
+                            {selectedCustomer.proposalSentAt && (
+                              <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Sent {safeFormatDate(selectedCustomer.proposalSentAt)}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         </CardContent>
                     </Card>
-
-                {intakeBotOpen && selectedCustomer && (
-                  <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Bot className="h-4 w-4 text-primary" />Intake Bot — Staff Mode</CardTitle></CardHeader>
-                    <CardContent className="pt-0">
-                      <IntakeBotPanel
-                        services={selectedCustomer.services || []}
-                        clientName={selectedCustomer.name}
-                        mode="staff"
-                        customerId={selectedCustomer.customerId}
-                        fillHeight={false}
-                        onComplete={(fields) => {
-                          setSelectedCustomer((prev) => prev ? { ...prev, proposalFields: { ...prev.proposalFields, ...fields } } : prev);
-                          setIntakeBotOpen(false);
-                        }}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
 
                 <Card>
                       <CardHeader className="pb-2"><CardTitle className="text-sm">Services</CardTitle></CardHeader>
@@ -1333,6 +1311,33 @@ const Customers = () => {
                         )}
                       </CardContent>
                     </Card>
+
+                    {/* Sent proposal summary card */}
+                    {selectedCustomer.proposalSentAt && selectedCustomer.proposalSnapshot && (
+                      <Card className="border-green-200 bg-green-50/40 dark:bg-green-950/20 dark:border-green-900">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center gap-2 text-green-800 dark:text-green-300">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Proposal Sent — {safeFormatDate(selectedCustomer.proposalSentAt)}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                          {selectedCustomer.proposalSnapshot.proposalTitle && (
+                            <p className="font-medium">{selectedCustomer.proposalSnapshot.proposalTitle}</p>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                            {selectedCustomer.proposalSnapshot.nationality && <span>Nationality: <strong className="text-foreground">{selectedCustomer.proposalSnapshot.nationality}</strong></span>}
+                            {selectedCustomer.proposalSnapshot.country && <span>Country: <strong className="text-foreground">{selectedCustomer.proposalSnapshot.country}</strong></span>}
+                            {selectedCustomer.proposalSnapshot.propertyDescription && <span className="col-span-2">Subject: <strong className="text-foreground">{selectedCustomer.proposalSnapshot.propertyDescription}</strong></span>}
+                            {selectedCustomer.proposalSnapshot.transactionValueEUR != null && <span>Transaction value: <strong className="text-foreground">€{selectedCustomer.proposalSnapshot.transactionValueEUR.toLocaleString()}</strong></span>}
+                            {selectedCustomer.proposalSnapshot.serviceFeeALL != null && <span>Service fee: <strong className="text-foreground">{(selectedCustomer.proposalSnapshot.serviceFeeALL ?? 0).toLocaleString()} ALL</strong></span>}
+                          </div>
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={() => setShowProposalModal(true)}>
+                            <FileText className="h-3.5 w-3.5" /> View / Edit Proposal
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <Card>
                       <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
@@ -1410,6 +1415,11 @@ const Customers = () => {
           onSaved={(updated) => {
             setSelectedCustomer(updated);
             setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+          }}
+          onSent={(updated) => {
+            setSelectedCustomer(updated);
+            setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+            setShowProposalModal(false);
           }}
         />
       )}
