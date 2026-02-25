@@ -18,16 +18,16 @@ import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Fixed conversion approximation (shown as indicative, source: xe.com) ──
-const EUR_RATE = 0.01037032; // 1 ALL → EUR
-const USD_RATE = 0.01212463;
-const GBP_RATE = 0.00902409;
+export const EUR_RATE = 0.01037032; // 1 ALL → EUR
+export const USD_RATE = 0.01212463;
+export const GBP_RATE = 0.00902409;
 
-function fmt(n: number, decimals = 2) {
+export function fmt(n: number, decimals = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 // ── Service-specific content generators ──
-interface ServiceContent {
+export interface ServiceContent {
   scopeParagraph: string;
   servicesSections: Array<{ heading: string; bullets: string[] }>;
   requiredDocs: string[];
@@ -35,7 +35,7 @@ interface ServiceContent {
   nextSteps: string[];
 }
 
-function getServiceContent(services: ServiceType[], propertyDescription?: string): ServiceContent {
+export function getServiceContent(services: ServiceType[], propertyDescription?: string): ServiceContent {
   // Use the primary (first) service to determine the main template
   const primary = services[0] ?? "residency_permit";
 

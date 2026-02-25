@@ -377,4 +377,6 @@ export interface PortalData {
   portalNotes: PortalNote[];
   chatMessages: PortalMessage[];
   expiresAt?: string;
+  proposalSentAt?: string | null;
+  proposalSnapshot?: ProposalFields | null;
 }

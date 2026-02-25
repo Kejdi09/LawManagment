@@ -5,12 +5,14 @@ import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/ty
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { IntakeBotSection } from "@/components/IntakeBotPanel";
+import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, Printer,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -144,6 +146,7 @@ export default function ClientPortalPage() {
   const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const printProposalRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
 
   // Load portal data
@@ -216,6 +219,42 @@ export default function ClientPortalPage() {
     }
   };
 
+  function handlePrintProposal() {
+    const content = printProposalRef.current;
+    if (!content || !data) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Service Proposal \u2014 ${data.client.name}</title>
+      <meta charset="utf-8"/>
+      <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
+        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
+        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
+        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
+        .cover-block p { margin: 3px 0; font-size: 13px; }
+        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
+        p { font-size: 13px; margin: 6px 0; }
+        ul { font-size: 13px; padding-left: 22px; margin: 4px 0; }
+        li { margin-bottom: 2px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; }
+        th { background: #f0f0f0; border: 1px solid #ccc; padding: 7px 10px; text-align: left; }
+        td { border: 1px solid #ccc; padding: 7px 10px; }
+        .right { text-align: right; }
+        .mono { font-family: monospace; }
+        .total-row { background: #f0f0f0; font-weight: bold; }
+        .final-row { background: #e0e0e0; font-weight: bold; }
+        .footer { border-top: 1px solid #ddd; margin-top: 40px; padding-top: 12px; text-align: center; font-size: 11px; color: #888; }
+        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
+      </style>
+    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
+    win.document.close();
+    setTimeout(() => { win.print(); }, 500);
+  }
+
   const trailingClientCount = countTrailingClient(chatMessages);
 
   if (loading) {
@@ -238,8 +277,29 @@ export default function ClientPortalPage() {
   }
 
   const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
+  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
+  const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
+  const defaultTab = showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: any lawyer messages newer than the last visit
   const hasNewMessages = chatMessages.some((m) => m.senderType === "lawyer" && !m.readByLawyer);
+
+  // Proposal computed values (only used when showProposalTab)
+  const snap = data.proposalSnapshot;
+  const pConsultation = snap?.consultationFeeALL ?? 0;
+  const pServiceFee = snap?.serviceFeeALL ?? 0;
+  const pPoa = snap?.poaFeeALL ?? 0;
+  const pTranslation = snap?.translationFeeALL ?? 0;
+  const pOther = snap?.otherFeesALL ?? 0;
+  const pServiceSubtotal = pConsultation + pServiceFee;
+  const pAdditionalSubtotal = pPoa + pTranslation + pOther;
+  const pTotal = pServiceSubtotal + pAdditionalSubtotal;
+  const pTotalEUR = pTotal * EUR_RATE;
+  const pTotalUSD = pTotal * USD_RATE;
+  const pTotalGBP = pTotal * GBP_RATE;
+  const pServiceContent = showProposalTab ? getServiceContent(data.client.services || [], snap?.propertyDescription) : null;
+  const pDisplayDate = snap?.proposalDate
+    ? new Date(snap.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
+    : "";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -271,14 +331,19 @@ export default function ClientPortalPage() {
 
       {/* Tabs */}
       <div className="flex-1 max-w-3xl w-full mx-auto px-4 pt-4 pb-8">
-        <Tabs defaultValue={showIntakeTab ? "intake" : "status"} className="flex flex-col gap-0">
-          <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: showIntakeTab ? "1fr 1fr 1fr" : "1fr 1fr" }}>
+        <Tabs defaultValue={defaultTab} className="flex flex-col gap-0">
+          <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
             <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
               <FileText className="h-3.5 w-3.5" /> Status
             </TabsTrigger>
             {showIntakeTab && (
               <TabsTrigger value="intake" className="flex items-center gap-1.5 text-xs">
                 <ClipboardList className="h-3.5 w-3.5" /> Intake Form
+              </TabsTrigger>
+            )}
+            {showProposalTab && (
+              <TabsTrigger value="proposal" className="flex items-center gap-1.5 text-xs">
+                <FileText className="h-3.5 w-3.5" /> Proposal
               </TabsTrigger>
             )}
             <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs relative">
@@ -355,6 +420,151 @@ export default function ClientPortalPage() {
                   rel="noopener noreferrer"
                   className="underline decoration-dotted hover:text-foreground"
                 >
+                  Contact us on WhatsApp
+                </a>
+                {" "}(+355 69 62 71 692)
+              </p>
+            </TabsContent>
+          )}
+
+          {/* ── PROPOSAL TAB ── */}
+          {showProposalTab && snap && pServiceContent && (
+            <TabsContent value="proposal" className="mt-0 space-y-3">
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handlePrintProposal}>
+                  <Printer className="h-3.5 w-3.5" /> Print / Save as PDF
+                </Button>
+              </div>
+
+              <div
+                ref={printProposalRef}
+                className="bg-white text-gray-900 rounded-lg border shadow-sm p-8 font-serif text-[13px] leading-relaxed"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                {/* Cover */}
+                <h1 className="text-2xl font-bold text-center uppercase tracking-widest mb-1">Service Proposal</h1>
+                <p className="text-center text-sm text-gray-500 mb-6">Presented to: <strong>{data.client.name}</strong></p>
+
+                <div className="border rounded p-4 mb-2 bg-gray-50">
+                  <p className="text-sm font-semibold mb-1">Services Provided:</p>
+                  <p className="text-sm">{snap.proposalTitle}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Tirana</p>
+                    <p className="text-xs text-gray-700">Gjergj Fishta Blvd, F.G.P Bld. Ent. nr. 2, Office 5, 1001, Tirana, Albania.</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Durrës</p>
+                    <p className="text-xs text-gray-700">Rruga Aleksandër Goga, Lagja 11, 2001, Durrës, Albania.</p>
+                  </div>
+                </div>
+
+                <div className="border rounded p-4 mb-8 bg-gray-50 text-xs text-gray-700 flex flex-wrap gap-4">
+                  <span>☎ +355 69 62 71 692</span>
+                  <span>✉ info@dafkulawfirm.al</span>
+                  <span>🌐 www.dafkulawfirm.al</span>
+                  <span className="ml-auto font-semibold">Date: {pDisplayDate}</span>
+                </div>
+
+                {/* Section 1 */}
+                <div className="mb-1">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">1 — Scope of the Proposal</p>
+                  <p className="text-sm">{pServiceContent.scopeParagraph}</p>
+                  {snap.transactionValueEUR && (
+                    <p className="text-sm mt-1">Total estimated transaction value: <strong>EUR {fmt(snap.transactionValueEUR, 0)}</strong>.</p>
+                  )}
+                </div>
+
+                {/* Section 2 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">2 — Scope of Services Provided</p>
+                  {pServiceContent.servicesSections.map((sec) => (
+                    <div key={sec.heading} className="mt-3">
+                      <p className="text-sm font-semibold mb-1">{sec.heading}</p>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {sec.bullets.map((b, i) => <li key={i} className="text-sm">{b}</li>)}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Section 3 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">3 — Required Documents</p>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    {pServiceContent.requiredDocs.map((d, i) => <li key={i} className="text-sm">{d}</li>)}
+                  </ul>
+                </div>
+
+                {/* Section 4 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">4 — Fees &amp; Costs</p>
+                  <p className="text-sm font-semibold mb-1">4.2 Fees Applied to This Engagement</p>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Description</th>
+                        <th className="border px-3 py-1.5 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td className="border px-3 py-1.5">Consultation fee</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pConsultation, 0)} ALL</td></tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Service fee{snap.propertyDescription ? ` — ${snap.propertyDescription}` : ""}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(pServiceFee, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold"><td className="border px-3 py-1.5">Service Fees Subtotal</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pServiceSubtotal, 0)} ALL</td></tr>
+                      <tr><td className="border px-3 py-1.5">Power of Attorney</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pPoa, 0)} ALL</td></tr>
+                      <tr><td className="border px-3 py-1.5">Translation &amp; Notary{snap.additionalCostsNote ? ` (${snap.additionalCostsNote})` : ""}</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pTranslation, 0)} ALL</td></tr>
+                      <tr><td className="border px-3 py-1.5">Other fees</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pOther, 0)} ALL</td></tr>
+                      <tr className="bg-gray-50 font-semibold"><td className="border px-3 py-1.5">Additional Costs Subtotal</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pAdditionalSubtotal, 0)} ALL</td></tr>
+                      <tr className="bg-gray-100 font-bold"><td className="border px-3 py-1.5">TOTAL</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pTotal, 0)} ALL ≈ {fmt(pTotalEUR)} EUR ≈ {fmt(pTotalUSD)} USD ≈ {fmt(pTotalGBP)} GBP</td></tr>
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-gray-500 mb-4">Currency conversions are indicative only (source: xe.com)</p>
+                </div>
+
+                {/* Section 5 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">5 — Payment Terms</p>
+                  {snap.paymentTermsNote ? (
+                    <p className="text-sm">{snap.paymentTermsNote}</p>
+                  ) : (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      <li>50% payable upon signing of the engagement agreement.</li>
+                      <li>50% payable prior to completion of the engagement.</li>
+                      <li>Government, notary, and third-party costs are payable separately and in advance.</li>
+                      <li>Payments may be made via bank transfer, cash, card, PayPal, or other agreed method.</li>
+                    </ul>
+                  )}
+                </div>
+
+                {/* Section 6 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">6 — Timeline Overview</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                    {pServiceContent.timeline.map((t, i) => <li key={i}>{t}</li>)}
+                  </ul>
+                </div>
+
+                {/* Section 7 */}
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">7 — Next Steps</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-sm">
+                    {pServiceContent.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+
+                <div className="mt-10 border-t pt-4 text-center text-xs text-gray-400">
+                  DAFKU Law Firm · Tirana &amp; Durrës, Albania · info@dafkulawfirm.al · www.dafkulawfirm.al
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Questions about this proposal?{" "}
+                <a href="https://wa.me/355696271692" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-foreground">
                   Contact us on WhatsApp
                 </a>
                 {" "}(+355 69 62 71 692)

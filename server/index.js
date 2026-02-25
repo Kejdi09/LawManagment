@@ -2014,6 +2014,8 @@ app.get('/api/portal/:token', async (req, res) => {
     chatMessages: chatMessages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt, readByLawyer: m.readByLawyer })),
     expiresAt: tokenDoc.expiresAt,
     linkExpired: false,
+    proposalSentAt: client.proposalSentAt || null,
+    proposalSnapshot: client.proposalSnapshot || null,
   });
 });
 
