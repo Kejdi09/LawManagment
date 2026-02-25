@@ -313,7 +313,7 @@ const AdminActivity = () => {
         </>}
 
         <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl w-[95vw] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Activity Details</DialogTitle>
               <DialogDescription>Detailed audit log information for the selected activity record.</DialogDescription>

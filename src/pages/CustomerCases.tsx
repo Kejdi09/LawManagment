@@ -556,7 +556,7 @@ const CustomerCases = () => {
       />
 
       <Dialog open={showCaseForm} onOpenChange={(o) => !o && setShowCaseForm(false)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Customer Case</DialogTitle>
             <DialogDescription>Create a case for a pre-confirmation customer. Additional details can be edited later.</DialogDescription>

@@ -280,66 +280,114 @@ export default function InvoicesPage() {
           {filtered.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">No invoices found.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[130px]">Invoice ID</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Case</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-[100px]">Amount</TableHead>
-                    <TableHead className="w-[110px]">Status</TableHead>
-                    <TableHead className="w-[100px]">Due Date</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((inv) => (
-                    <TableRow key={inv.invoiceId}>
-                      <TableCell className="font-mono text-xs">{inv.invoiceId}</TableCell>
-                      <TableCell className="font-medium">
-                        <div>{clientNames[inv.customerId] || inv.customerId}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{inv.customerId}</div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{inv.caseId || "—"}</TableCell>
-                      <TableCell className="text-sm">{inv.description || "—"}</TableCell>
-                      <TableCell className="font-semibold">{inv.currency} {inv.amount.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Select value={inv.status} onValueChange={(v) => handleStatusChange(inv.invoiceId, v as InvoiceStatus)}>
-                          <SelectTrigger className="h-7 text-xs border-0 p-0 focus:ring-0">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[inv.status]}`}>
-                              {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
-                            </span>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="paid">Paid</SelectItem>
-                            <SelectItem value="overdue">Overdue</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {inv.dueDate ? formatDate(inv.dueDate) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(inv)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {isAdmin && (
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(inv.invoiceId)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+            <>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[130px]">Invoice ID</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Case</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-[100px]">Amount</TableHead>
+                      <TableHead className="w-[110px]">Status</TableHead>
+                      <TableHead className="w-[100px]">Due Date</TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((inv) => (
+                      <TableRow key={inv.invoiceId}>
+                        <TableCell className="font-mono text-xs">{inv.invoiceId}</TableCell>
+                        <TableCell className="font-medium">
+                          <div>{clientNames[inv.customerId] || inv.customerId}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{inv.customerId}</div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{inv.caseId || "—"}</TableCell>
+                        <TableCell className="text-sm">{inv.description || "—"}</TableCell>
+                        <TableCell className="font-semibold">{inv.currency} {inv.amount.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Select value={inv.status} onValueChange={(v) => handleStatusChange(inv.invoiceId, v as InvoiceStatus)}>
+                            <SelectTrigger className="h-7 text-xs border-0 p-0 focus:ring-0">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[inv.status]}`}>
+                                {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                              </span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="paid">Paid</SelectItem>
+                              <SelectItem value="overdue">Overdue</SelectItem>
+                              <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {inv.dueDate ? formatDate(inv.dueDate) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(inv)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {isAdmin && (
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(inv.invoiceId)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card view */}
+              <div className="sm:hidden space-y-2 p-2">
+                {filtered.map((inv) => (
+                  <div key={inv.invoiceId} className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm truncate">{clientNames[inv.customerId] || inv.customerId}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{inv.invoiceId}</div>
+                        {inv.description && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{inv.description}</div>}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-semibold text-sm">{inv.currency} {inv.amount.toLocaleString()}</div>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[inv.status]}`}>
+                          {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                    {inv.dueDate && (
+                      <div className="text-xs text-muted-foreground">Due: {formatDate(inv.dueDate)}</div>
+                    )}
+                    <div className="flex items-center gap-2 pt-1">
+                      <Select value={inv.status} onValueChange={(v) => handleStatusChange(inv.invoiceId, v as InvoiceStatus)}>
+                        <SelectTrigger className="h-7 text-xs w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="overdue">Overdue</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 ml-auto" onClick={() => handleEdit(inv)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {isAdmin && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(inv.invoiceId)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

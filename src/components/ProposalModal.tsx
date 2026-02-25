@@ -478,7 +478,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">
             Generate Proposal — {customer.name}
@@ -677,7 +677,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               </div>
 
               {/* Two office columns */}
-              <div className="grid grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Tirana</p>
                   <p className="text-xs text-gray-700">Gjergj Fishta Blvd, F.G.P Bld. Ent. nr. 2, Office 5, 1001, Tirana, Albania.</p>

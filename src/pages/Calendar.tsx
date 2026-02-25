@@ -280,16 +280,18 @@ const MeetingsCalendarPage = () => {
             {selectedDayMeetings.length === 0 ? (
               <div className="text-sm text-muted-foreground">No meetings for this date.</div>
             ) : selectedDayMeetings.map((meeting) => (
-              <div key={meeting.meetingId} className="rounded-md border p-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{meeting.title}</div>
-                  <div className="text-sm text-muted-foreground">{formatDate(meeting.startsAt, true)} • {meeting.assignedTo}</div>
-                  <div className="text-sm text-muted-foreground">{meeting.customerId ? `${customerNames[meeting.customerId] || meeting.customerId}` : "No client/customer linked"}</div>
-                  {meeting.notes && <div className="text-sm mt-1">{meeting.notes}</div>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(meeting)}>Edit</Button>
-                  <Button variant="destructive" size="sm" onClick={() => onDelete(meeting.meetingId)}>Delete</Button>
+              <div key={meeting.meetingId} className="rounded-md border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{meeting.title}</div>
+                    <div className="text-sm text-muted-foreground">{formatDate(meeting.startsAt, true)} • {meeting.assignedTo}</div>
+                    <div className="text-sm text-muted-foreground">{meeting.customerId ? `${customerNames[meeting.customerId] || meeting.customerId}` : "No client/customer linked"}</div>
+                    {meeting.notes && <div className="text-sm mt-1">{meeting.notes}</div>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => onEdit(meeting)}>Edit</Button>
+                    <Button variant="destructive" size="sm" onClick={() => onDelete(meeting.meetingId)}>Delete</Button>
+                  </div>
                 </div>
               </div>
             ))}

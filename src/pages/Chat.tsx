@@ -11,6 +11,7 @@ import {
   Search,
   Users,
   XCircle,
+  ArrowLeft,
 } from "lucide-react";
 import {
   getAllCustomers,
@@ -64,6 +65,9 @@ const Chat = () => {
   // Unread counts per person
   const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
 
+  // Mobile: toggle between people list and chat pane
+  const [mobileShowChat, setMobileShowChat] = useState(false);
+
   // ── Load people list ────────────────────────────────────────────────────────
   const loadPeople = useCallback(async () => {
     try {
@@ -109,6 +113,7 @@ const Chat = () => {
   // ── Select a person ─────────────────────────────────────────────────────────
   const selectPerson = useCallback(async (customerId: string) => {
     setSelectedId(customerId);
+    setMobileShowChat(true);
     setPortalToken(null);
     setPortalLinkCopied(false);
     setChatMessages([]);
@@ -235,7 +240,7 @@ const Chat = () => {
     <MainLayout title="Chat">
       <div className="flex h-[calc(100vh-4.5rem)] overflow-hidden -mx-4 -mt-4 md:-mx-6 md:-mt-6">
         {/* ── Left: person list ─────────────────────────────────────────────── */}
-        <div className="w-64 shrink-0 border-r flex flex-col bg-card">
+        <div className={`border-r flex flex-col bg-card shrink-0 w-full md:w-64 ${mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -289,7 +294,7 @@ const Chat = () => {
         </div>
 
         {/* ── Right: portal link + chat ─────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`flex-col overflow-hidden flex-1 ${mobileShowChat ? 'flex' : 'hidden md:flex'}`}>
           {!selectedId || !selectedPerson ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 text-muted-foreground">
               <MessageSquare className="h-12 w-12 opacity-20" />
@@ -298,7 +303,14 @@ const Chat = () => {
           ) : (
             <>
               {/* Header */}
-              <div className="px-6 py-3 border-b flex items-center gap-3 bg-card shrink-0">
+              <div className="px-3 md:px-6 py-3 border-b flex items-center gap-3 bg-card shrink-0">
+                <button
+                  className="md:hidden flex items-center justify-center h-8 w-8 rounded-full hover:bg-muted shrink-0"
+                  onClick={() => setMobileShowChat(false)}
+                  aria-label="Back to contacts"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
                 <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
                   {selectedPerson.name[0]?.toUpperCase() ?? "?"}
                 </div>
@@ -317,14 +329,14 @@ const Chat = () => {
               </div>
 
               {/* Portal link bar */}
-              <div className="px-6 py-3 border-b bg-muted/30 shrink-0">
+              <div className="px-3 md:px-6 py-2 border-b bg-muted/30 shrink-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium text-muted-foreground">Client Portal Link</span>
+                  <span className="text-xs font-medium text-muted-foreground">Portal Link</span>
 
                   {portalLink ? (
                     <>
-                      <span className="font-mono text-[11px] truncate max-w-xs border rounded px-1.5 py-0.5 bg-background select-all">
+                      <span className="font-mono text-[11px] truncate max-w-[140px] sm:max-w-xs border rounded px-1.5 py-0.5 bg-background select-all">
                         {portalLink}
                       </span>
                       <Button

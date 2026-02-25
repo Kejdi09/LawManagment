@@ -1360,7 +1360,7 @@ const Customers = () => {
               <Label>Title</Label>
               <Input value={consultForm.title} onChange={(e) => setConsultForm((f) => ({ ...f, title: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Start Date &amp; Time <span className="text-destructive">*</span></Label>
                 <Input type="datetime-local" value={consultForm.startsAt} onChange={(e) => setConsultForm((f) => ({ ...f, startsAt: e.target.value }))} />
@@ -1549,13 +1549,13 @@ const Customers = () => {
                         <div className="space-y-1">
                           {customerDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
                           {customerDocuments.map((d) => (
-                            <div key={d.docId} className="flex items-center justify-between gap-2 text-sm rounded-md border p-2">
-                              <div className="truncate" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
-                              <div className="flex items-center gap-2">
+                            <div key={d.docId} className="flex flex-wrap items-center justify-between gap-2 text-sm rounded-md border p-2">
+                              <div className="truncate min-w-0 flex-1" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
+                              <div className="flex items-center gap-1 shrink-0">
                                 <Button variant="outline" size="sm" onClick={() => handlePreviewCustomerDocument(d.docId)}>Preview</Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadCustomerDocument(d.docId, d.originalName || d.filename)}>Download</Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomerDocument(d.docId)} className="text-destructive">
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadCustomerDocument(d.docId, d.originalName || d.filename)}>DL</Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomerDocument(d.docId)} className="text-destructive h-7 w-7">
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
                             </div>

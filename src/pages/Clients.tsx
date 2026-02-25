@@ -299,55 +299,91 @@ const ClientsPage = () => {
       <div className="space-y-4">
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Consultant</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Services</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clients.length === 0 ? (
+            {/* Desktop: scrollable table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <Table className="min-w-[760px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
-                      No confirmed clients yet.
-                    </TableCell>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Consultant</TableHead>
+                    <TableHead>Channel</TableHead>
+                    <TableHead>Services</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  clients.map((client) => (
-                    <TableRow key={client.customerId} className="cursor-pointer" onClick={() => openDetail(client)}>
-                      <TableCell className="font-mono text-xs">{client.customerId}</TableCell>
-                      <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{stripProfessionalTitle(client.assignedTo) || client.assignedTo || "Unassigned"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[client.contactChannel]}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{client.services?.length || 0}</TableCell>
-                      <TableCell className="text-sm">{client.phone}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{client.email}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[client.status]}`}>
-                          {LEAD_STATUS_LABELS[client.status]}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => openEdit(client)}>Edit</Button>
-                          <Button size="sm" variant="destructive" onClick={() => removeClient(client.customerId)}>Delete</Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {clients.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
+                        No confirmed clients yet.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    clients.map((client) => (
+                      <TableRow key={client.customerId} className="cursor-pointer" onClick={() => openDetail(client)}>
+                        <TableCell className="font-mono text-xs">{client.customerId}</TableCell>
+                        <TableCell className="font-medium">{client.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{stripProfessionalTitle(client.assignedTo) || client.assignedTo || "Unassigned"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[client.contactChannel]}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{client.services?.length || 0}</TableCell>
+                        <TableCell className="text-sm">{client.phone}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{client.email}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[client.status]}`}>
+                            {LEAD_STATUS_LABELS[client.status]}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => openEdit(client)}>Edit</Button>
+                            <Button size="sm" variant="destructive" onClick={() => removeClient(client.customerId)}>Delete</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile: card view */}
+            <div className="sm:hidden space-y-2 p-2">
+              {clients.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-6">No confirmed clients yet.</div>
+              ) : (
+                clients.map((client) => (
+                  <button
+                    key={client.customerId}
+                    className="w-full text-left rounded-md border p-3 hover:bg-muted/50 transition-colors"
+                    onClick={() => openDetail(client)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm truncate">{client.name}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{client.customerId}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{stripProfessionalTitle(client.assignedTo) || client.assignedTo || "Unassigned"}</div>
+                        {(client.phone || client.email) && (
+                          <div className="text-xs text-muted-foreground mt-0.5">{client.phone || client.email}</div>
+                        )}
+                      </div>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shrink-0 ${statusAccent[client.status]}`}>
+                        {LEAD_STATUS_LABELS[client.status]}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="outline" onClick={() => openEdit(client)}>Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => removeClient(client.customerId)}>Delete</Button>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -420,13 +456,13 @@ const ClientsPage = () => {
                       <div className="space-y-1">
                         {clientDocuments.length === 0 && (<div className="text-xs text-muted-foreground">No documents</div>)}
                         {clientDocuments.map((d) => (
-                          <div key={d.docId} className="flex items-center justify-between gap-2 text-sm rounded-md border p-2">
-                            <div className="truncate" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
-                            <div className="flex items-center gap-2">
+                          <div key={d.docId} className="flex flex-wrap items-center justify-between gap-2 text-sm rounded-md border p-2">
+                            <div className="truncate min-w-0 flex-1" title={d.originalName || d.filename}>{d.originalName || d.filename}</div>
+                            <div className="flex items-center gap-1 shrink-0">
                               <Button variant="outline" size="sm" onClick={() => handlePreviewClientDocument(d.docId)}>Preview</Button>
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadClientDocument(d.docId, d.originalName || d.filename)}>Download</Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteClientDocument(d.docId)} className="text-destructive">
-                                <Trash2 className="h-4 w-4" />
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadClientDocument(d.docId, d.originalName || d.filename)}>DL</Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteClientDocument(d.docId)} className="text-destructive h-7 w-7">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </div>
@@ -459,7 +495,7 @@ const ClientsPage = () => {
 
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Cases ({selectedCases.length})</CardTitle></CardHeader>
-                    <CardContent className="p-0">
+                    <CardContent className="p-0 overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -635,7 +671,7 @@ const ClientsPage = () => {
                 <Label>Title</Label>
                 <Input value={consultForm.title} onChange={(e) => setConsultForm((f) => ({ ...f, title: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Start Date &amp; Time <span className="text-destructive">*</span></Label>
                   <Input type="datetime-local" value={consultForm.startsAt} onChange={(e) => setConsultForm((f) => ({ ...f, startsAt: e.target.value }))} />

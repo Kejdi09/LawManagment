@@ -436,7 +436,7 @@ export default function ClientPortalPage() {
                   <p className="text-sm">{snap.proposalTitle}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Tirana</p>
                     <p className="text-xs text-gray-700">Gjergj Fishta Blvd, F.G.P Bld. Ent. nr. 2, Office 5, 1001, Tirana, Albania.</p>
