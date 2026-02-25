@@ -1310,10 +1310,19 @@ const Customers = () => {
                                 onClick={async () => {
                                   setResetBotLoading(true);
                                   try {
-                                    const updated = await updateCustomer(selectedCustomer.customerId, { intakeBotReset: true });
+                                    const updated = await updateCustomer(selectedCustomer.customerId, {
+                                      intakeBotReset: true,
+                                      // Clear proposal data so the client portal shows a clean slate
+                                      proposalFields: null,
+                                      proposalSentAt: null,
+                                      proposalSnapshot: null,
+                                      proposalViewedAt: null,
+                                      // Revert status so the cycle starts fresh
+                                      status: "INTAKE",
+                                    });
                                     setSelectedCustomer(updated);
                                     setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-                                    toast({ title: "Intake form reset", description: "The client will be prompted to fill in the intake form again." });
+                                    toast({ title: "Intake form reset", description: "Proposal cleared. The client will be prompted to fill in the intake form again." });
                                   } catch {
                                     toast({ title: "Error", description: "Could not reset intake form.", variant: "destructive" });
                                   } finally {

@@ -7,7 +7,7 @@
  *  - "staff"   (internal): saves directly to the customer record via updateCustomer
  */
 import { useEffect, useRef, useState } from "react";
-import { Bot, MessageSquare, Phone, Send, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Bot, MessageSquare, Phone, Send, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ServiceType, SERVICE_LABELS, ProposalFields } from "@/lib/types";
@@ -31,44 +31,44 @@ interface BotQuestion {
 const COMMON_QUESTIONS: BotQuestion[] = [
   {
     id: "nationality",
-    text: "What is your nationality? (e.g. German, French, Italian…)",
-    placeholder: "e.g. German",
+    text: "What is your nationality?",
+    placeholder: "e.g. Italian, German, Albanian",
   },
   {
     id: "country",
-    text: "What country do you currently live in?",
-    placeholder: "e.g. Germany",
+    text: "What country do you currently reside in?",
+    placeholder: "e.g. Germany, Italy, Albania",
   },
   {
     id: "idPassportNumber",
-    text: "What is your ID or Passport number? (You can skip this — we'll collect it later.)",
+    text: "What is your ID or passport number?",
     placeholder: "e.g. AB1234567",
     optional: true,
-    hint: "You can type 'skip' to leave this for later.",
+    hint: "Optional — type \"skip\" if you prefer to provide this later.",
   },
 ];
 
 const REAL_ESTATE_QUESTIONS: BotQuestion[] = [
   {
     id: "propertyDescription",
-    text: "Please describe the property you are interested in purchasing.\n(e.g. 'a residential apartment in Tirana' or 'a house and garage in Durrës')",
-    placeholder: "e.g. a residential house and garage in Durrës",
+    text: "Please describe the property involved in this transaction.\nInclude the type (e.g. apartment, house, commercial unit), intended use, and approximate location.",
+    placeholder: "e.g. Residential apartment in Tirana, Blloku area",
     onlyFor: ["real_estate"],
   },
   {
     id: "transactionValueEUR",
-    text: "What is the approximate purchase price or investment value in EUR? (Just the number, e.g. 100000)",
-    placeholder: "e.g. 100000",
+    text: "What is the approximate transaction or investment value in EUR? Please enter a number only.",
+    placeholder: "e.g. 95000",
     onlyFor: ["real_estate"],
-    hint: "Type a number in EUR, e.g. 85000",
+    hint: "Enter the value in EUR as a number, e.g. 95000. Type \"skip\" if unknown.",
   },
 ];
 
 const VISA_QUESTIONS: BotQuestion[] = [
   {
     id: "propertyDescription",
-    text: "What is the main reason for your stay / relocation to Albania?",
-    placeholder: "e.g. employment, self-employment, family, retirement, investment…",
+    text: "What is the primary purpose of your stay or relocation to Albania?",
+    placeholder: "e.g. employment, self-employment, family reunification, retirement, investment",
     onlyFor: ["visa_c", "visa_d", "residency_permit"],
   },
 ];
@@ -152,8 +152,8 @@ export default function IntakeBotPanel({
   useEffect(() => {
     const greeting =
       mode === "portal"
-        ? `Hello ${clientName}! 👋 I'm the DAFKU Law Firm intake assistant.\n\nTo help us prepare a personalised proposal for your ${serviceLabelList} service(s), I'll ask you a few quick questions.\n\nYou can type 'skip' to skip any optional question, or type 'help' at any time to reach us on WhatsApp.`
-        : `Staff intake mode for: ${clientName}.\n\nServices: ${serviceLabelList}.\n\nPlease answer the following questions to fill in the proposal fields. Type 'skip' to skip optional fields.`;
+        ? `Good day, ${clientName}. Welcome to the DAFKU Law Firm client intake process.\n\nTo prepare a tailored proposal for your ${serviceLabelList} service(s), we will guide you through a brief set of questions. This should only take a few minutes.\n\nPlease answer each question as accurately as possible. You may type "skip" to pass any optional question, or type "help" to reach our team directly on WhatsApp.`
+        : `Staff intake — ${clientName}\nServices: ${serviceLabelList}\n\nPlease answer each question to complete the proposal fields. Type "skip" to omit optional fields.`;
     setMessages([botMsg(greeting)]);
     // Ask the first question after a short delay
     setTimeout(() => {
@@ -186,14 +186,14 @@ export default function IntakeBotPanel({
   }
 
   function buildSummaryText(rawAnswers: Record<string, string>): string {
-    const lines = [`📋 INTAKE SUMMARY — ${clientName}`, `Services: ${serviceLabelList}`, ""];
+    const lines = [`INTAKE SUMMARY — ${clientName}`, `Services: ${serviceLabelList}`, ""];
     for (const q of questions) {
       const answer = rawAnswers[q.id];
       if (answer && answer.toLowerCase() !== "skip") {
-        lines.push(`• ${q.text.split("\n")[0].replace(/\?$/, "")}: ${answer}`);
+        lines.push(`- ${q.text.split("\n")[0].replace(/\?$/, "")}: ${answer}`);
       }
     }
-    lines.push("\n✅ Submitted via intake bot. Ready for proposal generation.");
+    lines.push("\nSubmitted via intake form. Ready for proposal preparation.");
     return lines.join("\n");
   }
 
@@ -207,7 +207,7 @@ export default function IntakeBotPanel({
         const updated = await updateCustomer(customerId, { proposalFields: fields as ProposalFields });
         setMessages((prev) => [
           ...prev,
-          botMsg("✅ All done! The answers have been saved to the customer record. You can now generate the proposal from the customer detail panel."),
+          botMsg("All done. The answers have been saved to the client record. You may now generate the proposal from the customer detail panel."),
         ]);
         toast({ title: "Intake saved", description: "Proposal fields updated on customer record." });
         onComplete?.(fields);
@@ -216,7 +216,7 @@ export default function IntakeBotPanel({
         toast({ title: "Save failed", variant: "destructive" });
         setMessages((prev) => [
           ...prev,
-          botMsg("⚠️ There was an issue saving the data. Please try the 'Edit Fields' form in the proposal generator."),
+          botMsg("There was an issue saving the data. Please use the \"Edit Fields\" form in the proposal generator to enter the information manually."),
         ]);
       } finally {
         setSaving(false);
@@ -225,7 +225,7 @@ export default function IntakeBotPanel({
       const summary = buildSummaryText(rawAnswers);
       setMessages((prev) => [
         ...prev,
-        botMsg("✅ Thank you! Your answers have been submitted to the DAFKU Law Firm team. We will prepare your personalised proposal and get back to you shortly.\n\nIf you have any questions in the meantime, feel free to message us below or contact us on WhatsApp."),
+        botMsg(`Thank you, ${clientName}. Your information has been submitted to the DAFKU Law Firm team.\n\nWe will review your answers and prepare a personalised proposal for you. You can expect to hear from us shortly.\n\nIf you have any immediate questions, please use the Messages tab or contact us directly on WhatsApp.`),
       ]);
       onSendSummaryMessage?.(summary);
       onComplete?.(fields);
@@ -242,7 +242,7 @@ export default function IntakeBotPanel({
       setMessages((prev) => [
         ...prev,
         userMsg(text),
-        botMsg(`For immediate assistance, please contact us on WhatsApp: ${WHATSAPP_NUMBER}\nOr click the button below to open a chat.`),
+        botMsg(`For immediate assistance, please contact us directly on WhatsApp: ${WHATSAPP_NUMBER}\n\nA member of our team will be happy to help you.`),
       ]);
       setShowWhatsApp(true);
       return;
@@ -260,7 +260,7 @@ export default function IntakeBotPanel({
         setMessages((prev) => [
           ...prev,
           userMsg(text),
-          botMsg("Please enter a valid number (e.g. 100000). You can type 'skip' to leave this for later."),
+          botMsg('Please enter a valid number in EUR (e.g. 95000). Type "skip" if you prefer to provide this information later.'),
         ]);
         return;
       }
@@ -279,7 +279,7 @@ export default function IntakeBotPanel({
       setTimeout(() => {
         setMessages((prev) => [
           ...prev,
-          botMsg("Great, that's all the information I need! Let me save your answers now…"),
+          botMsg("Thank you. That is all the information we need. Please allow a moment while we process your answers."),
         ]);
         setTimeout(() => finishIntake(newAnswers), 800);
       }, 400);
@@ -303,7 +303,7 @@ export default function IntakeBotPanel({
       <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 shrink-0">
         <Bot className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold">
-          {mode === "portal" ? "Intake Assistant — DAFKU Law Firm" : "Staff Intake Bot"}
+          {mode === "portal" ? "Client Intake — DAFKU Law Firm" : "Staff Intake Form"}
         </span>
         {done && <CheckCircle2 className="h-3.5 w-3.5 text-green-600 ml-auto" />}
       </div>
@@ -350,10 +350,9 @@ export default function IntakeBotPanel({
         {/* Progress hint while active */}
         {!done && currentQuestion && (
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pl-8">
-            <AlertTriangle className="h-3 w-3 opacity-40" />
-            Question {currentStep + 1} of {questions.length}
-            {currentQuestion.optional && " · optional — type 'skip' to continue"}
-            {currentQuestion.hint && ` · ${currentQuestion.hint}`}
+            <span>Step {currentStep + 1} of {questions.length}</span>
+            {currentQuestion.optional && <span className="opacity-70">· optional</span>}
+            {currentQuestion.hint && <span className="opacity-70">· {currentQuestion.hint}</span>}
           </div>
         )}
 
@@ -389,7 +388,7 @@ export default function IntakeBotPanel({
       ) : (
         <div className="border-t px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 shrink-0">
           <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-          Intake complete. You can close this panel.
+          Intake complete.
           {mode === "portal" && (
             <span>
               {" "}·{" "}
@@ -468,14 +467,14 @@ export function IntakeBotSection({
           {completed ? (
             <div className="p-4 text-sm text-muted-foreground flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-              Thank you! Your information has been submitted. Our team will prepare your proposal shortly.
+              Your information has been submitted. Our team will prepare your proposal and be in touch shortly.
               <a
                 href={WHATSAPP_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 underline decoration-dotted text-primary hover:text-primary/80"
               >
-                WhatsApp us
+                Contact us on WhatsApp
               </a>
             </div>
           ) : (
