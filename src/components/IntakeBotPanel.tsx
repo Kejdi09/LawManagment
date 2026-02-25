@@ -415,13 +415,20 @@ export function IntakeBotSection({
   services,
   clientName,
   onSendSummaryMessage,
+  storageKey,
 }: {
   services: ServiceType[];
   clientName?: string;
   onSendSummaryMessage?: (text: string) => void;
+  /** localStorage key to persist completion across refreshes (e.g. portal token) */
+  storageKey?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const lsKey = storageKey ? `portal_intake_done_${storageKey}` : null;
+  const [completed, setCompleted] = useState(() => {
+    if (!lsKey) return false;
+    try { return localStorage.getItem(lsKey) === "1"; } catch { return false; }
+  });
 
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -465,7 +472,10 @@ export function IntakeBotSection({
                 mode="portal"
                 fillHeight={false}
                 onSendSummaryMessage={onSendSummaryMessage}
-                onComplete={() => setCompleted(true)}
+                onComplete={() => {
+                  if (lsKey) { try { localStorage.setItem(lsKey, "1"); } catch {} }
+                  setCompleted(true);
+                }}
               />
             </div>
           )}

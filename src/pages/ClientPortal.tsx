@@ -4,12 +4,13 @@ import { getPortalData, getPortalChatByToken, sendPortalMessage } from "@/lib/ca
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { IntakeBotSection } from "@/components/IntakeBotPanel";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -236,14 +237,19 @@ export default function ClientPortalPage() {
     );
   }
 
+  const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
+  // Unread indicator: any lawyer messages newer than the last visit
+  const hasNewMessages = chatMessages.some((m) => m.senderType === "lawyer" && !m.readByLawyer);
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Sticky header */}
+      <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-10 shrink-0">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <FileText className="h-5 w-5 text-primary" />
+          <FileText className="h-5 w-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Dafku Law Firm � Case Portal</div>
-            <div className="text-xs text-muted-foreground">Read-only view for {data.client.name}</div>
+            <div className="font-semibold text-sm">DAFKU Law Firm — Client Portal</div>
+            <div className="text-xs text-muted-foreground truncate">{data.client.name}</div>
           </div>
           {data.expiresAt && (
             <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
@@ -254,85 +260,140 @@ export default function ClientPortalPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{data.client.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex gap-2 flex-wrap">
-              {(data.client.services || []).map((s: ServiceType) => (
-                <Badge key={s} variant="secondary">{SERVICE_LABELS[s] || s}</Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-3">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-            Your Cases ({data.cases.length})
-          </h2>
-          {data.cases.length === 0 && (
-            <Card>
-              <CardContent className="py-6 text-sm text-muted-foreground text-center">
-                No active cases at this time.
-              </CardContent>
-            </Card>
-          )}
-          {data.cases.map((c) => (
-            <CaseCard key={c.caseId} c={c} history={data.history} />
+      {/* Services banner */}
+      <div className="border-b bg-muted/30 shrink-0">
+        <div className="max-w-3xl mx-auto px-4 py-2 flex gap-2 flex-wrap">
+          {(data.client.services || []).map((s: ServiceType) => (
+            <Badge key={s} variant="secondary" className="text-xs">{SERVICE_LABELS[s] || s}</Badge>
           ))}
         </div>
+      </div>
 
-        {/* Intake bot — shown if the customer is in a proposal-relevant status */}
-        {(data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE") && (
-          <div className="space-y-2">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              📋 Prepare Your Proposal
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Help us prepare a personalised service proposal by answering a few quick questions below.
+      {/* Tabs */}
+      <div className="flex-1 max-w-3xl w-full mx-auto px-4 pt-4 pb-8">
+        <Tabs defaultValue={showIntakeTab ? "intake" : "status"} className="flex flex-col gap-0">
+          <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: showIntakeTab ? "1fr 1fr 1fr" : "1fr 1fr" }}>
+            <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
+              <FileText className="h-3.5 w-3.5" /> Status
+            </TabsTrigger>
+            {showIntakeTab && (
+              <TabsTrigger value="intake" className="flex items-center gap-1.5 text-xs">
+                <ClipboardList className="h-3.5 w-3.5" /> Intake Form
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs relative">
+              <MessageSquare className="h-3.5 w-3.5" /> Messages
+              {hasNewMessages && (
+                <span className="absolute top-1 right-2 h-2 w-2 rounded-full bg-blue-500" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── STATUS TAB ── */}
+          <TabsContent value="status" className="space-y-4 mt-0">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">{data.client.name}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Services</span>
+                  <div className="flex gap-2 flex-wrap mt-1">
+                    {(data.client.services || []).map((s: ServiceType) => (
+                      <Badge key={s} variant="secondary">{SERVICE_LABELS[s] || s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-3">
+              <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                Your Cases ({data.cases.length})
+              </h2>
+              {data.cases.length === 0 && (
+                <Card>
+                  <CardContent className="py-6 text-sm text-muted-foreground text-center">
+                    No active cases at this time.
+                  </CardContent>
+                </Card>
+              )}
+              {data.cases.map((c) => (
+                <CaseCard key={c.caseId} c={c} history={data.history} />
+              ))}
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground pt-2 border-t">
+              For questions, use the Messages tab or contact us on WhatsApp: +355 69 62 71 692
             </p>
-            <IntakeBotSection
-              services={data.client.services || []}
-              clientName={data.client.name}
-              onSendSummaryMessage={async (text) => {
-                if (!token) return;
-                try {
-                  const msg = await sendPortalMessage(token, text);
-                  setChatMessages((prev) => [...prev, msg]);
-                } catch {
-                  // non-blocking
-                }
-              }}
+          </TabsContent>
+
+          {/* ── INTAKE TAB ── */}
+          {showIntakeTab && (
+            <TabsContent value="intake" className="mt-0 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Please answer the questions below so our team can prepare a personalised proposal for you.
+                This only takes a few minutes and you only need to do it once.
+              </p>
+              <IntakeBotSection
+                services={data.client.services || []}
+                clientName={data.client.name}
+                storageKey={token}
+                onSendSummaryMessage={async (text) => {
+                  if (!token) return;
+                  try {
+                    const msg = await sendPortalMessage(token, text);
+                    setChatMessages((prev) => [...prev, msg]);
+                  } catch { /* non-blocking */ }
+                }}
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                Need immediate help?{" "}
+                <a
+                  href="https://wa.me/355696271692"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted hover:text-foreground"
+                >
+                  Contact us on WhatsApp
+                </a>
+                {" "}(+355 69 62 71 692)
+              </p>
+            </TabsContent>
+          )}
+
+          {/* ── MESSAGES TAB ── */}
+          <TabsContent value="messages" className="mt-0 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Send a message directly to your lawyer. You can send up to 3 messages in a row before waiting for a reply.
+              {linkExpired && " This link has expired — message history is preserved but you cannot send new messages."}
+            </p>
+            <PortalChatPanel
+              messages={chatMessages}
+              text={chatText}
+              onTextChange={setChatText}
+              onSend={handleSendChat}
+              sending={chatSending}
+              isAdmin={false}
+              trailingClientCount={trailingClientCount}
+              linkExpired={linkExpired}
+              fillHeight={false}
             />
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" /> Chat with Your Lawyer
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            You can send up to 3 consecutive messages. After that, you must wait for your lawyer to reply.
-            {linkExpired && " Your link has expired — message history is shown but new messages are disabled."}
-          </p>
-          <PortalChatPanel
-            messages={chatMessages}
-            text={chatText}
-            onTextChange={setChatText}
-            onSend={handleSendChat}
-            sending={chatSending}
-            isAdmin={false}
-            trailingClientCount={trailingClientCount}
-            linkExpired={linkExpired}
-          />
-        </div>
-
-        <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-          This page is read-only and provided for your information. For any questions, contact your lawyer directly.
-        </div>
-      </main>
+            <p className="text-xs text-muted-foreground text-center">
+              For urgent matters, reach us directly on WhatsApp:{" "}
+              <a
+                href="https://wa.me/355696271692"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-dotted hover:text-foreground"
+              >
+                +355 69 62 71 692
+              </a>
+            </p>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }
+

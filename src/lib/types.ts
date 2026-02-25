@@ -89,6 +89,10 @@ export interface Customer {
   notes?: string;
   /** Proposal-specific fields filled via intake bot or manually by staff */
   proposalFields?: ProposalFields;
+  /** ISO timestamp of when the proposal was formally sent to the client */
+  proposalSentAt?: string;
+  /** Snapshot of the proposal fields at the time it was sent */
+  proposalSnapshot?: ProposalFields;
   /** Nationality – synced from proposalFields for convenience */
   nationality?: string;
   /** Country of origin / current residence */

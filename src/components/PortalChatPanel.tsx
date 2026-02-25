@@ -50,10 +50,12 @@ export function PortalChatPanel({
   loading = false,
   fillHeight = false,
 }: PortalChatPanelProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Scroll the message list container — NOT the whole page
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   const clientCapped = !isAdmin && trailingClientCount >= maxConsecutive;
@@ -66,7 +68,7 @@ export function PortalChatPanel({
       style={fillHeight ? undefined : { height: 340 }}
     >
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {loading && (
           <div className="flex items-center justify-center py-6">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -134,7 +136,6 @@ export function PortalChatPanel({
               </div>
             );
           })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Status banners */}

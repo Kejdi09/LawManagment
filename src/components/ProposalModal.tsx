@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Printer, Save } from "lucide-react";
+import { Printer, Save, Send } from "lucide-react";
 import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/types";
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
@@ -353,9 +353,10 @@ interface ProposalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: (updated: Customer) => void;
+  onSent?: (updated: Customer) => void;
 }
 
-export default function ProposalModal({ customer, open, onOpenChange, onSaved }: ProposalModalProps) {
+export default function ProposalModal({ customer, open, onOpenChange, onSaved, onSent }: ProposalModalProps) {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -416,6 +417,24 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved }:
       onSaved?.(updated);
     } catch {
       toast({ title: "Save failed", description: "Could not save proposal fields.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSendProposal() {
+    setSaving(true);
+    try {
+      const updated = await updateCustomer(customer.customerId, {
+        proposalFields: fields,
+        proposalSentAt: new Date().toISOString(),
+        proposalSnapshot: fields,
+      });
+      toast({ title: "Proposal sent", description: "The proposal has been marked as sent and saved to the customer record." });
+      onSent?.(updated);
+      onOpenChange(false);
+    } catch {
+      toast({ title: "Failed to send", description: "Could not send the proposal.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -621,9 +640,13 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved }:
             </div>
 
             <div className="flex gap-2 mt-6">
-              <Button onClick={handleSave} disabled={saving}>
+              <Button variant="outline" onClick={handleSave} disabled={saving}>
                 <Save className="h-4 w-4 mr-1.5" />
-                {saving ? "Saving…" : "Save to Customer Record"}
+                {saving ? "Saving…" : "Save Draft"}
+              </Button>
+              <Button onClick={handleSendProposal} disabled={saving}>
+                <Send className="h-4 w-4 mr-1.5" />
+                {saving ? "Sending…" : "Send Proposal"}
               </Button>
             </div>
           </TabsContent>
