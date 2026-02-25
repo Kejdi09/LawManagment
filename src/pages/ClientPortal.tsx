@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage } from "@/lib/case-store";
+import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields } from "@/lib/case-store";
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { IntakeBotSection } from "@/components/IntakeBotPanel";
 import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, Printer,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -37,13 +37,6 @@ const STATE_COLOR: Record<string, string> = {
   WAITING_RESPONSE_C: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   WAITING_AUTHORITIES: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   default: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-};
-
-const PRIORITY_PORTAL: Record<string, string> = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200",
-  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200",
-  low: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
 };
 
 function stateColor(state: string) {
@@ -76,11 +69,6 @@ function CaseCard({ c, history }: {
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${stateColor(c.state)}`}>
               {STATE_LABELS[c.state] || c.state}
             </span>
-            {c.priority && (
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${PRIORITY_PORTAL[c.priority] || PRIORITY_PORTAL.medium}`}>
-                {c.priority.charAt(0).toUpperCase() + c.priority.slice(1)} priority
-              </span>
-            )}
             {isWaitingClient && (
               <span className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" /> Action required
@@ -146,7 +134,6 @@ export default function ClientPortalPage() {
   const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const printProposalRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
 
   // Load portal data
@@ -218,42 +205,6 @@ export default function ClientPortalPage() {
       setChatSending(false);
     }
   };
-
-  function handlePrintProposal() {
-    const content = printProposalRef.current;
-    if (!content || !data) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head>
-      <title>Service Proposal \u2014 ${data.client.name}</title>
-      <meta charset="utf-8"/>
-      <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
-        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
-        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
-        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
-        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
-        .cover-block p { margin: 3px 0; font-size: 13px; }
-        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
-        p { font-size: 13px; margin: 6px 0; }
-        ul { font-size: 13px; padding-left: 22px; margin: 4px 0; }
-        li { margin-bottom: 2px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; }
-        th { background: #f0f0f0; border: 1px solid #ccc; padding: 7px 10px; text-align: left; }
-        td { border: 1px solid #ccc; padding: 7px 10px; }
-        .right { text-align: right; }
-        .mono { font-family: monospace; }
-        .total-row { background: #f0f0f0; font-weight: bold; }
-        .final-row { background: #e0e0e0; font-weight: bold; }
-        .footer { border-top: 1px solid #ddd; margin-top: 40px; padding-top: 12px; text-align: center; font-size: 11px; color: #888; }
-        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
-      </style>
-    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
-    win.document.close();
-    setTimeout(() => { win.print(); }, 500);
-  }
 
   const trailingClientCount = countTrailingClient(chatMessages);
 
@@ -411,6 +362,10 @@ export default function ClientPortalPage() {
                     setChatMessages((prev) => [...prev, msg]);
                   } catch { /* non-blocking */ }
                 }}
+                onComplete={async (fields) => {
+                  if (!token) return;
+                  try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
+                }}
               />
               <p className="text-xs text-muted-foreground text-center">
                 Need immediate help?{" "}
@@ -430,14 +385,7 @@ export default function ClientPortalPage() {
           {/* ── PROPOSAL TAB ── */}
           {showProposalTab && snap && pServiceContent && (
             <TabsContent value="proposal" className="mt-0 space-y-3">
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handlePrintProposal}>
-                  <Printer className="h-3.5 w-3.5" /> Print / Save as PDF
-                </Button>
-              </div>
-
               <div
-                ref={printProposalRef}
                 className="bg-white text-gray-900 rounded-lg border shadow-sm p-8 font-serif text-[13px] leading-relaxed"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >

@@ -416,12 +416,15 @@ export function IntakeBotSection({
   clientName,
   onSendSummaryMessage,
   storageKey,
+  onComplete,
 }: {
   services: ServiceType[];
   clientName?: string;
   onSendSummaryMessage?: (text: string) => void;
   /** localStorage key to persist completion across refreshes (e.g. portal token) */
   storageKey?: string;
+  /** Called when intake is finished, receives the collected proposal fields */
+  onComplete?: (fields: Partial<ProposalFields>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const lsKey = storageKey ? `portal_intake_done_${storageKey}` : null;
@@ -472,9 +475,10 @@ export function IntakeBotSection({
                 mode="portal"
                 fillHeight={false}
                 onSendSummaryMessage={onSendSummaryMessage}
-                onComplete={() => {
+                onComplete={(fields) => {
                   if (lsKey) { try { localStorage.setItem(lsKey, "1"); } catch {} }
                   setCompleted(true);
+                  onComplete?.(fields);
                 }}
               />
             </div>

@@ -437,6 +437,18 @@ export async function getPortalChatByToken(token: string): Promise<{ expired: bo
   return res.json();
 }
 
+export async function savePortalIntakeFields(token: string, fields: Partial<import("./types").ProposalFields>): Promise<void> {
+  const res = await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/intake`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proposalFields: fields }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+}
+
 export async function sendPortalMessage(token: string, text: string): Promise<PortalMessage> {
   const res = await fetch(`${API_URL}/api/portal/chat/${encodeURIComponent(token)}`, {
     method: "POST",

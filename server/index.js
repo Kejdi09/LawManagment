@@ -2056,6 +2056,31 @@ app.post('/api/portal/chat/:token', async (req, res) => {
   res.status(201).json({ messageId: msg.messageId, text: msg.text, senderType: msg.senderType, senderName: msg.senderName, createdAt: msg.createdAt });
 });
 
+// Save intake/proposal fields from portal (token-based, no auth required)
+app.post('/api/portal/:token/intake', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
+  const { proposalFields } = req.body;
+  if (!proposalFields || typeof proposalFields !== 'object') return res.status(400).json({ error: 'proposalFields required' });
+  const setFields = { proposalFields };
+  if (proposalFields.nationality) setFields.nationality = proposalFields.nationality;
+  if (proposalFields.country) setFields.country = proposalFields.country;
+  // Try customers collection first, then confirmed clients
+  const custResult = await customersCol.findOneAndUpdate(
+    { customerId: tokenDoc.customerId },
+    { $set: setFields },
+    { returnDocument: 'after' }
+  );
+  if (!custResult) {
+    await confirmedClientsCol.updateOne(
+      { customerId: tokenDoc.customerId },
+      { $set: setFields }
+    );
+  }
+  res.json({ ok: true });
+});
+
 // ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────
 // IMPORTANT: specific routes (/unread-counts) must come BEFORE parameterised routes (/:customerId)
 
