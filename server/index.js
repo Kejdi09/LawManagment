@@ -1983,6 +1983,7 @@ app.post('/api/meetings', verifyAuth, async (req, res) => {
     startsAt: parsedStarts.toISOString(),
     endsAt: req.body?.endsAt ? new Date(req.body.endsAt).toISOString() : null,
     assignedTo: assignedToRaw,
+    location: String(req.body?.location || '').trim().slice(0, 200) || null,
     notes: String(req.body?.notes || '').trim().slice(0, 2000),
     status: String(req.body?.status || 'scheduled').slice(0, 40),
     createdBy: req.user?.username || null,
@@ -2393,6 +2394,74 @@ app.post('/api/portal/:token/proposal-viewed', async (req, res) => {
     );
   }
   res.json({ ok: true });
+});
+
+// Client responds to proposal: accept → advance to SEND_CONTRACT; revision → post chat message
+app.post('/api/portal/:token/respond-proposal', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  const { action, note } = req.body; // action: 'accept' | 'revision'
+  if (!['accept', 'revision'].includes(action)) return res.status(400).json({ error: 'action must be accept or revision' });
+
+  const customer = await customersCol.findOne({ customerId: tokenDoc.customerId });
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+  if (action === 'accept') {
+    if (!['WAITING_APPROVAL', 'SEND_PROPOSAL'].includes(customer.status)) {
+      return res.status(400).json({ error: 'Proposal is not awaiting response' });
+    }
+    const now = new Date().toISOString();
+    await customersCol.updateOne(
+      { customerId: customer.customerId },
+      { $set: { status: 'SEND_CONTRACT', proposalAcceptedAt: now } }
+    );
+    await customerHistoryCol.insertOne({
+      historyId: genShortId('CH'),
+      customerId: customer.customerId,
+      statusFrom: customer.status,
+      statusTo: 'SEND_CONTRACT',
+      date: now,
+      changedBy: 'portal-client',
+      changedByRole: 'client',
+      changedByConsultant: null,
+      changedByLawyer: null,
+    });
+    // Post acceptance note to portal chat if provided
+    if (note && note.trim()) {
+      await portalMessagesCol.insertOne({
+        messageId: genShortId('MSG'),
+        customerId: customer.customerId,
+        text: `[Proposal Accepted] ${note.trim()}`,
+        senderType: 'client',
+        readByStaff: false,
+        readByClient: true,
+        timestamp: now,
+      });
+    }
+    sendEmail({
+      to: process.env.ADMIN_EMAIL,
+      subject: `Proposal accepted — ${customer.name}`,
+      text: `${customer.name} has accepted the proposal via the client portal.\n\nStatus advanced to "Send Contract". Please prepare and send the contract.`,
+    });
+    return res.json({ ok: true, status: 'SEND_CONTRACT' });
+  }
+
+  if (action === 'revision') {
+    const now = new Date().toISOString();
+    const text = note?.trim()
+      ? `[Revision Request] ${note.trim()}`
+      : '[Revision Request] The client has requested revisions to the proposal.';
+    await portalMessagesCol.insertOne({
+      messageId: genShortId('MSG'),
+      customerId: customer.customerId,
+      text,
+      senderType: 'client',
+      readByStaff: false,
+      readByClient: true,
+      timestamp: now,
+    });
+    return res.json({ ok: true });
+  }
 });
 
 // ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────

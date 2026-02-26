@@ -1,12 +1,20 @@
-import { Case, CaseStage, STAGE_LABELS } from "@/lib/types";
+import { Case, CaseStage, STAGE_LABELS, ALL_STAGES, Priority, PRIORITY_CONFIG } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isPast } from "date-fns";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { Clock } from "lucide-react";
+
+const PRIORITY_DOT: Record<Priority, string> = {
+  urgent: "bg-red-500",
+  high:   "bg-orange-400",
+  medium: "bg-amber-400",
+  low:    "bg-emerald-400",
+};
 
 interface CaseTableProps {
   state: CaseStage;
@@ -15,9 +23,10 @@ interface CaseTableProps {
   customerNames?: Record<string, string>;
   showMoreColumns?: boolean;
   personLabel?: string;
+  onQuickStateChange?: (caseId: string, newState: string) => void;
 }
 
-export function CaseTable({ state, cases, onSelectCase, customerNames = {}, showMoreColumns = false, personLabel = "Person" }: CaseTableProps) {
+export function CaseTable({ state, cases, onSelectCase, customerNames = {}, showMoreColumns = false, personLabel = "Person", onQuickStateChange }: CaseTableProps) {
   if (cases.length === 0) return null;
 
   return (
@@ -31,7 +40,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
       <CardContent className="p-0">
         {/* Desktop / tablet: full table */}
         <div className="hidden sm:block overflow-x-auto">
-          <Table className={showMoreColumns ? "min-w-[1150px]" : "min-w-[860px]"}>
+          <Table className={showMoreColumns ? "min-w-[1250px]" : "min-w-[920px]"}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[110px]">Case ID</TableHead>
@@ -41,6 +50,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                 <TableHead className="w-[110px]">Assigned</TableHead>
                 <TableHead className="w-[160px]">Due</TableHead>
                 {showMoreColumns && <TableHead className="w-[90px]">Docs</TableHead>}
+                {onQuickStateChange && <TableHead className="w-[160px]">Move to</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -48,6 +58,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                 const customerName = customerNames[c.customerId];
                 const overdue = c.deadline && isPast(new Date(c.deadline));
                 const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
+                const priority = (c.priority as Priority) || "medium";
                 const rowClassName = overdue
                   ? "bg-destructive/10 border-l-4 border-l-destructive"
                   : dueSoon
@@ -74,9 +85,20 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                       <div className="text-xs text-muted-foreground font-mono">{c.customerId}</div>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {c.title
-                        ? <span className="text-sm">{c.title}</span>
-                        : <span className="text-xs text-muted-foreground">—</span>}
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-block w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[priority]}`}
+                          title={PRIORITY_CONFIG[priority]?.label ?? priority}
+                        />
+                        {c.title
+                          ? <span className="text-sm">{c.title}</span>
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </div>
+                      <div className="mt-0.5 ml-4">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${PRIORITY_CONFIG[priority]?.color ?? ""}`}>
+                          {PRIORITY_CONFIG[priority]?.label ?? priority}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.category}{c.subcategory ? ` / ${c.subcategory}` : ""}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{stripProfessionalTitle(c.assignedTo) || c.assignedTo || "—"}</TableCell>
@@ -85,6 +107,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                         <span className={`flex items-center gap-1 ${overdue ? "text-destructive" : dueSoon ? "text-amber-700" : "text-muted-foreground"}`}>
                           <Clock className="h-3 w-3" />
                           {formatDate(c.deadline)}
+                          {overdue && <span className="text-[10px] font-semibold text-destructive ml-0.5">Overdue</span>}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">No deadline</span>
@@ -95,6 +118,23 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.documentState === "missing" ? "bg-destructive/10 text-destructive" : "bg-green-100 text-green-700"}`}>
                           {c.documentState === "missing" ? "Missing" : "OK"}
                         </span>
+                      </TableCell>
+                    )}
+                    {onQuickStateChange && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={c.state}
+                          onValueChange={(v) => onQuickStateChange(c.caseId, v)}
+                        >
+                          <SelectTrigger className="h-7 text-xs w-[150px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ALL_STAGES.map((s) => (
+                              <SelectItem key={s} value={s} className="text-xs">{STAGE_LABELS[s]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                     )}
                   </TableRow>
@@ -110,6 +150,7 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
             const customerName = customerNames[c.customerId];
             const overdue = c.deadline && isPast(new Date(c.deadline));
             const dueSoon = !!c.deadline && !overdue && (new Date(c.deadline).getTime() - Date.now()) <= 48 * 60 * 60 * 1000;
+            const priority = (c.priority as Priority) || "medium";
             const rowClassName = overdue
               ? "bg-destructive/10 border-l-4 border-l-destructive"
               : dueSoon
@@ -119,11 +160,33 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
               <button key={c.caseId} onClick={() => onSelectCase(c.caseId)} className={`w-full text-left rounded-md p-3 border ${rowClassName}`}>
                 <div className="flex items-start gap-3">
                   <div className="font-mono text-xs font-medium">{c.caseId}</div>
-                  <div className="flex-1">
-                    <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[priority]}`} />
+                      <div className="font-medium text-sm truncate">{customerName ?? c.customerId}</div>
+                    </div>
                     <div className="text-xs text-muted-foreground font-mono">{c.customerId}</div>
                     {c.title && <div className="text-xs font-medium mt-0.5 truncate">{c.title}</div>}
-                    <div className="mt-2 text-xs text-muted-foreground ml-auto">{c.deadline ? formatDate(c.deadline) : 'No deadline'}</div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${PRIORITY_CONFIG[priority]?.color ?? ""}`}>
+                        {PRIORITY_CONFIG[priority]?.label ?? priority}
+                      </span>
+                      <div className="text-xs text-muted-foreground">{c.deadline ? formatDate(c.deadline) : "No deadline"}</div>
+                    </div>
+                    {onQuickStateChange && (
+                      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                        <Select value={c.state} onValueChange={(v) => onQuickStateChange(c.caseId, v)}>
+                          <SelectTrigger className="h-6 text-[11px] w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ALL_STAGES.map((s) => (
+                              <SelectItem key={s} value={s} className="text-xs">{STAGE_LABELS[s]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </button>
@@ -134,3 +197,4 @@ export function CaseTable({ state, cases, onSelectCase, customerNames = {}, show
     </Card>
   );
 }
+

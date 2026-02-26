@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed } from "@/lib/case-store";
+import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal } from "@/lib/case-store";
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,9 +10,10 @@ import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { IntakeBotSection } from "@/components/IntakeBotPanel";
 import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
+import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -133,6 +134,11 @@ export default function ClientPortalPage() {
   const [chatText, setChatText] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
+  // Proposal response state
+  const [proposalResponding, setProposalResponding] = useState(false);
+  const [proposalRespondDone, setProposalRespondDone] = useState<"accepted" | "revision" | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [showRevisionForm, setShowRevisionForm] = useState(false);
   // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
   const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -566,7 +572,89 @@ export default function ClientPortalPage() {
                 </a>
                 {" "}(+355 69 69 52 989)
               </p>
-            </TabsContent>
+              {/* ── Proposal Accept / Revision ── */}
+              {(data.client.status === "SEND_PROPOSAL" || data.client.status === "WAITING_APPROVAL") && (
+                <div className="mt-6 border-t pt-5">
+                  {proposalRespondDone === "accepted" && (
+                    <div className="flex items-center gap-2 justify-center text-green-700 dark:text-green-400 font-medium text-sm">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Proposal accepted — your lawyer has been notified.
+                    </div>
+                  )}
+                  {proposalRespondDone === "revision" && (
+                    <div className="flex items-center gap-2 justify-center text-amber-700 dark:text-amber-400 font-medium text-sm">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Revision request sent — we&apos;ll be in touch shortly.
+                    </div>
+                  )}
+                  {!proposalRespondDone && (
+                    <>
+                      <p className="text-sm font-medium text-center mb-4">Ready to proceed?</p>
+                      {!showRevisionForm ? (
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                          <Button
+                            className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                            disabled={proposalResponding}
+                            onClick={async () => {
+                              if (!token) return;
+                              setProposalResponding(true);
+                              try {
+                                await respondToProposal(token, "accept");
+                                setProposalRespondDone("accepted");
+                              } finally {
+                                setProposalResponding(false);
+                              }
+                            }}
+                          >
+                            <ThumbsUp className="w-4 h-4" />
+                            Accept Proposal
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="gap-2"
+                            disabled={proposalResponding}
+                            onClick={() => setShowRevisionForm(true)}
+                          >
+                            <PenLine className="w-4 h-4" />
+                            Request Revisions
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-w-lg mx-auto">
+                          <p className="text-sm text-muted-foreground">Describe what you&apos;d like adjusted:</p>
+                          <Textarea
+                            placeholder="e.g. Please clarify the timeline for step 2…"
+                            value={revisionNote}
+                            onChange={(e) => setRevisionNote(e.target.value)}
+                            rows={3}
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <Button variant="ghost" size="sm" onClick={() => setShowRevisionForm(false)}>
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={proposalResponding || !revisionNote.trim()}
+                              onClick={async () => {
+                                if (!token) return;
+                                setProposalResponding(true);
+                                try {
+                                  await respondToProposal(token, "revision", revisionNote.trim());
+                                  setProposalRespondDone("revision");
+                                } finally {
+                                  setProposalResponding(false);
+                                }
+                              }}
+                            >
+                              Send Request
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}            </TabsContent>
           )}
 
           {/* ── MESSAGES TAB ── */}

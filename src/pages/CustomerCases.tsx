@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useMemo, useEffect } from "react";
-import { getAllCases, searchCases, createCase, getAllCustomers } from "@/lib/case-store";
+import { getAllCases, searchCases, createCase, getAllCustomers, updateCase } from "@/lib/case-store";
 import { ALL_STAGES, Priority, INTAKE_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
@@ -202,6 +202,15 @@ const CustomerCases = () => {
     });
     setCaseList(filtered);
   }, [query, docFilter]);
+
+  const handleQuickStateChange = useCallback(async (caseId: string, newState: string) => {
+    try {
+      await updateCase(caseId, { state: newState as import("@/lib/types").CaseState });
+      await loadCases();
+    } catch (err) {
+      toast({ title: "Update failed", description: err instanceof Error ? err.message : "Could not update case", variant: "destructive" });
+    }
+  }, [loadCases, toast]);
 
   useEffect(() => {
     (async () => {
@@ -517,6 +526,7 @@ const CustomerCases = () => {
               showMoreColumns={showMoreCaseColumns}
               onSelectCase={setSelectedCaseId}
               personLabel="Customer"
+              onQuickStateChange={handleQuickStateChange}
             />
           );
         })}

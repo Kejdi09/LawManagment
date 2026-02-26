@@ -45,14 +45,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
 import MainLayout from "@/components/MainLayout";
 import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 import ProposalModal from "@/components/ProposalModal";
+import IntakeBotPanel from "@/components/IntakeBotPanel";
 
 // Reusable safe date formatter
 function safeFormatDate(dateValue: string | Date | null | undefined) {
@@ -145,6 +147,7 @@ const Customers = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [showIntakeSheet, setShowIntakeSheet] = useState(false);
   const [resetBotLoading, setResetBotLoading] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
@@ -1404,7 +1407,7 @@ const Customers = () => {
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
                         {/* Proposal button – only shown when status is SEND_PROPOSAL and no proposal sent yet */}
-                        {selectedCustomer.status === "SEND_PROPOSAL" && !selectedCustomer.proposalSentAt && (
+                        {(selectedCustomer.status === "SEND_PROPOSAL" && !selectedCustomer.proposalSentAt) && (
                           <div className="flex flex-wrap gap-2 pt-1">
                             <Button
                               size="sm"
@@ -1417,6 +1420,23 @@ const Customers = () => {
                             </Button>
                           </div>
                         )}
+                        {/* Staff intake bot – fill intake form on behalf of client */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => setShowIntakeSheet(true)}
+                              >
+                                <Bot className="h-3.5 w-3.5" />
+                                Fill Intake Form
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Run the intake chatbot on behalf of this client to populate proposal fields</TooltipContent>
+                          </Tooltip>
+                        </div>
                         {/* Reset intake bot button */}
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Tooltip>
@@ -1586,6 +1606,43 @@ const Customers = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Staff intake bot sheet */}
+      {selectedCustomer && showIntakeSheet && (
+        <Sheet open={showIntakeSheet} onOpenChange={setShowIntakeSheet}>
+          <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
+            <SheetHeader className="px-4 pt-4 pb-2 border-b shrink-0">
+              <SheetTitle className="text-sm font-semibold">
+                Intake Form — {selectedCustomer.name}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden flex flex-col px-4 py-3">
+              <IntakeBotPanel
+                services={selectedCustomer.services || []}
+                clientName={selectedCustomer.name}
+                mode="staff"
+                customerId={selectedCustomer.customerId}
+                fillHeight
+                onComplete={async (fields) => {
+                  // Reload the customer to pick up the saved proposalFields
+                  await loadCustomers();
+                  if (selectedId) await loadCustomerDetail(selectedId);
+                  // Auto-advance to SEND_PROPOSAL if still at INTAKE
+                  if (selectedCustomer.status === "INTAKE") {
+                    try {
+                      await updateCustomer(selectedCustomer.customerId, { status: "SEND_PROPOSAL" });
+                      await loadCustomers();
+                      if (selectedId) await loadCustomerDetail(selectedId);
+                    } catch { /* ignore if already advanced */ }
+                  }
+                  void fields;
+                  setTimeout(() => setShowIntakeSheet(false), 2_000);
+                }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Proposal generator modal */}
       {selectedCustomer && showProposalModal && (

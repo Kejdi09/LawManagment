@@ -469,6 +469,18 @@ export async function savePortalIntakeFields(token: string, fields: Partial<impo
   }
 }
 
+export async function respondToProposal(token: string, action: "accept" | "revision", note?: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/respond-proposal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, note }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+}
+
 export async function sendPortalMessage(token: string, text: string): Promise<PortalMessage> {
   const res = await fetch(`${API_URL}/api/portal/chat/${encodeURIComponent(token)}`, {
     method: "POST",

@@ -185,6 +185,7 @@ export interface Meeting {
   startsAt: string;
   endsAt?: string | null;
   assignedTo: string;
+  location?: string | null;
   notes?: string;
   status: string;
   createdBy?: string | null;

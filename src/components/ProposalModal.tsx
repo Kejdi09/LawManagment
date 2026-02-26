@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Printer, Save, Send } from "lucide-react";
+import { Printer, Save, Send, Wand2 } from "lucide-react";
 import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/types";
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,32 @@ export const GBP_RATE = 0.00902409;
 
 export function fmt(n: number, decimals = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// ── Fee presets per service (suggested starting points, staff can adjust)
+// Values in Albanian Lek (ALL). For multiple services, service fees are summed;
+// shared costs (consultation, POA, translation) use the maximum across services.
+const SVC_PRESETS: Partial<Record<ServiceType, { consultationFeeALL?: number; serviceFeeALL?: number; poaFeeALL?: number; translationFeeALL?: number }>> = {
+  real_estate:       { consultationFeeALL: 20_000, serviceFeeALL: 150_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
+  visa_c:            { consultationFeeALL: 15_000, serviceFeeALL:  75_000, translationFeeALL: 10_000 },
+  visa_d:            { consultationFeeALL: 15_000, serviceFeeALL: 100_000, poaFeeALL: 15_000, translationFeeALL: 10_000 },
+  residency_permit:  { consultationFeeALL: 20_000, serviceFeeALL: 120_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
+  company_formation: { consultationFeeALL: 20_000, serviceFeeALL: 100_000, translationFeeALL: 20_000 },
+  tax_consulting:    { consultationFeeALL: 15_000, serviceFeeALL:  80_000 },
+  compliance:        { consultationFeeALL: 15_000, serviceFeeALL:  60_000 },
+};
+
+export function computePresetFees(services: ServiceType[]): Pick<ProposalFields, "consultationFeeALL" | "serviceFeeALL" | "poaFeeALL" | "translationFeeALL"> {
+  let consultationFeeALL = 0, serviceFeeALL = 0, poaFeeALL = 0, translationFeeALL = 0;
+  for (const svc of services) {
+    const p = SVC_PRESETS[svc];
+    if (!p) continue;
+    consultationFeeALL = Math.max(consultationFeeALL, p.consultationFeeALL ?? 0);
+    serviceFeeALL     += p.serviceFeeALL     ?? 0;
+    poaFeeALL          = Math.max(poaFeeALL,    p.poaFeeALL        ?? 0);
+    translationFeeALL  = Math.max(translationFeeALL, p.translationFeeALL ?? 0);
+  }
+  return { consultationFeeALL, serviceFeeALL, poaFeeALL, translationFeeALL };
 }
 
 // ── Service-specific content generators ──
@@ -773,8 +799,23 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               )}
 
               {/* Fee section */}
-              <div className="md:col-span-2 border-t pt-4">
-                <p className="text-sm font-semibold mb-3">Fees (in ALL)</p>
+              <div className="md:col-span-2 border-t pt-4 flex items-center justify-between">
+                <p className="text-sm font-semibold">Fees (in ALL)</p>
+                {(customer.services || []).length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => {
+                      const preset = computePresetFees(customer.services as ServiceType[]);
+                      setFields((prev) => ({ ...prev, ...preset }));
+                    }}
+                  >
+                    <Wand2 className="h-3 w-3" />
+                    Load standard fees
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-1">

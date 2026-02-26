@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useMemo, useEffect } from "react";
-import { getAllCases, searchCases, createCase, getConfirmedClients } from "@/lib/case-store";
+import { getAllCases, searchCases, createCase, getConfirmedClients, updateCase } from "@/lib/case-store";
 import { ALL_STAGES, Priority, CLIENT_LAWYERS, Customer, STAGE_LABELS, CaseStage } from "@/lib/types";
 import { mapCaseStateToStage, mapStageToState } from "@/lib/utils";
 import { CaseTable } from "@/components/CaseTable";
@@ -543,6 +543,14 @@ const Index = () => {
               showMoreColumns={showMoreCaseColumns}
               onSelectCase={setSelectedCaseId}
               personLabel="Client"
+              onQuickStateChange={async (caseId, newState) => {
+                try {
+                  await updateCase(caseId, { state: newState as import("@/lib/types").CaseState });
+                  await loadCases();
+                } catch (err) {
+                  toast({ title: "Update failed", description: err instanceof Error ? err.message : "Could not update", variant: "destructive" });
+                }
+              }}
             />
           );
         })}

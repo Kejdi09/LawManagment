@@ -435,7 +435,7 @@ export default function IntakeBotPanel({
         botMsg(`Thank you, ${clientName}. Your information has been submitted to the DAFKU Law Firm team.\n\nWe will review your answers and prepare a personalised proposal for you. You can expect to hear from us shortly.\n\nIf you have any immediate questions, please use the Messages tab or contact us directly on WhatsApp.`),
       ]);
       onSendSummaryMessage?.(summary);
-      setTimeout(() => onComplete?.(fields), 10_000);
+      onComplete?.(fields);
     }
   }
 
