@@ -77,6 +77,13 @@ export interface ProposalFields {
   purposeOfStay?: string;
   /** Previous visa/residency refusals: "none" or details */
   previousRefusals?: string;
+  // ── Dependent (spouse / family member for Pensioner / Family Reunification) ──
+  /** Full name of the accompanying dependent / spouse */
+  dependentName?: string;
+  /** Nationality of the dependent */
+  dependentNationality?: string;
+  /** Occupation / status of the dependent */
+  dependentOccupation?: string;
   // ── Company Formation specific ──
   /** Legal form of the company: SH.P.K., SH.A., branch, representative office, other */
   companyType?: string;
@@ -206,6 +213,7 @@ export type ServiceType =
   | "visa_c"
   | "visa_d"
   | "residency_permit"
+  | "residency_pensioner"
   | "company_formation"
   | "real_estate"
   | "tax_consulting"
@@ -261,6 +269,7 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   visa_c: "Visa C",
   visa_d: "Visa D",
   residency_permit: "Residency Permit",
+  residency_pensioner: "Residency Permit – Pensioner",
   company_formation: "Company Formation",
   real_estate: "Real Estate",
   tax_consulting: "Tax Consulting",

@@ -30,13 +30,14 @@ export function fmt(n: number, decimals = 2) {
 // Values in Albanian Lek (ALL). For multiple services, service fees are summed;
 // shared costs (consultation, POA, translation) use the maximum across services.
 const SVC_PRESETS: Partial<Record<ServiceType, { consultationFeeALL?: number; serviceFeeALL?: number; poaFeeALL?: number; translationFeeALL?: number }>> = {
-  real_estate:       { consultationFeeALL: 20_000, serviceFeeALL: 150_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
-  visa_c:            { consultationFeeALL: 15_000, serviceFeeALL:  75_000, translationFeeALL: 10_000 },
-  visa_d:            { consultationFeeALL: 15_000, serviceFeeALL: 100_000, poaFeeALL: 15_000, translationFeeALL: 10_000 },
-  residency_permit:  { consultationFeeALL: 20_000, serviceFeeALL: 120_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
-  company_formation: { consultationFeeALL: 20_000, serviceFeeALL: 100_000, translationFeeALL: 20_000 },
-  tax_consulting:    { consultationFeeALL: 15_000, serviceFeeALL:  80_000 },
-  compliance:        { consultationFeeALL: 15_000, serviceFeeALL:  60_000 },
+  real_estate:         { consultationFeeALL: 20_000, serviceFeeALL: 150_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
+  visa_c:              { consultationFeeALL: 15_000, serviceFeeALL:  75_000, translationFeeALL: 10_000 },
+  visa_d:              { consultationFeeALL: 15_000, serviceFeeALL: 100_000, poaFeeALL: 15_000, translationFeeALL: 10_000 },
+  residency_permit:    { consultationFeeALL: 20_000, serviceFeeALL: 120_000, poaFeeALL: 15_000, translationFeeALL: 15_000 },
+  residency_pensioner: { consultationFeeALL:      0, serviceFeeALL:  90_000, translationFeeALL: 15_000 },
+  company_formation:   { consultationFeeALL: 20_000, serviceFeeALL: 100_000, translationFeeALL: 20_000 },
+  tax_consulting:      { consultationFeeALL: 15_000, serviceFeeALL:  80_000 },
+  compliance:          { consultationFeeALL: 15_000, serviceFeeALL:  60_000 },
 };
 
 export function computePresetFees(services: ServiceType[]): Pick<ProposalFields, "consultationFeeALL" | "serviceFeeALL" | "poaFeeALL" | "translationFeeALL"> {
@@ -56,6 +57,8 @@ export function computePresetFees(services: ServiceType[]): Pick<ProposalFields,
 export interface ServiceContent {
   scopeParagraph: string;
   servicesSections: Array<{ heading: string; bullets: string[] }>;
+  /** Step-by-step process overview — present only for template-specific services */
+  processSteps?: Array<{ step: string; bullets: string[] }>;
   requiredDocs: string[];
   timeline: string[];
   nextSteps: string[];
@@ -379,8 +382,308 @@ function contentForTax(type: ServiceType, fields: Partial<ProposalFields>): Serv
   };
 }
 
+// ── Pensioner Residency Permit template ──
+function contentForPensionerResidency(fields: Partial<ProposalFields>): ServiceContent {
+  const hasDependents = (fields.numberOfFamilyMembers ?? 0) > 0 || !!fields.dependentName;
+  return {
+    scopeParagraph: `Provision of full legal assistance for obtaining a Residence Permit in Albania as a Pensioner${hasDependents ? ", including Family Reunification for a dependent family member" : ""}. This covers the complete procedure from document collection through to the final biometric residence permit card.`,
+    servicesSections: [
+      {
+        heading: "Services – Residency Permit Procedure",
+        bullets: [
+          "Full legal guidance during the entire application process",
+          "Pre-check and verification of all documents",
+          "Assistance with translations, notarization, and legalization if required",
+          "Preparing all declarations required by the authorities",
+          "Completing the residence permit applications",
+          "Scheduling appointments with institutions",
+          "Submission of applications at Migration Office",
+          "Follow-up with authorities until final approval",
+          "Assistance with Civil Registry address registration",
+          "Accompanying the applicant for biometric fingerprints",
+          "Guidance until the applicant receives the final residence permit card",
+          "Payment of government or third-party fees",
+          "Documents translation, apostille/legalization, or notary",
+        ],
+      },
+    ],
+    processSteps: [
+      {
+        step: "STEP 1: Residency Permit for the Main Applicant – Pensioner",
+        bullets: [
+          "Documents collection and preparation (see below)",
+          "Government Fees payment by us",
+          "Residency Permit Application Submission at the Local Directorate for Border and Migration in Durrës",
+          "Receiving Provisional Residency Permit",
+          "Final Decision on Residency Permit",
+          "Address Registration at Civil Registry Office",
+          "Application for biometric Residency Permit Card",
+          "Obtaining the biometric residence card",
+        ],
+      },
+      ...(hasDependents
+        ? [{
+            step: "STEP 2: Residency Permit for Dependent – Family Reunification",
+            bullets: [
+              "Same procedure as Step 1",
+              "Submission after main applicant's Residency Permit is granted",
+            ],
+          }]
+        : []),
+    ],
+    requiredDocs: [
+      "— For the Main Applicant (Pensioner) —",
+      "Photocopy of valid travel document (valid at least 3 months beyond permit period, with at least 2 blank pages)",
+      "Individual declarations for reason of staying in Albania — We prepare in Albanian & English, you sign",
+      "Proof of insurance in Albania — We arrange at our associate insurance company",
+      "Evidence from a bank in Albania for transfer of pension income — We support with bank account opening",
+      "Legalized criminal record from country of origin (issued within last 6 months, translated & notarized) — We handle",
+      "Evidence of annual pension income exceeding 1,200,000 ALL — We handle legal translation and notary",
+      "Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate",
+      "Passport-size photograph (47mm × 36mm, taken within last 6 months, white background, neutral expression)",
+      "Proof of accommodation in Albania (residential rental contract in accordance with Albanian standards)",
+      ...(hasDependents
+        ? [
+            "— For the Dependent (Family Reunification) —",
+            "Photocopy of dependent's valid travel document",
+            "Marriage certificate (apostilled/legalized, translated and notarized if not issued in Albania) — We handle",
+            "Proof of insurance in Albania for dependent — We arrange",
+            "Copy of main applicant's residence permit in Albania",
+            "Proof of Government Fee Payment for dependent — We pay and provide the mandate",
+            "Passport-size photograph of dependent (47mm × 36mm)",
+            "Proof of accommodation in Albania",
+            "Evidence of sufficient financial resources during the stay in Albania",
+          ]
+        : []),
+    ],
+    timeline: [
+      "Preparation and application submission: 3–5 business days",
+      "Provisional Residency Permit: approx. 10–15 business days",
+      "Final Decision on Residency Permit: approx. 30–45 business days",
+      "Residency Permit Card issuance: approx. 2 calendar weeks",
+    ],
+    nextSteps: [
+      "Prepare and sign the service agreement",
+      "Make initial payment as agreed upon agreement signing",
+      "Documents collection and preparation",
+      "Residency Permit application submission at the Migration Office",
+      "Follow-up with authorities until final decision",
+      "Biometric fingerprints appointment and Residency Permit Card collection",
+    ],
+    feeDescription: "For Residency Permit applications as Pensioner, DAFKU Law Firm applies a fixed legal service fee per applicant, covering all procedural steps from document preparation through to the final permit card. For the specific fees applied to this engagement, see Section 4.2 below.",
+  };
+}
+
+// ── Type D Visa + Residence Permit for Employment template ──
+function contentForVisaDEmployment(fields: Partial<ProposalFields>): ServiceContent {
+  return {
+    scopeParagraph: `Provision of full legal assistance for obtaining a Type D Visa and Residence Permit in Albania for employment purposes${fields.nationality ? ` (Nationality: ${fields.nationality})` : ""}. This covers the complete process from visa application through to the final biometric residence permit card.`,
+    servicesSections: [
+      {
+        heading: "Services – Visa and Residency Permit Procedure",
+        bullets: [
+          "Full legal guidance during the entire application process",
+          "Pre-check and verification of all documents",
+          "Assistance with translations, notarization, and legalization if required",
+          "Preparing all declarations required by the authorities",
+          "Payment of government or third-party fees",
+          "Completing the visa and residence permit applications",
+          "Scheduling appointments with institutions",
+          "Submission of applications at Migration Office",
+          "Follow-up with authorities until final approval",
+          "Assistance with Civil Registry address registration",
+          "Accompanying the applicant for biometric fingerprints",
+          "Guidance until the applicant receives the final residence permit card",
+        ],
+      },
+    ],
+    processSteps: [
+      {
+        step: "STEP 1: Type D Visa Processing",
+        bullets: [
+          "Issuing Power of Attorney (if needed)",
+          "Preparation of employment contract",
+          "Preparation of Accommodation proof (contract or declaration)",
+          "Documents collection and preparation (see below)",
+          "Visa and Residency Permit Government Fees payment by us",
+          "Visa application submission",
+          "Decision on the visa approval",
+        ],
+      },
+      {
+        step: "STEP 2: Residency Permit Processing",
+        bullets: [
+          "As soon as the visa is approved and you enter the Albanian border, the Residency Permit procedure starts automatically",
+          "Delivering the original documents and the Residency Permit application at the Local Directorate for Border and Migration",
+          "Receiving Provisional Residency Permit",
+          "Final Decision on Residency Permit",
+          "Address Registration at Civil Registry Office",
+          "Application for biometric Residency Permit Card",
+          "Obtaining the biometric residence card",
+        ],
+      },
+    ],
+    requiredDocs: [
+      "— For the Type D Visa Application (Employee) —",
+      "Passport-size photograph (47mm × 36mm, taken within last 6 months, white background, neutral expression) — Provided by applicant",
+      "Photocopy of valid travel document (valid at least 3 months beyond visa period, with at least 2 blank pages) — Provided by applicant",
+      "Document certifying accommodation in Albania (notarized rental contract or hosting declaration) — We arrange",
+      "Document proving professional/commercial activity in applicant's country related to visa purpose — Provided by applicant",
+      "Residence Permit (12+ months) from country of residence if different from nationality country (valid 3+ additional months beyond visa period)",
+      "Document proving legal status of the inviting entity — We obtain from accountant",
+      "Invitation signed by the host — We prepare, applicant signs",
+      "Employment contract drafted according to Albanian Labor Code — We prepare",
+      "— For the Residency Permit Application (Employee) —",
+      "Photocopy of valid travel document",
+      "Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate",
+      "Passport-size photograph (two printed copies + digital copy sent to us via email)",
+      "Proof of accommodation in Albania (notarized rental contract)",
+      "Employment contract according to Albanian Labor Code — We prepare",
+      "Proof of professional qualification (diploma / certificate / reference / self-declaration)",
+    ],
+    timeline: [
+      "Documents preparation: approx. 3–5 business days",
+      "Visa processing: approx. 15–30 business days",
+      "Residency Permit: approx. 30–45 business days",
+      "Residency Permit ID Card: approx. 2 calendar weeks",
+    ],
+    nextSteps: [
+      "Prepare and sign the service agreement",
+      "Make initial payment as agreed upon agreement signing",
+      "Documents collection and preparation",
+      "Visa application submission",
+      "Residency Permit application submission after visa approval",
+      "Follow-up with authorities until final decision",
+      "Biometric fingerprints appointment and Residency Permit Card collection",
+    ],
+    feeDescription: "For Type D Visa and Residency Permit applications for employment, DAFKU Law Firm applies a fixed legal service fee per applicant, covering all procedural steps from visa application through to the final permit card. For the specific fees applied to this engagement, see Section 4.2 below.",
+  };
+}
+
+// ── Company Formation + Type D Visa for Self-Employed template ──
+function contentForCompanySelfEmployed(fields: Partial<ProposalFields>): ServiceContent {
+  return {
+    scopeParagraph: `Provision of full legal assistance for Company Registration and Management in Albania, combined with a Type D Visa and Residence Permit as Self-Employed/Business Owner${fields.nationality ? ` (Nationality: ${fields.nationality})` : ""}. This engagement covers both the legal establishment of the company and the complete immigration procedure.`,
+    servicesSections: [
+      {
+        heading: "Services – Company Formation in Albania",
+        bullets: [
+          "Legal consultation and structuring of the company",
+          "Selection and reservation of the company name",
+          "Drafting of the Founding Act and Company Statute",
+          "Registration of the company with the National Business Center (QKB)",
+          "Issuance of the company registration certificate and NUIS (tax number)",
+          "Registration with the tax authorities (VAT and contributions if applicable)",
+          "Assistance with opening a corporate bank account",
+          "Preparation of company documentation required for residency permit purposes",
+        ],
+      },
+      {
+        heading: "Services – Visa and Residency Permit Procedure",
+        bullets: [
+          "Full legal guidance during the entire application process",
+          "Pre-check and verification of all documents",
+          "Assistance with translations, notarization, and legalization if required",
+          "Preparing all declarations required by the authorities",
+          "Completing the visa and residence permit applications",
+          "Scheduling appointments with institutions",
+          "Submission of applications at Migration Office",
+          "Follow-up with authorities until final approval",
+          "Assistance with Civil Registry address registration",
+          "Accompanying the applicant for biometric fingerprints",
+          "Guidance until the applicant receives the final residence permit card",
+          "Payment of government or third-party fees",
+          "Documents translation, apostille/legalization, or notary",
+        ],
+      },
+    ],
+    processSteps: [
+      {
+        step: "STEP 1: Company Formation",
+        bullets: [
+          "Issuing Power of Attorney",
+          "Registration documents preparation",
+          "Company registration submission",
+          "Obtaining TAX ID / NIPT",
+          "Obtaining Registration Certificate by QKB",
+          "Employee declaration",
+        ],
+      },
+      {
+        step: "STEP 2: Visa and Residency Permit",
+        bullets: [
+          "Documents collection and preparation (see below)",
+          "Visa and Residency Permit Application and Government Fees payment by us",
+          "Decision on the visa approval",
+          "As soon as the visa is approved and you enter the Albanian border, the Residency Permit procedure starts automatically",
+          "Residency Permit application at the Local Directorate for Border and Migration in the city where you will be based",
+          "Receiving Provisional Residency Permit",
+          "Final Decision on Residency Permit",
+          "Address Registration at Civil Registry Office",
+          "Application for biometric Residency Permit Card",
+          "Obtaining the biometric residence card",
+        ],
+      },
+    ],
+    requiredDocs: [
+      "— For Company Registration —",
+      "Valid passport copy (for each shareholder and administrator)",
+      "Contact details and residential address (foreign address)",
+      "Company name proposal (at least two options)",
+      "Description of business activity",
+      "Appointment details of the company administrator",
+      "Shareholding structure details",
+      "Company address in Albania",
+      "Power of Attorney (notarized and apostilled/legalized, if registration is done remotely)",
+      "— For Type D Visa (Self-Employed) —",
+      "Passport-size photograph (47mm × 36mm, within last 6 months, white background, neutral expression)",
+      "Photocopy of valid travel document (valid at least 3 months beyond visa period, with at least 2 blank pages)",
+      "Certification of professional capacity (diploma, certificate, qualifications related to self-employment)",
+      "Business Registration Certificate — We provide upon company registration",
+      "Document certifying accommodation in Albania (rental contract or accommodation declaration) — We can arrange",
+      "Bank statement covering the last 12 months (income and outgoings)",
+      "— For Residency Permit (Self-Employed) —",
+      "Photocopy of valid travel document",
+      "Project idea for the business/activity (as required by the National Employment and Labor Agency) — We prepare",
+      "Proof of sufficient financial means (minimum 500,000 ALL or equivalent) — We open the bank account; you make the deposit",
+      "Document proving necessary skills (certificate / diploma or equivalent)",
+      "Proof of registration of the activity in QKB — We provide upon company registration",
+      "Payment Mandate of Government fee — We pay and provide the document",
+      "Passport-size photograph (47mm × 36mm)",
+      "Proof of accommodation in Albania (rental contract) — We can arrange",
+    ],
+    timeline: [
+      "Company Registration: approx. 3–5 business days",
+      "Visa processing: approx. 15–30 business days",
+      "Residency Permit: approx. 30–45 business days",
+      "Residency Permit ID Card: approx. 2 calendar weeks",
+    ],
+    nextSteps: [
+      "Prepare and sign the service agreement",
+      "Make initial payment as agreed upon agreement signing",
+      "Documents collection and preparation",
+      "Company Registration",
+      "Visa and Residency Permit application submission",
+      "Follow-up with authorities until final decision",
+      "Biometric fingerprints appointment and Residency Permit Card collection",
+    ],
+    feeDescription: "For Company Formation combined with Type D Visa and Residency Permit for Self-Employed/Business Owners, DAFKU Law Firm applies a fixed service fee covering both the company registration process and the complete immigration procedure. For the specific fees applied to this engagement, see Section 4.2 below.",
+  };
+}
+
 export function getServiceContent(services: ServiceType[], fields: Partial<ProposalFields>): ServiceContent {
   const all: ServiceType[] = services.length ? services : ["residency_permit"];
+
+  // ── Template-specific routing (match the 4 uploaded .docx templates) ──
+  if (all.includes("residency_pensioner")) {
+    return contentForPensionerResidency(fields);
+  }
+  if (all.includes("company_formation")) {
+    return contentForCompanySelfEmployed(fields);
+  }
+  if (all.includes("visa_d")) {
+    return contentForVisaDEmployment(fields);
+  }
 
   // Build a ServiceContent per service
   const parts: ServiceContent[] = all.map((svc) => {
@@ -469,10 +772,17 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
   const today = new Date().toISOString().slice(0, 10);
 
   // Merge stored proposalFields with sensible defaults
-  const initFields = (): ProposalFields => ({
-    proposalTitle:
-      customer.proposalFields?.proposalTitle ||
-      `Legal Assistance — ${(customer.services || []).map((s) => SERVICE_LABELS[s] || s).join(", ")}`,
+  const initFields = (): ProposalFields => {
+    const svcs = customer.services || [];
+    const defaultTitle = (() => {
+      if (customer.proposalFields?.proposalTitle) return customer.proposalFields.proposalTitle;
+      if (svcs.includes("residency_pensioner")) return "Residence Permit for Pensioner and Family Reunification";
+      if (svcs.includes("company_formation")) return "Company Registration and Management + Type D Visa & Residence Permit as Self-Employed/Business Owner";
+      if (svcs.includes("visa_d")) return "Type D Visa & Residence Permit for Employees";
+      return `Legal Assistance — ${svcs.map((s) => SERVICE_LABELS[s] || s).join(", ")}`;
+    })();
+    return {
+    proposalTitle: defaultTitle,
     proposalDate: customer.proposalFields?.proposalDate || today,
     propertyDescription: customer.proposalFields?.propertyDescription || "",
     transactionValueEUR: customer.proposalFields?.transactionValueEUR ?? undefined,
@@ -493,6 +803,10 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
     numberOfApplicants: customer.proposalFields?.numberOfApplicants ?? undefined,
     numberOfFamilyMembers: customer.proposalFields?.numberOfFamilyMembers ?? undefined,
     previousRefusals: customer.proposalFields?.previousRefusals || "",
+    // Dependent (for Pensioner / Family Reunification)
+    dependentName: customer.proposalFields?.dependentName || "",
+    dependentNationality: customer.proposalFields?.dependentNationality || "",
+    dependentOccupation: customer.proposalFields?.dependentOccupation || "",
     // Company formation
     companyType: customer.proposalFields?.companyType || "",
     businessActivity: customer.proposalFields?.businessActivity || "",
@@ -500,7 +814,8 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
     shareCapitalALL: customer.proposalFields?.shareCapitalALL ?? undefined,
     // Tax / Compliance
     situationDescription: customer.proposalFields?.situationDescription || "",
-  });
+    };
+  };
 
   const [fields, setFields] = useState<ProposalFields>(initFields);
   const [saving, setSaving] = useState(false);
@@ -524,6 +839,8 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
 
   // Proposal template is driven entirely by customer.services (saved in DB)
   const serviceContent = getServiceContent(customer.services || [], fields);
+  // Whether this proposal uses step-by-step process overview (template-specific)
+  const hp = !!(serviceContent.processSteps?.length);
 
   const displayDate = fields.proposalDate
     ? new Date(fields.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
@@ -677,11 +994,11 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               </div>
 
               {/* ── Service-specific fields ── */}
-              {(customer.services || []).some((s) => ["visa_c", "visa_d", "residency_permit"].includes(s)) && (
+              {(customer.services || []).some((s) => ["visa_c", "visa_d", "residency_permit", "residency_pensioner"].includes(s)) && (
                 <>
                   <div className="md:col-span-2 border-t pt-4">
                     <p className="text-sm font-semibold mb-1 text-blue-700">
-                      {(customer.services || []).includes("residency_permit") ? "Residency Permit" : "Visa"} — Intake Fields
+                      {(customer.services || []).some((s) => ["residency_permit", "residency_pensioner"].includes(s)) ? "Residency Permit" : "Visa"} — Intake Fields
                     </p>
                   </div>
                   <div className="md:col-span-2 space-y-1">
@@ -709,7 +1026,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                       placeholder="e.g. 1"
                     />
                   </div>
-                  {(customer.services || []).includes("residency_permit") && (
+                  {(customer.services || []).some((s) => ["residency_permit", "residency_pensioner"].includes(s)) && (
                     <div className="space-y-1">
                       <Label>Family members / dependants</Label>
                       <Input
@@ -728,6 +1045,40 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                       placeholder='"none" or describe briefly'
                     />
                   </div>
+
+                  {/* Dependent / Family Member — only for Pensioner template */}
+                  {(customer.services || []).includes("residency_pensioner") && (
+                    <>
+                      <div className="md:col-span-2 border-t pt-4">
+                        <p className="text-sm font-semibold mb-1 text-blue-700">Dependent (Spouse / Family Member – Family Reunification)</p>
+                        <p className="text-xs text-muted-foreground">Leave blank if there is no accompanying dependent.</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Dependent Full Name</Label>
+                        <Input
+                          value={fields.dependentName ?? ""}
+                          onChange={(e) => setField("dependentName", e.target.value)}
+                          placeholder="e.g. Amanda Kerri Norris"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Dependent Nationality</Label>
+                        <Input
+                          value={fields.dependentNationality ?? ""}
+                          onChange={(e) => setField("dependentNationality", e.target.value)}
+                          placeholder="e.g. USA, British…"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Dependent Occupation</Label>
+                        <Input
+                          value={fields.dependentOccupation ?? ""}
+                          onChange={(e) => setField("dependentOccupation", e.target.value)}
+                          placeholder="e.g. In Retirement"
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -927,7 +1278,8 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
             >
               {/* Cover */}
               <h1 className="text-2xl font-bold text-center uppercase tracking-widest mb-1">Service Proposal</h1>
-              <p className="text-center text-sm text-gray-500 mb-8">Presented to: <strong>{customer.name}</strong></p>
+              <p className="text-center text-sm text-gray-500 mb-1">Presented to: <strong>{customer.name}</strong></p>
+              <p className="text-center text-xs text-gray-400 mb-8">Client ID: {customer.customerId}</p>
 
               <div className="border rounded p-4 mb-2 bg-gray-50">
                 <p className="text-sm font-semibold mb-1">Services Provided:</p>
@@ -953,6 +1305,35 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 <span className="ml-auto font-semibold">Date: {displayDate}</span>
               </div>
 
+              {/* Case Overview — shown when client has nationality/occupation/purpose filled in */}
+              {(fields.nationality || fields.employmentType || fields.purposeOfStay) && (
+                <div className="border rounded p-4 mb-6 bg-gray-50">
+                  <p className="text-sm font-semibold mb-3">Case Overview</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Main Applicant</p>
+                      <p className="text-sm"><strong>Name:</strong> {customer.name}</p>
+                      {fields.nationality && <p className="text-sm"><strong>Nationality:</strong> {fields.nationality}</p>}
+                      {fields.employmentType && <p className="text-sm"><strong>Occupation:</strong> {fields.employmentType}</p>}
+                      {fields.purposeOfStay && <p className="text-sm"><strong>Relocation motive:</strong> {fields.purposeOfStay}</p>}
+                    </div>
+                    {(fields.dependentName || (fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0)) && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                          {fields.dependentName ? "Dependent" : `${fields.numberOfFamilyMembers} Dependent(s)`}
+                        </p>
+                        {fields.dependentName && <p className="text-sm"><strong>Name:</strong> {fields.dependentName}</p>}
+                        {fields.dependentNationality && <p className="text-sm"><strong>Nationality:</strong> {fields.dependentNationality}</p>}
+                        {fields.dependentOccupation && <p className="text-sm"><strong>Occupation:</strong> {fields.dependentOccupation}</p>}
+                        {!fields.dependentName && fields.numberOfFamilyMembers && (
+                          <p className="text-sm"><strong>Relocation motive:</strong> Family Reunification</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Section 1 */}
               <div className="section-divider mb-1">
                 <p className="text-sm font-bold border-b pb-1 mb-2">1 — Scope of the Proposal</p>
@@ -977,23 +1358,38 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 ))}
               </div>
 
-              {/* Section 3 */}
+              {/* Section 3 — Process Overview (template-specific services only) */}
+              {hp && (
+                <div className="mt-6">
+                  <p className="text-sm font-bold border-b pb-1 mb-2">3 — Process Overview</p>
+                  {serviceContent.processSteps!.map((ps, idx) => (
+                    <div key={idx} className="mt-3">
+                      <p className="text-sm font-semibold mb-1">{ps.step}</p>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {ps.bullets.map((b, i) => <li key={i} className="text-sm">{b}</li>)}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Section 3/4 — Required Documents */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">3 — Required Documents</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "4" : "3"} — Required Documents</p>
                 <p className="text-sm mb-1">Required Documentation from the Client:</p>
                 <ul className="list-disc pl-5 space-y-0.5">
                   {serviceContent.requiredDocs.map((d, i) => <li key={i} className="text-sm">{d}</li>)}
                 </ul>
               </div>
 
-              {/* Section 4 */}
+              {/* Section 4/5 — Fees & Costs */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">4 — Fees & Costs</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "5" : "4"} — Fees & Costs</p>
 
-                <p className="text-sm font-semibold mb-0.5">4.1 General Legal Service Fee</p>
+                <p className="text-sm font-semibold mb-0.5">{hp ? "5.1" : "4.1"} General Legal Service Fee</p>
                 <p className="text-sm mb-3">{serviceContent.feeDescription}</p>
 
-                <p className="text-sm font-semibold mb-1">4.2 Fees and Costs Applied to this Specific Case</p>
+                <p className="text-sm font-semibold mb-1">{hp ? "5.2" : "4.2"} Fees and Costs Applied to this Specific Case</p>
                 <table className="w-full border-collapse text-sm mb-4">
                   <thead>
                     <tr className="bg-gray-100">
@@ -1060,7 +1456,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                   </tbody>
                 </table>
 
-                <p className="text-sm font-semibold mb-1">4.3 Calculation in Foreign Currencies</p>
+                <p className="text-sm font-semibold mb-1">{hp ? "5.3" : "4.3"} Calculation in Foreign Currencies</p>
                 <table className="w-full border-collapse text-sm mb-4">
                   <thead>
                     <tr className="bg-gray-100">
@@ -1089,7 +1485,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 </table>
                 <p className="text-xs text-gray-500 mb-4">Conversion Source: https://www.xe.com/ (indicative rates — subject to change)</p>
 
-                <p className="text-sm font-semibold mb-1">4.4 Costs Not Included</p>
+                <p className="text-sm font-semibold mb-1">{hp ? "5.4" : "4.4"} Costs Not Included</p>
                 <p className="text-sm mb-1">The legal fee does not include:</p>
                 <ul className="list-disc pl-5 space-y-0.5 text-sm">
                   <li>Notary fees related to the execution of agreements and notarization of documents.</li>
@@ -1103,9 +1499,9 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 </ul>
               </div>
 
-              {/* Section 5 */}
+              {/* Section 5/6 — Payment Terms */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">5 — Payment Terms</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "6" : "5"} — Payment Terms</p>
                 {fields.paymentTermsNote ? (
                   <p className="text-sm">{fields.paymentTermsNote}</p>
                 ) : (
@@ -1119,17 +1515,17 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 )}
               </div>
 
-              {/* Section 6 */}
+              {/* Section 6/7 — Timeline */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">6 — Timeline Overview</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "7" : "6"} — Timeline Overview</p>
                 <ul className="list-disc pl-5 space-y-0.5 text-sm">
                   {serviceContent.timeline.map((t, i) => <li key={i}>{t}</li>)}
                 </ul>
               </div>
 
-              {/* Section 7 */}
+              {/* Section 7/8 — Notes */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">7 — Important Notes & Legal Disclaimers</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "8" : "7"} — Important Notes & Legal Disclaimers</p>
                 <p className="text-sm mb-1">It is important for the Client to be aware of the following:</p>
                 <ul className="list-disc pl-5 space-y-0.5 text-sm">
                   <li>All legal services are provided based on the documentation and information made available by the Client and third parties.</li>
@@ -1141,9 +1537,9 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 </ul>
               </div>
 
-              {/* Section 8 */}
+              {/* Section 8/9 — Next Steps */}
               <div className="mt-6">
-                <p className="text-sm font-bold border-b pb-1 mb-2">8 — Next Steps</p>
+                <p className="text-sm font-bold border-b pb-1 mb-2">{hp ? "9" : "8"} — Next Steps</p>
                 <p className="text-sm mb-1">Upon your approval of this proposal, the following steps will be taken:</p>
                 <ul className="list-disc pl-5 space-y-0.5 text-sm">
                   {serviceContent.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
