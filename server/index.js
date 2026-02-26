@@ -2060,6 +2060,11 @@ app.get('/api/portal/chat/:token', async (req, res) => {
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   const messages = await portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray();
   const expired = new Date(tokenDoc.expiresAt) < new Date();
+  // Mark all unread lawyer messages as read by the client (fires async, non-blocking)
+  portalMessagesCol.updateMany(
+    { customerId: tokenDoc.customerId, senderType: 'lawyer', readByClient: false },
+    { $set: { readByClient: true } }
+  ).catch(() => {});
   res.json({
     expired,
     messages: messages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt })),
@@ -2171,9 +2176,10 @@ app.post('/api/portal/:token/proposal-viewed', async (req, res) => {
 // IMPORTANT: specific routes (/unread-counts) must come BEFORE parameterised routes (/:customerId)
 
 // Get unread counts for all customers (for sidebar badges)
+// Shows dot when lawyer sent a message the client hasn't opened yet
 app.get('/api/portal-chat/unread-counts', verifyAuth, async (req, res) => {
   const pipeline = [
-    { $match: { senderType: 'client', readByLawyer: false } },
+    { $match: { senderType: 'lawyer', readByClient: false } },
     { $group: { _id: '$customerId', count: { $sum: 1 } } },
   ];
   const results = await portalMessagesCol.aggregate(pipeline).toArray();
@@ -2205,7 +2211,7 @@ app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   const customerId = String(req.params.customerId).trim();
   if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
   const senderName = req.user?.lawyerName || req.user?.consultantName || req.user?.username || 'Lawyer';
-  const msg = { messageId: genShortId('PM'), customerId, text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true };
+  const msg = { messageId: genShortId('PM'), customerId, text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true, readByClient: false };
   await portalMessagesCol.insertOne(msg);
   // Notify client via email
   const [cust, cli] = await Promise.all([

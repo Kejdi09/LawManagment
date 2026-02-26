@@ -24,10 +24,13 @@ interface BotQuestion {
   placeholder?: string;
   optional?: boolean;
   hint?: string;
+  /** Numeric fields get parsed to number in buildProposalFields */
+  isNumeric?: boolean;
   /** If defined, only show if a certain service is in the services list */
   onlyFor?: ServiceType[];
 }
 
+// Common to every service
 const COMMON_QUESTIONS: BotQuestion[] = [
   {
     id: "nationality",
@@ -44,47 +47,162 @@ const COMMON_QUESTIONS: BotQuestion[] = [
     text: "What is your ID or passport number?",
     placeholder: "e.g. AB1234567",
     optional: true,
-    hint: "Optional — type \"skip\" if you prefer to provide this later.",
+    hint: 'Optional — type "skip" if you prefer to provide this later.',
   },
 ];
 
+// Real estate
 const REAL_ESTATE_QUESTIONS: BotQuestion[] = [
   {
     id: "propertyDescription",
-    text: "Please describe the property involved in this transaction.\nInclude the type (e.g. apartment, house, commercial unit), intended use, and approximate location.",
+    text: "Please describe the property involved in this transaction.\nInclude the type (e.g. apartment, house, commercial unit), its intended use, and the approximate location.",
     placeholder: "e.g. Residential apartment in Tirana, Blloku area",
     onlyFor: ["real_estate"],
   },
   {
     id: "transactionValueEUR",
-    text: "What is the approximate transaction or investment value in EUR? Please enter a number only.",
+    text: "What is the approximate transaction / investment value in EUR? Please enter a number only.",
     placeholder: "e.g. 95000",
     onlyFor: ["real_estate"],
-    hint: "Enter the value in EUR as a number, e.g. 95000. Type \"skip\" if unknown.",
+    isNumeric: true,
+    hint: 'Enter the value in EUR as a number, e.g. 95000. Type "skip" if unknown.',
   },
 ];
 
+// Visa C / Visa D
 const VISA_QUESTIONS: BotQuestion[] = [
   {
-    id: "propertyDescription",
-    text: "What is the primary purpose of your stay or relocation to Albania?",
-    placeholder: "e.g. employment, self-employment, family reunification, retirement, investment",
-    onlyFor: ["visa_c", "visa_d", "residency_permit"],
+    id: "purposeOfStay",
+    text: "What is the primary purpose of your visit to Albania?\n(e.g. tourism, business meeting, family visit, event attendance)",
+    placeholder: "e.g. Business meetings with Albanian partners",
+    onlyFor: ["visa_c", "visa_d"],
+  },
+  {
+    id: "numberOfApplicants",
+    text: "How many people will be applying? (Including yourself.)",
+    placeholder: "e.g. 1",
+    onlyFor: ["visa_c", "visa_d"],
+    isNumeric: true,
+    hint: "Enter a number, e.g. 1 or 3.",
+  },
+  {
+    id: "previousRefusals",
+    text: "Have you or any co-applicants previously had a visa or permit application refused?\nIf yes, please briefly describe when and for what country.",
+    placeholder: 'e.g. "None" or "Schengen visa refused in 2022, Germany"',
+    optional: true,
+    onlyFor: ["visa_c", "visa_d"],
+    hint: 'Type "none" or "skip" if there are no previous refusals.',
+  },
+];
+
+// Residency permit
+const RESIDENCY_QUESTIONS: BotQuestion[] = [
+  {
+    id: "purposeOfStay",
+    text: "What is the primary reason for relocating to / residing in Albania?\n(e.g. employment, self-employment, property ownership, retirement, family reunification, investment)",
+    placeholder: "e.g. Self-employment and property ownership",
+    onlyFor: ["residency_permit"],
+  },
+  {
+    id: "employmentType",
+    text: "What is your current employment / income status?",
+    placeholder: "e.g. Employed, Self-employed, Freelancer, Retired, Investor, Student",
+    onlyFor: ["residency_permit"],
+  },
+  {
+    id: "numberOfApplicants",
+    text: "How many people will be applying for a residence permit? (Including yourself.)",
+    placeholder: "e.g. 1",
+    onlyFor: ["residency_permit"],
+    isNumeric: true,
+    hint: "Enter a number, e.g. 1 or 4.",
+  },
+  {
+    id: "numberOfFamilyMembers",
+    text: "Of those, how many are family members / dependants? (Enter 0 if none.)",
+    placeholder: "e.g. 0",
+    onlyFor: ["residency_permit"],
+    isNumeric: true,
+    hint: "Enter 0 if you are the only applicant.",
+  },
+  {
+    id: "previousRefusals",
+    text: "Have you or any co-applicants previously had a residence permit or visa application refused?\nIf yes, please briefly describe.",
+    placeholder: 'e.g. "None" or "Residence permit refused in 2021"',
+    optional: true,
+    onlyFor: ["residency_permit"],
+    hint: 'Type "none" or "skip" if there are no previous refusals.',
+  },
+];
+
+// Company formation
+const COMPANY_FORMATION_QUESTIONS: BotQuestion[] = [
+  {
+    id: "companyType",
+    text: "What type of legal entity would you like to establish?\n(e.g. SH.P.K. — limited liability, SH.A. — joint stock, branch of a foreign company, representative office)",
+    placeholder: "e.g. SH.P.K. (limited liability company)",
+    onlyFor: ["company_formation"],
+    hint: 'Most small/medium businesses choose SH.P.K. Type "unsure" if you need advice.',
+  },
+  {
+    id: "businessActivity",
+    text: "What is the primary business activity or purpose of the company?\n(Please be as specific as possible.)",
+    placeholder: "e.g. Import and wholesale distribution of construction materials",
+    onlyFor: ["company_formation"],
+  },
+  {
+    id: "numberOfShareholders",
+    text: "How many shareholders will the company have?",
+    placeholder: "e.g. 1",
+    onlyFor: ["company_formation"],
+    isNumeric: true,
+    hint: "Enter a number, e.g. 1 or 3.",
+  },
+  {
+    id: "shareCapitalALL",
+    text: "What is the proposed registered share capital in ALL (Albanian Lek)?\nThe legal minimum for a SH.P.K. is 100 ALL.",
+    placeholder: "e.g. 100",
+    onlyFor: ["company_formation"],
+    isNumeric: true,
+    hint: 'Enter a number in ALL, e.g. 100 or 1000000. Type "skip" if undecided.',
+    optional: true,
+  },
+];
+
+// Tax consulting / Compliance
+const TAX_COMPLIANCE_QUESTIONS: BotQuestion[] = [
+  {
+    id: "situationDescription",
+    text: "Please briefly describe your situation and what you need assistance with.\n(e.g. tax registration, annual filing, VAT compliance, transfer pricing, financial audit support)",
+    placeholder: "e.g. I need to register for VAT and set up monthly reporting for my new Albanian company",
+    onlyFor: ["tax_consulting", "compliance"],
+  },
+  {
+    id: "employmentType",
+    text: "Are you acting as an individual, or on behalf of a company?",
+    placeholder: "e.g. Individual, Company — SH.P.K., Foreign company with Albanian branch",
+    onlyFor: ["tax_consulting", "compliance"],
   },
 ];
 
 function buildQuestions(services: ServiceType[]): BotQuestion[] {
   const questions: BotQuestion[] = [...COMMON_QUESTIONS];
+  const added = new Set<string>(COMMON_QUESTIONS.map((q) => String(q.id)));
 
-  if (services.includes("real_estate")) {
-    for (const q of REAL_ESTATE_QUESTIONS) questions.push(q);
-  }
-  if (services.includes("visa_c") || services.includes("visa_d") || services.includes("residency_permit")) {
-    for (const q of VISA_QUESTIONS) {
-      // Avoid duplicates if already added
-      if (!questions.find((existing) => existing.id === q.id)) questions.push(q);
+  function push(arr: BotQuestion[]) {
+    for (const q of arr) {
+      if (!added.has(String(q.id))) {
+        questions.push(q);
+        added.add(String(q.id));
+      }
     }
   }
+
+  if (services.includes("real_estate")) push(REAL_ESTATE_QUESTIONS);
+  if (services.includes("visa_c") || services.includes("visa_d")) push(VISA_QUESTIONS);
+  if (services.includes("residency_permit")) push(RESIDENCY_QUESTIONS);
+  if (services.includes("company_formation")) push(COMPANY_FORMATION_QUESTIONS);
+  if (services.includes("tax_consulting") || services.includes("compliance")) push(TAX_COMPLIANCE_QUESTIONS);
 
   return questions;
 }
@@ -174,14 +292,50 @@ export default function IntakeBotPanel({
 
   function buildProposalFields(rawAnswers: Record<string, string>): Partial<ProposalFields> {
     const fields: Partial<ProposalFields> = {};
-    if (rawAnswers.nationality) fields.nationality = rawAnswers.nationality;
-    if (rawAnswers.country) fields.country = rawAnswers.country;
-    if (rawAnswers.idPassportNumber) fields.idPassportNumber = rawAnswers.idPassportNumber;
-    if (rawAnswers.propertyDescription) fields.propertyDescription = rawAnswers.propertyDescription;
-    if (rawAnswers.transactionValueEUR) {
-      const v = parseFloat(rawAnswers.transactionValueEUR.replace(/[^0-9.]/g, ""));
-      if (!isNaN(v)) fields.transactionValueEUR = v;
-    }
+
+    // Helper: parse a user answer to a positive number, or undefined
+    const toNum = (v: string | undefined): number | undefined => {
+      if (!v) return undefined;
+      const n = parseFloat(v.replace(/[^0-9.]/g, ""));
+      return isNaN(n) ? undefined : n;
+    };
+    // Helper: set a string field if non-empty and not a skip signal
+    const setStr = (key: keyof ProposalFields, val: string | undefined) => {
+      if (val && !/^(skip|none|-)$/i.test(val.trim())) {
+        (fields as Record<string, unknown>)[key] = val;
+      }
+    };
+
+    // Common
+    setStr("nationality", rawAnswers.nationality);
+    setStr("country", rawAnswers.country);
+    setStr("idPassportNumber", rawAnswers.idPassportNumber);
+
+    // Real estate
+    setStr("propertyDescription", rawAnswers.propertyDescription);
+    const txv = toNum(rawAnswers.transactionValueEUR);
+    if (txv !== undefined) fields.transactionValueEUR = txv;
+
+    // Visa / Residency
+    setStr("purposeOfStay", rawAnswers.purposeOfStay);
+    setStr("employmentType", rawAnswers.employmentType);
+    setStr("previousRefusals", rawAnswers.previousRefusals);
+    const nApplicants = toNum(rawAnswers.numberOfApplicants);
+    if (nApplicants !== undefined) fields.numberOfApplicants = nApplicants;
+    const nFamily = toNum(rawAnswers.numberOfFamilyMembers);
+    if (nFamily !== undefined) fields.numberOfFamilyMembers = nFamily;
+
+    // Company formation
+    setStr("companyType", rawAnswers.companyType);
+    setStr("businessActivity", rawAnswers.businessActivity);
+    const nShareholders = toNum(rawAnswers.numberOfShareholders);
+    if (nShareholders !== undefined) fields.numberOfShareholders = nShareholders;
+    const capital = toNum(rawAnswers.shareCapitalALL);
+    if (capital !== undefined) fields.shareCapitalALL = capital;
+
+    // Tax / Compliance
+    setStr("situationDescription", rawAnswers.situationDescription);
+
     return fields;
   }
 
@@ -253,14 +407,14 @@ export default function IntakeBotPanel({
 
     const isSkip = text.toLowerCase() === "skip";
 
-    // Validate numeric fields
-    if (currentQ.id === "transactionValueEUR" && !isSkip) {
+    // Validate numeric fields (driven by isNumeric flag on each question)
+    if (currentQ.isNumeric && !isSkip) {
       const v = parseFloat(text.replace(/[^0-9.]/g, ""));
-      if (isNaN(v) || v <= 0) {
+      if (isNaN(v) || v < 0) {
         setMessages((prev) => [
           ...prev,
           userMsg(text),
-          botMsg('Please enter a valid number in EUR (e.g. 95000). Type "skip" if you prefer to provide this information later.'),
+          botMsg(`Please enter a valid number (e.g. ${currentQ.placeholder ?? "1"}). Type "skip" if you prefer to provide this information later.`),
         ]);
         return;
       }

@@ -15,7 +15,6 @@ import {
   createMeeting,
   generatePortalToken,
   getChatUnreadCounts,
-  markChatRead,
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
@@ -228,14 +227,8 @@ const Customers = () => {
     return () => clearInterval(id);
   }, [loadUnreadCounts]);
 
-  // Mark portal messages as read when staff opens a customer
-  useEffect(() => {
-    if (!selectedId) return;
-    if ((unreadCounts[selectedId] ?? 0) > 0) {
-      markChatRead(selectedId).catch(() => {});
-      setUnreadCounts((prev) => ({ ...prev, [selectedId]: 0 }));
-    }
-  }, [selectedId]);
+  // NOTE: Dot clears automatically when the CLIENT opens their portal chat (server marks readByClient=true).
+  // No action needed when staff opens the customer panel.
 
   // Real-time polling: refresh customers every 5s
   useEffect(() => {

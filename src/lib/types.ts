@@ -66,6 +66,29 @@ export interface ProposalFields {
   country?: string;
   /** ID or passport number for documents section */
   idPassportNumber?: string;
+  // ── Visa / Residency specific ──
+  /** Number of applicants (including the main applicant) */
+  numberOfApplicants?: number;
+  /** Number of accompanying family members */
+  numberOfFamilyMembers?: number;
+  /** Employment type: employed, self-employed, student, retired, investor, other */
+  employmentType?: string;
+  /** Primary purpose of stay / relocation */
+  purposeOfStay?: string;
+  /** Previous visa/residency refusals: "none" or details */
+  previousRefusals?: string;
+  // ── Company Formation specific ──
+  /** Legal form of the company: SH.P.K., SH.A., branch, representative office, other */
+  companyType?: string;
+  /** Number of shareholders */
+  numberOfShareholders?: number;
+  /** Primary business activity / purpose */
+  businessActivity?: string;
+  /** Proposed registered share capital in ALL */
+  shareCapitalALL?: number;
+  // ── Tax / Compliance specific ──
+  /** Free-text description of the client's situation or what they need */
+  situationDescription?: string;
 }
 
 export interface Customer {
