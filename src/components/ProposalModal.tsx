@@ -35,296 +35,283 @@ export interface ServiceContent {
   nextSteps: string[];
 }
 
-export function getServiceContent(services: ServiceType[], fields: Partial<ProposalFields>): ServiceContent {
-  // Use the primary (first) service to determine the main template
-  const primary = services[0] ?? "residency_permit";
+// Per-service content builders (TypeScript — types stripped at runtime by Node splice script)
 
-  if (primary === "real_estate") {
-    const desc = fields.propertyDescription || "the property";
-    return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance in connection with the purchase of ${desc} in Albania. The objective of the service is to ensure full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
-      servicesSections: [
-        {
-          heading: "2.1 Legal Due Diligence",
-          bullets: [
-            "Verification of ownership title with the Albanian State Cadastre (ASHK)",
-            "Confirmation that the property is properly registered",
-            "Verification of encumbrances (mortgages, liens, seizures, restrictions)",
-            "Review of ownership history and seller's legal authority",
-            "Consistency check between legal documentation and factual status",
-          ],
-        },
-        {
-          heading: "2.2 Contractual Documentation",
-          bullets: [
-            "Review and/or drafting of the final Sale & Purchase Agreement",
-            "Inclusion of buyer-protective clauses",
-            "Coordination with the seller, real estate agent, and notary",
-          ],
-        },
-        {
-          heading: "2.3 Notarial Transaction Assistance",
-          bullets: [
-            "Legal assistance during notarial execution of the transaction",
-            "Verification of seller identity and disposal rights",
-            "Review of the notarial deed prior to execution",
-          ],
-        },
-        {
-          heading: "2.4 Payment Coordination & Legal Guidance",
-          bullets: [
-            "Legal advice on secure payment methods (bank transfer)",
-            "Coordination of payment timing with the notarial transaction",
-            "Legal linkage of payment to ownership transfer",
-          ],
-        },
-        {
-          heading: "2.5 Post-Transaction Registration",
-          bullets: [
-            "Follow-up and registration of ownership with ASHK",
-            "Submission of required documentation",
-            "Monitoring until issuance of the new ownership certificate in the Client's name",
-          ],
-        },
-      ],
-      requiredDocs: [
-        "Valid identification document (ID / Passport)",
-        "Available property-related documentation (if any)",
-        "Payment method details",
-        "Power of Attorney (if required)",
-      ],
-      timeline: [
-        "Legal due diligence & document verification: approx. 3–5 business days (subject to document availability)",
-        "Contract review / finalization & notarial coordination: approx. 3–7 business days",
-        "Notarial execution of the Sale & Purchase Agreement: subject to parties' availability",
-        "Registration of ownership with the Albanian State Cadastre (ASHK): approx. 15–30 business days",
-      ],
-      nextSteps: [
-        "Execution of the legal service engagement agreement",
-        "Payment of the initial portion of the legal fee as agreed",
-        "Commencement of legal due diligence and document verification",
-        "Review and finalization of the Sale & Purchase Agreement",
-        "Coordination with the notary, seller, and real estate agent",
-        "Assistance during notarial signing and payment coordination",
-        "Follow-up and monitoring of ownership registration with ASHK",
-        "Completion of the process upon issuance of the ownership certificate in the Client's name",
-      ],
-    };
-  }
-
-  if (primary === "visa_c" || primary === "visa_d") {
-    const visaLabel = primary === "visa_c" ? "Visa C (Short-Stay)" : "Visa D (Long-Stay)";
-    const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
-    const applicantsPart = fields.numberOfApplicants && fields.numberOfApplicants > 1
-      ? ` for ${fields.numberOfApplicants} applicant(s)`
-      : "";
-    return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a ${visaLabel}${applicantsPart}${purposePart} in Albania. The objective of the service is to ensure full compliance with Albanian immigration requirements, protection of the Client's interests throughout the application process, and timely submission to the competent authorities.`,
-      servicesSections: [
-        {
-          heading: "2.1 Eligibility Assessment",
-          bullets: [
-            "Review of the Client's personal and professional situation",
-            ...(fields.purposeOfStay ? [`Confirmation that a ${visaLabel} is the correct visa type for the stated purpose: ${fields.purposeOfStay}`] : ["Confirmation of visa category and sub-category applicable"]),
-            "Assessment of supporting documentation requirements",
-          ],
-        },
-        {
-          heading: "2.2 Document Preparation",
-          bullets: [
-            "Review and verification of all required supporting documents",
-            "Assistance with translation and notarisation of foreign-language documents where required",
-            "Preparation of the visa application form and supporting cover letter",
-          ],
-        },
-        {
-          heading: "2.3 Submission & Follow-Up",
-          bullets: [
-            "Submission of the complete application package to the competent Albanian authority",
-            "Ongoing follow-up with the immigration authority on the status of the application",
-            "Communication with the Client regarding any additional requirements or requests from authorities",
-          ],
-        },
-      ],
-      requiredDocs: [
-        `Valid passport (minimum 6 months validity beyond intended stay)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
-        "Proof of purpose of stay (employment contract, invitation letter, enrolment letter, etc.)",
-        "Proof of financial means (bank statements, sponsorship letter)",
-        "Proof of accommodation in Albania (lease agreement, hotel booking, property deed)",
-        "Passport-size photographs",
-        ...(fields.numberOfApplicants && fields.numberOfApplicants > 1 ? [`Documentation for all ${fields.numberOfApplicants} applicants`] : []),
-        ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals) ? [`Explanation letter / documentation regarding previous refusal: ${fields.previousRefusals}`] : []),
-        "Any additional documents specific to the visa sub-category",
-      ],
-      timeline: [
-        "Document review and preparation: approx. 3–5 business days",
-        "Application submission: approx. 1–2 business days after document completion",
-        `Authority processing time: approx. 15–30 business days (subject to authority workload${fields.numberOfApplicants && fields.numberOfApplicants > 1 ? ` — ${fields.numberOfApplicants} applicant(s)` : ""})`,
-        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
-      ],
-      nextSteps: [
-        "Execution of the legal service engagement agreement",
-        "Payment of the initial portion of the legal fee as agreed",
-        "Collection and review of required documents from the Client",
-        "Submission of the visa application to the competent Albanian authority",
-        "Follow-up with the immigration authority on application status",
-        "Notification to the Client upon decision and next steps",
-      ],
-    };
-  }
-
-  if (primary === "residency_permit") {
-    const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
-    const employmentPart = fields.employmentType ? ` The client's current status is: ${fields.employmentType}.` : "";
-    const applicantsNote = fields.numberOfApplicants
-      ? ` This application covers ${fields.numberOfApplicants} applicant(s)${
-          fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0
-            ? `, of whom ${fields.numberOfFamilyMembers} are family member(s)/dependant(s)`
-            : ""
-        }.`
-      : "";
-    return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a Residence Permit in Albania${purposePart}.${employmentPart}${applicantsNote} The objective of the service is to ensure full compliance with Albanian immigration law, protection of the Client's interests, and successful registration of residence status with the competent authorities.`,
-      servicesSections: [
-        {
-          heading: "2.1 Eligibility & Category Assessment",
-          bullets: [
-            "Review of the Client's personal, professional, and financial situation",
-            ...(fields.employmentType ? [`Assessment of the Client's status as: ${fields.employmentType} — and the appropriate residence permit category`] : ["Determination of the most suitable residence permit category"]),
-            "Legal advice on residency rights and obligations under Albanian law",
-          ],
-        },
-        {
-          heading: "2.2 Document Preparation",
-          bullets: [
-            "Review and verification of all required supporting documents",
-            "Assistance with translation and notarisation of foreign-language documents",
-            "Preparation of the residence permit application and supporting documentation",
-          ],
-        },
-        {
-          heading: "2.3 Submission to Competent Authorities",
-          bullets: [
-            "Submission of the complete application package to the National Registration Centre (QKR) or competent body",
-            "Coordination with relevant Albanian authorities",
-            "Assistance during any required in-person appointments",
-          ],
-        },
-        {
-          heading: "2.4 Monitoring & Completion",
-          bullets: [
-            "Ongoing monitoring of the application status",
-            "Communication with authorities regarding any additional requirements",
-            "Notification to the Client upon approval and collection of the residence permit",
-          ],
-        },
-      ],
-      requiredDocs: [
-        `Valid passport (minimum 12 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
-        "Lease agreement or property ownership deed",
-        ...(fields.employmentType ? [`Proof of ${fields.employmentType} status (employment contract, self-employment registration, pension statement, investment proof, etc.)`] : ["Proof of financial means or proof of employment / self-employment"]),
-        "Health insurance (valid for Albania)",
-        `Certificate of no criminal record from country of origin${fields.country ? ` (${fields.country})` : ""} (apostilled / legalised)`,
-        "Passport-size photographs",
-        ...(fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0 ? [`Documents for ${fields.numberOfFamilyMembers} accompanying family member(s) / dependant(s) (passports, birth/marriage certificates, etc.)`] : []),
-        ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals) ? [`Explanation letter regarding previous refusal: ${fields.previousRefusals}`] : []),
-        "Power of Attorney (if the Client appoints a representative)",
-      ],
-      timeline: [
-        "Document review and preparation: approx. 5–10 business days",
-        "Application submission: approx. 1–2 business days after document completion",
-        `Authority processing time: approx. 30–60 business days (subject to authority workload and permit category${fields.numberOfApplicants && fields.numberOfApplicants > 1 ? ` — ${fields.numberOfApplicants} applicant(s)` : ""})`,
-        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
-      ],
-      nextSteps: [
-        "Execution of the legal service engagement agreement",
-        "Payment of the initial portion of the legal fee as agreed",
-        "Collection and review of required documents from the Client",
-        "Submission of the residence permit application",
-        "Ongoing monitoring and follow-up with authorities",
-        "Notification to the Client upon approval and permit collection",
-      ],
-    };
-  }
-
-  if (primary === "company_formation") {
-    const companyTypePart = fields.companyType ? ` — ${fields.companyType}` : "";
-    const activityPart = fields.businessActivity ? ` engaged in ${fields.businessActivity}` : "";
-    const shareholdersPart = fields.numberOfShareholders ? ` with ${fields.numberOfShareholders} shareholder(s)` : "";
-    const capitalPart = fields.shareCapitalALL ? ` Proposed registered capital: ${fields.shareCapitalALL.toLocaleString()} ALL.` : "";
-    return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for the formation and registration of a company in Albania${companyTypePart}${activityPart}${shareholdersPart}.${capitalPart} The objective of the service is to ensure full legal compliance with Albanian commercial law, protection of the Client's interests, and successful registration with the National Registration Centre (QKR).`,
-      servicesSections: [
-        {
-          heading: "2.1 Legal & Structural Advisory",
-          bullets: [
-            ...(fields.companyType ? [`Legal advisory on the chosen entity type: ${fields.companyType} — confirmation of suitability and legal requirements`] : ["Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)"]),
-            ...(fields.numberOfShareholders ? [`Advice on the shareholder structure (${fields.numberOfShareholders} shareholder(s)), registered capital, and governance`] : ["Advice on shareholder structure, registered capital, and governance"]),
-            "Company name availability check with the National Registration Centre (QKR)",
-          ],
-        },
-        {
-          heading: "2.2 Document Preparation",
-          bullets: [
-            `Drafting of the Articles of Association and Company Statute${fields.businessActivity ? ` — business activity: ${fields.businessActivity}` : ""}`,
-            "Preparation of all registration documents required by QKR",
-            "Assistance with notarisation of required documents",
-          ],
-        },
-        {
-          heading: "2.3 Registration with Authorities",
-          bullets: [
-            "Submission of the complete registration package to QKR",
-            "Coordination with the tax authority for initial tax registration",
-            "Obtaining of the NIPT (Tax Identification Number)",
-          ],
-        },
-        {
-          heading: "2.4 Post-Registration Guidance",
-          bullets: [
-            "Guidance on opening a corporate bank account",
-            "Initial compliance obligations briefing",
-            "Coordination with accountant if required",
-          ],
-        },
-      ],
-      requiredDocs: [
-        `Valid identification document (ID / Passport) for all shareholders and directors${fields.numberOfShareholders ? ` (${fields.numberOfShareholders} shareholder(s))` : ""}`,
-        "Proposed company name (at least two options)",
-        `Shareholder structure and ownership percentages${fields.numberOfShareholders ? ` — ${fields.numberOfShareholders} shareholder(s)` : ""}`,
-        `Registered capital amount${fields.shareCapitalALL ? ` — ${fields.shareCapitalALL.toLocaleString()} ALL` : ""} and intended business activity${fields.businessActivity ? `: ${fields.businessActivity}` : ""}`,
-        "Registered office address in Albania",
-        "Power of Attorney (if the Client appoints a representative)",
-      ],
-      timeline: [
-        "Advisory and document preparation: approx. 3–5 business days",
-        "Notarisation and submission to QKR: approx. 1–2 business days",
-        "QKR registration processing: approx. 1–3 business days",
-        "Tax registration (NIPT): approx. 2–5 business days",
-        "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
-      ],
-      nextSteps: [
-        "Execution of the legal service engagement agreement",
-        "Payment of the initial portion of the legal fee as agreed",
-        "Collection of required documents and information from the Client",
-        "Drafting of Articles of Association and preparation of registration documents",
-        "Notarisation and submission to QKR",
-        "Tax registration and issuance of NIPT",
-        "Post-registration guidance and account opening support",
-      ],
-    };
-  }
-
-  // Default (tax_consulting / compliance / other)
-  const situationPart = fields.situationDescription ? ` The client requires assistance with: ${fields.situationDescription}.` : "";
-  const entityPart = fields.employmentType ? ` Acting as: ${fields.employmentType}.` : "";
+function contentForRealEstate(fields: Partial<ProposalFields>): ServiceContent {
+  const desc = fields.propertyDescription || "the property";
   return {
-    scopeParagraph: `This proposal outlines the provision of professional legal and ${
-      primary === "tax_consulting" ? "tax consulting" : "compliance advisory"
-    } services.${situationPart}${entityPart} The objective of the service is to protect the Client's interests, ensure full compliance with applicable Albanian law and regulations, and provide expert guidance throughout the engagement.`,
+    scopeParagraph: `Provision of full legal assistance for the purchase of ${desc} in Albania — ensuring full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
     servicesSections: [
       {
-        heading: "2.1 Initial Assessment",
+        heading: "Legal Due Diligence (Real Estate)",
+        bullets: [
+          "Verification of ownership title with the Albanian State Cadastre (ASHK)",
+          "Confirmation that the property is properly registered",
+          "Verification of encumbrances (mortgages, liens, seizures, restrictions)",
+          "Review of ownership history and seller's legal authority",
+          "Consistency check between legal documentation and factual status",
+        ],
+      },
+      {
+        heading: "Contractual Documentation (Real Estate)",
+        bullets: [
+          "Review and/or drafting of the final Sale & Purchase Agreement",
+          "Inclusion of buyer-protective clauses",
+          "Coordination with the seller, real estate agent, and notary",
+        ],
+      },
+      {
+        heading: "Notarial Transaction Assistance (Real Estate)",
+        bullets: [
+          "Legal assistance during notarial execution of the transaction",
+          "Verification of seller identity and disposal rights",
+          "Review of the notarial deed prior to execution",
+        ],
+      },
+      {
+        heading: "Post-Transaction Registration (Real Estate)",
+        bullets: [
+          "Follow-up and registration of ownership with ASHK",
+          "Submission of required documentation",
+          "Monitoring until issuance of the new ownership certificate in the Client's name",
+        ],
+      },
+    ],
+    requiredDocs: [
+      "Valid identification document (ID / Passport)",
+      "Available property-related documentation (if any)",
+      "Payment method details",
+      "Power of Attorney (if required for real estate)",
+    ],
+    timeline: [
+      "Real Estate — Legal due diligence & document verification: approx. 3–5 business days",
+      "Real Estate — Contract review / finalization: approx. 3–7 business days",
+      "Real Estate — Notarial execution: subject to parties' availability",
+      "Real Estate — Registration with ASHK: approx. 15–30 business days",
+    ],
+    nextSteps: [
+      "Collection and review of property-related documents",
+      "Legal due diligence on the property",
+      "Review and finalization of the Sale & Purchase Agreement",
+      "Assistance during notarial signing and payment coordination",
+      "Follow-up and monitoring of ownership registration with ASHK",
+    ],
+  };
+}
+
+function contentForVisa(type: "visa_c" | "visa_d", fields: Partial<ProposalFields>): ServiceContent {
+  const visaLabel = type === "visa_c" ? "Visa C (Short-Stay)" : "Visa D (Long-Stay)";
+  const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
+  const applicantsPart =
+    fields.numberOfApplicants && fields.numberOfApplicants > 1
+      ? ` for ${fields.numberOfApplicants} applicant(s)`
+      : "";
+  return {
+    scopeParagraph: `Provision of full legal assistance for obtaining a ${visaLabel}${applicantsPart}${purposePart} in Albania — ensuring full compliance with Albanian immigration requirements and timely submission to the competent authorities.`,
+    servicesSections: [
+      {
+        heading: `Eligibility Assessment (${visaLabel})`,
+        bullets: [
+          "Review of the Client's personal and professional situation",
+          fields.purposeOfStay
+            ? `Confirmation that a ${visaLabel} is the correct type for: ${fields.purposeOfStay}`
+            : "Confirmation of visa category and sub-category applicable",
+          "Assessment of supporting documentation requirements",
+        ],
+      },
+      {
+        heading: `Document Preparation & Submission (${visaLabel})`,
+        bullets: [
+          "Review and verification of all required supporting documents",
+          "Assistance with translation and notarisation of foreign-language documents",
+          "Preparation of the visa application form and cover letter",
+          "Submission of the complete application package to the competent Albanian authority",
+          "Ongoing follow-up with the immigration authority",
+        ],
+      },
+    ],
+    requiredDocs: [
+      `Valid passport (minimum 6 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
+      "Proof of purpose of stay (employment contract, invitation letter, etc.)",
+      "Proof of financial means (bank statements)",
+      "Proof of accommodation in Albania",
+      "Passport-size photographs",
+      ...(fields.numberOfApplicants && fields.numberOfApplicants > 1
+        ? [`Documentation for all ${fields.numberOfApplicants} applicants`]
+        : []),
+      ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals)
+        ? [`Explanation letter regarding previous refusal: ${fields.previousRefusals}`]
+        : []),
+    ],
+    timeline: [
+      `${visaLabel} — Document review and preparation: approx. 3–5 business days`,
+      `${visaLabel} — Application submission: approx. 1–2 business days after document completion`,
+      `${visaLabel} — Authority processing time: approx. 15–30 business days`,
+    ],
+    nextSteps: [
+      `Collection and review of required documents for ${visaLabel}`,
+      `Submission of the ${visaLabel} application to the competent Albanian authority`,
+      "Follow-up with the immigration authority on application status",
+    ],
+  };
+}
+
+function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
+  const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
+  const employmentPart = fields.employmentType
+    ? ` The client's current status is: ${fields.employmentType}.`
+    : "";
+  const applicantsNote = fields.numberOfApplicants
+    ? ` This application covers ${fields.numberOfApplicants} applicant(s)${
+        fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0
+          ? `, of whom ${fields.numberOfFamilyMembers} are family member(s)/dependant(s)`
+          : ""
+      }.`
+    : "";
+  return {
+    scopeParagraph: `Provision of full legal assistance for obtaining a Residence Permit in Albania${purposePart}.${employmentPart}${applicantsNote} Ensuring full compliance with Albanian immigration law and successful registration of residence status.`,
+    servicesSections: [
+      {
+        heading: "Eligibility & Category Assessment (Residency)",
+        bullets: [
+          "Review of the Client's personal, professional, and financial situation",
+          ...(fields.employmentType
+            ? [
+                `Assessment of the Client's status as: ${fields.employmentType} — and the appropriate permit category`,
+              ]
+            : ["Determination of the most suitable residence permit category"]),
+          "Legal advice on residency rights and obligations under Albanian law",
+        ],
+      },
+      {
+        heading: "Document Preparation & Submission (Residency)",
+        bullets: [
+          "Review and verification of all required supporting documents",
+          "Assistance with translation and notarisation of foreign-language documents",
+          "Preparation of the residence permit application and supporting documentation",
+          "Submission to the National Registration Centre (QKR) or competent body",
+          "Ongoing monitoring and communication with authorities",
+        ],
+      },
+    ],
+    requiredDocs: [
+      `Valid passport (minimum 12 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
+      "Lease agreement or property ownership deed",
+      ...(fields.employmentType
+        ? [
+            `Proof of ${fields.employmentType} status (employment contract, self-employment registration, etc.)`,
+          ]
+        : ["Proof of financial means or employment / self-employment"]),
+      "Health insurance valid for Albania",
+      `Certificate of no criminal record from country of origin${fields.country ? ` (${fields.country})` : ""} (apostilled / legalised)`,
+      "Passport-size photographs",
+      ...(fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0
+        ? [
+            `Documents for ${fields.numberOfFamilyMembers} family member(s)/dependant(s)`,
+          ]
+        : []),
+      ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals)
+        ? [`Explanation letter regarding previous refusal: ${fields.previousRefusals}`]
+        : []),
+      "Power of Attorney (if the Client appoints a representative for residency)",
+    ],
+    timeline: [
+      "Residency — Document review and preparation: approx. 5–10 business days",
+      "Residency — Application submission: approx. 1–2 business days after document completion",
+      `Residency — Authority processing time: approx. 30–60 business days${
+        fields.numberOfApplicants && fields.numberOfApplicants > 1
+          ? ` — ${fields.numberOfApplicants} applicant(s)`
+          : ""
+      }`,
+    ],
+    nextSteps: [
+      "Collection and review of required documents for the Residence Permit",
+      "Submission of the residence permit application",
+      "Ongoing monitoring and follow-up with authorities",
+      "Notification to the Client upon approval and permit collection",
+    ],
+  };
+}
+
+function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
+  const companyTypePart = fields.companyType ? ` — ${fields.companyType}` : "";
+  const activityPart = fields.businessActivity ? ` engaged in ${fields.businessActivity}` : "";
+  const shareholdersPart = fields.numberOfShareholders
+    ? ` with ${fields.numberOfShareholders} shareholder(s)`
+    : "";
+  const capitalPart = fields.shareCapitalALL
+    ? ` Proposed registered capital: ${fields.shareCapitalALL.toLocaleString()} ALL.`
+    : "";
+  return {
+    scopeParagraph: `Provision of full legal assistance for the formation and registration of a company in Albania${companyTypePart}${activityPart}${shareholdersPart}.${capitalPart} Ensuring full legal compliance with Albanian commercial law and successful registration with QKR.`,
+    servicesSections: [
+      {
+        heading: "Legal & Structural Advisory (Company Formation)",
+        bullets: [
+          ...(fields.companyType
+            ? [
+                `Legal advisory on the chosen entity type: ${fields.companyType} — confirmation of suitability`,
+              ]
+            : ["Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)"]),
+          ...(fields.numberOfShareholders
+            ? [
+                `Advice on the shareholder structure (${fields.numberOfShareholders} shareholder(s)), registered capital, and governance`,
+              ]
+            : ["Advice on shareholder structure, registered capital, and governance"]),
+          "Company name availability check with the National Registration Centre (QKR)",
+        ],
+      },
+      {
+        heading: "Document Preparation & Registration (Company Formation)",
+        bullets: [
+          `Drafting of the Articles of Association${
+            fields.businessActivity ? ` — business activity: ${fields.businessActivity}` : ""
+          }`,
+          "Preparation of all registration documents required by QKR",
+          "Submission to QKR and coordination with the tax authority for NIPT",
+          "Post-registration guidance (bank account opening, initial compliance)",
+        ],
+      },
+    ],
+    requiredDocs: [
+      `Valid ID / Passport for all shareholders and directors${
+        fields.numberOfShareholders ? ` (${fields.numberOfShareholders} shareholders)` : ""
+      }`,
+      "Proposed company name (at least two options)",
+      "Shareholder structure and ownership percentages",
+      `Registered capital${
+        fields.shareCapitalALL ? `: ${fields.shareCapitalALL.toLocaleString()} ALL` : ""
+      } and business activity${fields.businessActivity ? `: ${fields.businessActivity}` : ""}`,
+      "Registered office address in Albania",
+      "Power of Attorney (if the Client appoints a representative for company registration)",
+    ],
+    timeline: [
+      "Company Formation — Advisory and document preparation: approx. 3–5 business days",
+      "Company Formation — Notarisation and submission to QKR: approx. 1–2 business days",
+      "Company Formation — QKR registration processing: approx. 1–3 business days",
+      "Company Formation — Tax registration (NIPT): approx. 2–5 business days",
+    ],
+    nextSteps: [
+      "Collection of required documents and information for company formation",
+      "Drafting of Articles of Association and preparation of registration documents",
+      "Notarisation and submission to QKR",
+      "Tax registration and issuance of NIPT",
+      "Post-registration guidance and account opening support",
+    ],
+  };
+}
+
+function contentForTax(type: ServiceType, fields: Partial<ProposalFields>): ServiceContent {
+  const situationPart = fields.situationDescription
+    ? ` The client requires assistance with: ${fields.situationDescription}.`
+    : "";
+  const entityPart = fields.employmentType ? ` Acting as: ${fields.employmentType}.` : "";
+  const label = type === "tax_consulting" ? "Tax Consulting" : "Compliance Advisory";
+  return {
+    scopeParagraph: `Provision of professional legal and ${label.toLowerCase()} services.${situationPart}${entityPart} Ensuring full compliance with applicable Albanian law and expert guidance throughout the engagement.`,
+    servicesSections: [
+      {
+        heading: `Initial Assessment (${label})`,
         bullets: [
           "Review of the Client's situation, documentation, and objectives",
           "Identification of applicable legal and regulatory requirements",
@@ -332,19 +319,12 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
         ],
       },
       {
-        heading: "2.2 Advisory & Documentation",
+        heading: `Advisory & Documentation (${label})`,
         bullets: [
           "Provision of legal opinions and written advisory notes",
           "Preparation and review of relevant documentation",
           "Representation before competent authorities where required",
-        ],
-      },
-      {
-        heading: "2.3 Monitoring & Completion",
-        bullets: [
-          "Ongoing monitoring of the matter",
-          "Communication with the Client and third parties as required",
-          "Provision of a completion report upon conclusion of the engagement",
+          "Provision of a completion report upon conclusion",
         ],
       },
     ],
@@ -354,18 +334,83 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
       "Power of Attorney (if the Client appoints a representative)",
     ],
     timeline: [
-      "Initial review and assessment: approx. 3–7 business days",
-      "Advisory and documentation phase: approx. 5–15 business days",
-      "Authority interaction and monitoring: subject to authority processing times",
-      "NOTE: Indicative timelines may vary depending on the complexity of the matter",
+      `${label} — Initial review and assessment: approx. 3–7 business days`,
+      `${label} — Advisory and documentation phase: approx. 5–15 business days`,
+      `${label} — Authority interaction: subject to authority processing times`,
     ],
+    nextSteps: [
+      `Collection of required documents for ${label}`,
+      "Commencement of legal review and advisory work",
+      "Ongoing communication and monitoring",
+    ],
+  };
+}
+
+export function getServiceContent(services: ServiceType[], fields: Partial<ProposalFields>): ServiceContent {
+  const all: ServiceType[] = services.length ? services : ["residency_permit"];
+
+  // Build a ServiceContent per service
+  const parts: ServiceContent[] = all.map((svc) => {
+    if (svc === "real_estate") return contentForRealEstate(fields);
+    if (svc === "visa_c" || svc === "visa_d") return contentForVisa(svc, fields);
+    if (svc === "residency_permit") return contentForResidency(fields);
+    if (svc === "company_formation") return contentForCompany(fields);
+    return contentForTax(svc, fields);
+  });
+
+  if (parts.length === 1) {
+    // Single service — wrap scope with intro and number sections
+    const p = parts[0];
+    return {
+      ...p,
+      scopeParagraph:
+        "This proposal outlines the provision of legal services as described below.\n\n" +
+        p.scopeParagraph,
+      servicesSections: p.servicesSections.map((s, i) => ({
+        ...s,
+        heading: `2.${i + 1} ${s.heading}`,
+      })),
+    };
+  }
+
+  // Multiple services — merge content from all
+  const serviceNames = all.map((s) => SERVICE_LABELS[s] || s).join(", ");
+  const combinedScope =
+    `This proposal outlines the provision of integrated legal assistance covering the following services: ${serviceNames}.\n\n` +
+    parts.map((p) => p.scopeParagraph).join("\n\n");
+
+  // Re-number sections across all services
+  let sectionIdx = 1;
+  const combinedSections: ServiceContent["servicesSections"] = [];
+  for (const p of parts) {
+    for (const s of p.servicesSections) {
+      combinedSections.push({ ...s, heading: `2.${sectionIdx++} ${s.heading}` });
+    }
+  }
+
+  // Merge required docs — deduplicate
+  const seenDocs = new Set<string>();
+  const combinedDocs: string[] = [];
+  for (const p of parts) {
+    for (const d of p.requiredDocs) {
+      const key = d.toLowerCase().trim();
+      if (!seenDocs.has(key)) {
+        seenDocs.add(key);
+        combinedDocs.push(d);
+      }
+    }
+  }
+
+  return {
+    scopeParagraph: combinedScope,
+    servicesSections: combinedSections,
+    requiredDocs: combinedDocs,
+    timeline: parts.flatMap((p) => p.timeline),
     nextSteps: [
       "Execution of the legal service engagement agreement",
       "Payment of the initial portion of the legal fee as agreed",
-      "Collection of required documents and information from the Client",
-      "Commencement of legal review and advisory work",
-      "Ongoing communication and monitoring",
-      "Provision of completion report upon conclusion",
+      ...parts.flatMap((p) => p.nextSteps),
+      "Completion of all service engagements and issuance of final documents",
     ],
   };
 }

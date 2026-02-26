@@ -1,4 +1,4 @@
-import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, HistoryRecord, Invoice, Meeting, Note, PortalData, PortalMessage, PortalNote, SearchResult, TeamSummary } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, DeletedRecord, HistoryRecord, Invoice, Meeting, Note, PortalData, PortalMessage, PortalNote, SearchResult, TeamSummary } from "./types";
 
 export type PagedResult<T> = {
   items: T[];
@@ -501,4 +501,21 @@ export async function deletePortalChatMessage(customerId: string, messageId: str
 
 export async function getChatUnreadCounts(): Promise<Array<{ customerId: string; unreadCount: number }>> {
   return api<Array<{ customerId: string; unreadCount: number }>>(`/api/portal-chat/unread-counts`);
+}
+
+// ── Admin: Deleted Records ──
+export async function getDeletedRecords(): Promise<DeletedRecord[]> {
+  return api<DeletedRecord[]>('/api/admin/deleted-records');
+}
+
+export async function getDeletedRecord(recordId: string): Promise<DeletedRecord> {
+  return api<DeletedRecord>(`/api/admin/deleted-records/${recordId}`);
+}
+
+export async function restoreDeletedRecord(recordId: string): Promise<void> {
+  await api(`/api/admin/deleted-records/${recordId}/restore`, { method: 'POST' });
+}
+
+export async function purgeDeletedRecord(recordId: string): Promise<void> {
+  await api(`/api/admin/deleted-records/${recordId}`, { method: 'DELETE' });
 }

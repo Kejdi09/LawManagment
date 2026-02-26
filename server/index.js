@@ -121,6 +121,7 @@ let usersCol;
 let auditLogsCol;
 let portalNotesCol;
 let portalMessagesCol;
+let deletedRecordsCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -167,6 +168,7 @@ async function connectDb() {
   portalTokensCol = db.collection("portalTokens");
   portalNotesCol = db.collection("portalNotes");
   portalMessagesCol = db.collection("portalMessages");
+  deletedRecordsCol = db.collection("deletedRecords");
 }
 
 async function seedIfEmpty() {
@@ -443,9 +445,34 @@ async function syncCustomerNotifications() {
       const hoursSinceLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : 0;
       const readyToDeleteAfterFollowups = tracker.followupCount >= 3 && hoursSinceLastFollowup >= 24;
       if (readyToDeleteAfterFollowups) {
+        // Soft-delete: snapshot to deletedRecords before removing
+        const autoRelatedCases = await casesCol.find({ customerId: customer.customerId }).toArray();
+        const autoRelatedCaseIds = autoRelatedCases.map((c) => c.caseId);
+        const [autoCaseHistory, autoNotes, autoTasks, autoCustomerHistory] = await Promise.all([
+          historyCol.find({ caseId: { $in: autoRelatedCaseIds } }).toArray(),
+          notesCol.find({ caseId: { $in: autoRelatedCaseIds } }).toArray(),
+          tasksCol.find({ caseId: { $in: autoRelatedCaseIds } }).toArray(),
+          customerHistoryCol.find({ customerId: customer.customerId }).toArray(),
+        ]);
+        const autoNow = new Date().toISOString();
+        const autoExpiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
+        await deletedRecordsCol.insertOne({
+          recordId: genShortId('DR'),
+          recordType: 'customer',
+          customerId: customer.customerId,
+          customerName: customer.name || customer.customerId,
+          deletedAt: autoNow,
+          deletedBy: 'system-auto',
+          expiresAt: autoExpiresAt,
+          snapshot: { customer, cases: autoRelatedCases, caseHistory: autoCaseHistory, notes: autoNotes, tasks: autoTasks, customerHistory: autoCustomerHistory },
+        });
         await Promise.all([
           customerNotificationsCol.deleteMany({ customerId: customer.customerId }),
           customerHistoryCol.deleteMany({ customerId: customer.customerId }),
+          casesCol.deleteMany({ customerId: customer.customerId }),
+          historyCol.deleteMany({ caseId: { $in: autoRelatedCaseIds } }),
+          notesCol.deleteMany({ caseId: { $in: autoRelatedCaseIds } }),
+          tasksCol.deleteMany({ caseId: { $in: autoRelatedCaseIds } }),
           customersCol.deleteOne({ customerId: customer.customerId }),
         ]);
         await logAudit({
@@ -1128,8 +1155,27 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
   const current = await customersCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: "Not found" });
   const caseScope = buildCaseScopeFilter(req.user);
-  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
+  const [caseHistory, notes, tasks, customerHistory] = await Promise.all([
+    historyCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    notesCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    tasksCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    customerHistoryCol.find({ customerId: id }).toArray(),
+  ]);
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
+  const deletedRecord = {
+    recordId: genShortId('DR'),
+    recordType: 'customer',
+    customerId: id,
+    customerName: current.name || id,
+    deletedAt: now,
+    deletedBy: req.user?.username || 'unknown',
+    expiresAt,
+    snapshot: { customer: current, cases: relatedCases, caseHistory, notes, tasks, customerHistory },
+  };
+  await deletedRecordsCol.insertOne(deletedRecord);
   await Promise.all([
     casesCol.deleteMany({ customerId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
@@ -1138,7 +1184,7 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.deleteMany({ customerId: id }),
     customersCol.deleteOne({ customerId: id, ...customerScope }),
   ]);
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'customer', resourceId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'soft-delete', resource: 'customer', resourceId: id });
   res.json({ ok: true });
 });
 
@@ -1148,8 +1194,27 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const current = await confirmedClientsCol.findOne({ customerId: id, ...customerScope });
   if (!current) return res.status(404).json({ error: "Not found" });
   const caseScope = buildCaseScopeFilter(req.user);
-  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).project({ caseId: 1 }).toArray();
+  const relatedCases = await casesCol.find({ customerId: id, ...caseScope }).toArray();
   const relatedCaseIds = relatedCases.map((c) => c.caseId);
+  const [caseHistory, notes, tasks, customerHistory] = await Promise.all([
+    historyCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    notesCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    tasksCol.find({ caseId: { $in: relatedCaseIds } }).toArray(),
+    customerHistoryCol.find({ customerId: id }).toArray(),
+  ]);
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
+  const deletedRecord = {
+    recordId: genShortId('DR'),
+    recordType: 'confirmedClient',
+    customerId: id,
+    customerName: current.name || id,
+    deletedAt: now,
+    deletedBy: req.user?.username || 'unknown',
+    expiresAt,
+    snapshot: { customer: current, cases: relatedCases, caseHistory, notes, tasks, customerHistory },
+  };
+  await deletedRecordsCol.insertOne(deletedRecord);
   await Promise.all([
     casesCol.deleteMany({ customerId: id, ...caseScope }),
     historyCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
@@ -1158,7 +1223,74 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.deleteMany({ customerId: id }),
     confirmedClientsCol.deleteOne({ customerId: id, ...customerScope }),
   ]);
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'confirmedClient', resourceId: id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'soft-delete', resource: 'confirmedClient', resourceId: id });
+  res.json({ ok: true });
+});
+
+// ── Admin: Deleted Records (soft-delete archive) ─────────────────────────────
+app.get("/api/admin/deleted-records", verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const now = new Date().toISOString();
+  const records = await deletedRecordsCol
+    .find({ expiresAt: { $gt: now } })
+    .sort({ deletedAt: -1 })
+    .project({ 'snapshot': 0 })
+    .toArray();
+  res.json(records);
+});
+
+app.get("/api/admin/deleted-records/:id", verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const record = await deletedRecordsCol.findOne({ recordId: req.params.id });
+  if (!record) return res.status(404).json({ error: 'Not found' });
+  res.json(record);
+});
+
+app.post("/api/admin/deleted-records/:id/restore", verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const record = await deletedRecordsCol.findOne({ recordId: req.params.id });
+  if (!record) return res.status(404).json({ error: 'Not found' });
+  const { snapshot, recordType } = record;
+  // Re-insert customer/confirmedClient and related data
+  const col = recordType === 'confirmedClient' ? confirmedClientsCol : customersCol;
+  // Remove _id so MongoDB generates a new one
+  const customerDoc = { ...snapshot.customer };
+  delete customerDoc._id;
+  await col.updateOne({ customerId: record.customerId }, { $setOnInsert: customerDoc }, { upsert: true });
+  // Re-insert cases and related data (avoid duplicates)
+  const restoreOps = [];
+  for (const c of (snapshot.cases || [])) {
+    const d = { ...c }; delete d._id;
+    restoreOps.push(casesCol.updateOne({ caseId: c.caseId }, { $setOnInsert: d }, { upsert: true }));
+  }
+  for (const h of (snapshot.caseHistory || [])) {
+    const d = { ...h }; delete d._id;
+    restoreOps.push(historyCol.updateOne({ historyId: h.historyId }, { $setOnInsert: d }, { upsert: true }));
+  }
+  for (const n of (snapshot.notes || [])) {
+    const d = { ...n }; delete d._id;
+    restoreOps.push(notesCol.updateOne({ noteId: n.noteId }, { $setOnInsert: d }, { upsert: true }));
+  }
+  for (const t of (snapshot.tasks || [])) {
+    const d = { ...t }; delete d._id;
+    restoreOps.push(tasksCol.updateOne({ taskId: t.taskId }, { $setOnInsert: d }, { upsert: true }));
+  }
+  for (const ch of (snapshot.customerHistory || [])) {
+    const d = { ...ch }; delete d._id;
+    restoreOps.push(customerHistoryCol.updateOne({ historyId: ch.historyId }, { $setOnInsert: d }, { upsert: true }));
+  }
+  await Promise.all(restoreOps);
+  await deletedRecordsCol.deleteOne({ recordId: record.recordId });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'restore', resource: 'deletedRecord', resourceId: record.recordId, details: { customerId: record.customerId, recordType } });
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/deleted-records/:id", verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const record = await deletedRecordsCol.findOne({ recordId: req.params.id });
+  if (!record) return res.status(404).json({ error: 'Not found' });
+  await deletedRecordsCol.deleteOne({ recordId: req.params.id });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'purge', resource: 'deletedRecord', resourceId: req.params.id });
   res.json({ ok: true });
 });
 

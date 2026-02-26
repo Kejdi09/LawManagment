@@ -598,14 +598,16 @@ const CustomerCases = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Customer ID *</label>
-              <Input
-                list="cc-customer-ids"
-                autoComplete="off"
-                value={caseForm.customerId}
-                onChange={(e) => setCaseForm({ ...caseForm, customerId: e.target.value })}
-                placeholder="C001"
-                required
-              />
+              <Select value={caseForm.customerId} onValueChange={(v) => setCaseForm({ ...caseForm, customerId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select customer…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customerOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.id} — {o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Assigned To</label>
@@ -676,9 +678,7 @@ const CustomerCases = () => {
             <Button variant="ghost" onClick={() => setShowCaseForm(false)}>Cancel</Button>
             <Button onClick={handleCreateCase}>Create Case</Button>
           </div>
-          <datalist id="cc-customer-ids">
-            {customerOptions.map((o) => <option key={o.id} value={o.id}>{`${o.id} â€” ${o.name}`}</option>)}
-          </datalist>
+
           <datalist id="cc-category-options">
             {categoryOptions.map((c) => <option key={c} value={c} />)}
           </datalist>

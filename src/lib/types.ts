@@ -391,6 +391,24 @@ export interface PortalMessage {
   readByLawyer?: boolean;
 }
 
+export interface DeletedRecord {
+  recordId: string;
+  recordType: 'customer' | 'confirmedClient';
+  customerId: string;
+  customerName: string;
+  deletedAt: string;
+  deletedBy: string;
+  expiresAt: string;
+  snapshot: {
+    customer: Customer;
+    cases: Case[];
+    caseHistory: HistoryRecord[];
+    notes: Note[];
+    tasks: CaseTask[];
+    customerHistory: CustomerHistoryRecord[];
+  };
+}
+
 export interface PortalData {
   client: { name: string; customerId: string; services: ServiceType[]; status: string };
   cases: Array<{
