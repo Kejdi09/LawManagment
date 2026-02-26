@@ -20,6 +20,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Invoices = lazy(() => import("./pages/Invoices"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const Chat = lazy(() => import("./pages/Chat"));
+const StaffManagement = lazy(() => import("./pages/StaffManagement"));
 
 const queryClient = new QueryClient();
 
@@ -128,6 +129,7 @@ const App = () => (
                 <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
                 <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
                 <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
+                <Route path="/staff" element={<RequireAuth><StaffManagement /></RequireAuth>} />
                 <Route path="/portal/:token" element={<ClientPortal />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

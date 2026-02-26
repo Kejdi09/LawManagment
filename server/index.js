@@ -996,6 +996,25 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     update.statusHistory.push({ status: update.status, date: new Date().toISOString() });
   }
 
+  // Auto-advance SEND_CONTRACT → WAITING_ACCEPTANCE (contract was just dispatched)
+  if (update.status === 'SEND_CONTRACT') {
+    const autoId = genShortId('CH');
+    await customerHistoryCol.insertOne({
+      historyId: autoId,
+      customerId: id,
+      statusFrom: 'SEND_CONTRACT',
+      statusTo: 'WAITING_ACCEPTANCE',
+      date: new Date().toISOString(),
+      changedBy: 'system-auto',
+      changedByRole: 'system',
+      changedByConsultant: null,
+      changedByLawyer: null,
+    });
+    update.status = 'WAITING_ACCEPTANCE';
+    if (!update.statusHistory) update.statusHistory = (current.statusHistory || []);
+    update.statusHistory.push({ status: 'WAITING_ACCEPTANCE', date: new Date().toISOString() });
+  }
+
   // If becoming a confirmed client, migrate to confirmedClients and remove from customers
   if (update.status === 'CLIENT') {
     const confirmedPayload = {
@@ -1007,6 +1026,28 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       confirmedAt: new Date().toISOString(),
     };
     await confirmedClientsCol.updateOne({ customerId: id }, { $set: confirmedPayload }, { upsert: true });
+    // Auto-draft invoice from proposal fee fields if any fee data is present
+    const pf = confirmedPayload.proposalFields || {};
+    const totalAmt = (Number(pf.serviceFeeALL) || 0) + (Number(pf.poaFeeALL) || 0) + (Number(pf.translationFeeALL) || 0) + (Number(pf.otherFeesALL) || 0);
+    if (totalAmt > 0) {
+      const SVC_LABELS = { visa_c: 'Visa C', visa_d: 'Visa D', residency_permit: 'Residency Permit', company_formation: 'Company Formation', real_estate: 'Real Estate', tax_consulting: 'Tax Consulting', compliance: 'Compliance' };
+      const svcNames = (confirmedPayload.services || []).map(s => SVC_LABELS[s] || s).join(', ');
+      await invoicesCol.insertOne({
+        invoiceId: genShortId('INV'),
+        customerId: id,
+        caseId: null,
+        description: `Legal Services${svcNames ? ` — ${svcNames}` : ''} — ${confirmedPayload.name || id}`,
+        amount: totalAmt,
+        currency: 'ALL',
+        status: 'pending',
+        dueDate: null,
+        createdAt: new Date().toISOString(),
+        createdBy: req.user?.username || null,
+        assignedTo: confirmedPayload.assignedTo || null,
+        autoDrafted: true,
+      });
+      await logAudit({ username: req.user?.username, role: req.user?.role, action: 'auto_invoice', resource: 'invoice', resourceId: id, details: { amount: totalAmt, currency: 'ALL' } });
+    }
     await customersCol.deleteOne({ customerId: id });
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'confirm', resource: 'customer', resourceId: id, details: { assignedTo: confirmedPayload.assignedTo } });
     return res.json(confirmedPayload);
@@ -1276,6 +1317,72 @@ app.post("/api/admin/deleted-records/:id/restore", verifyAuth, async (req, res) 
   await deletedRecordsCol.deleteOne({ recordId: record.recordId });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'restore', resource: 'deletedRecord', resourceId: record.recordId, details: { customerId: record.customerId, recordType } });
   res.json({ ok: true });
+});
+
+// ── Admin: Staff Management ──────────────────────────────────────────────────
+app.get('/api/admin/users', verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const users = await usersCol.find({}).project({ password: 0 }).sort({ createdAt: 1 }).toArray();
+  res.json(users);
+});
+
+app.post('/api/admin/users', verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { username, password, role, consultantName, managerUsername } = req.body;
+  if (!username || !password || !role) return res.status(400).json({ error: 'username, password, and role are required' });
+  const existing = await usersCol.findOne({ username });
+  if (existing) return res.status(409).json({ error: 'Username already exists' });
+  const hashed = await bcrypt.hash(String(password), 10);
+  const doc = {
+    username: String(username).trim().toLowerCase(),
+    password: hashed,
+    role: String(role),
+    consultantName: String(consultantName || username).trim(),
+    lawyerName: String(consultantName || username).trim(),
+    managerUsername: managerUsername || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await usersCol.insertOne(doc);
+  const { password: _pw, ...safeDoc } = doc;
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'user', resourceId: doc.username });
+  res.status(201).json(safeDoc);
+});
+
+app.put('/api/admin/users/:username', verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { username } = req.params;
+  const { role, consultantName, managerUsername, password } = req.body;
+  const update = { updatedAt: new Date().toISOString() };
+  if (role !== undefined) update.role = role;
+  if (consultantName !== undefined) { update.consultantName = String(consultantName).trim(); update.lawyerName = String(consultantName).trim(); }
+  if (managerUsername !== undefined) update.managerUsername = managerUsername || null;
+  if (password) update.password = await bcrypt.hash(String(password), 10);
+  const result = await usersCol.updateOne({ username }, { $set: update });
+  if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
+  const updated = await usersCol.findOne({ username }, { projection: { password: 0 } });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'user', resourceId: username, details: { role, consultantName } });
+  res.json(updated);
+});
+
+app.delete('/api/admin/users/:username', verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { username } = req.params;
+  if (username === req.user?.username) return res.status(400).json({ error: 'Cannot delete your own account' });
+  const result = await usersCol.deleteOne({ username });
+  if (result.deletedCount === 0) return res.status(404).json({ error: 'Not found' });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'delete', resource: 'user', resourceId: username });
+  res.json({ ok: true });
+});
+
+// Returns dynamic role-based staff name lists for UI dropdowns
+app.get('/api/admin/staff-names', verifyAuth, async (req, res) => {
+  const users = await usersCol.find({}).project({ password: 0 }).toArray();
+  const nameOf = (u) => String(u.consultantName || u.username || '').trim();
+  const clientLawyers = [...new Set(users.filter(u => u.role === 'consultant' || u.role === 'admin').map(nameOf).filter(Boolean))];
+  const intakeLawyers = [...new Set(users.filter(u => u.role === 'intake').map(nameOf).filter(Boolean))];
+  const allLawyers = [...new Set(users.map(nameOf).filter(Boolean))];
+  res.json({ clientLawyers, intakeLawyers, allLawyers });
 });
 
 app.get("/api/customers/:id/cases", verifyAuth, async (req, res) => {

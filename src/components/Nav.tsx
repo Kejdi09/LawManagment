@@ -15,7 +15,8 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onInvoices = location.pathname.startsWith("/invoices");
   const onChat = location.pathname.startsWith("/chat");
   const onArchived = location.pathname.startsWith("/archived");
-  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat && !onArchived);
+  const onStaff = location.pathname.startsWith("/staff");
+  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat && !onArchived && !onStaff);
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -58,6 +59,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         )}
         {user?.role === "admin" && (
           <Button className={itemClass} variant={onArchived ? "default" : "ghost"} onClick={() => go("/archived")}>Deleted Records</Button>
+        )}
+        {user?.role === "admin" && (
+          <Button className={itemClass} variant={onStaff ? "default" : "ghost"} onClick={() => go("/staff")}>Staff Management</Button>
         )}
       </div>
       {showAccount && (

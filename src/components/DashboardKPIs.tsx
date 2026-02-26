@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getKPIs } from "@/lib/case-store";
 import { Card, CardContent } from "@/components/ui/card";
-import { Briefcase, FileX, Flame, ListTodo } from "lucide-react";
+import { Briefcase, Clock, FileX, Flame, ListTodo } from "lucide-react";
 
 export function DashboardKPIs() {
   const [kpis, setKpis] = useState({
@@ -19,12 +19,13 @@ export function DashboardKPIs() {
   const items = [
     { label: "Total Cases", value: kpis.totalCases, icon: Briefcase, accent: "text-primary" },
     { label: "Urgent / High", value: kpis.urgentCases, icon: Flame, accent: "text-orange-500" },
+    { label: "Overdue", value: kpis.overdue, icon: Clock, accent: "text-destructive" },
     { label: "Missing Docs", value: kpis.missingDocs, icon: FileX, accent: "text-yellow-600" },
     { label: "Pending Tasks", value: kpis.pendingTasks, icon: ListTodo, accent: "text-primary" },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
       {items.map((item) => (
         <Card key={item.label}>
           <CardContent className="flex items-center gap-3 p-4">

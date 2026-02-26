@@ -516,4 +516,39 @@ export async function restoreDeletedRecord(recordId: string): Promise<void> {
   await api(`/api/admin/deleted-records/${recordId}/restore`, { method: 'POST' });
 }
 
+// ── Admin: Staff Management ──
+export interface StaffUser {
+  username: string;
+  role: string;
+  consultantName: string;
+  lawyerName?: string;
+  managerUsername?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
+export interface StaffNames {
+  clientLawyers: string[];
+  intakeLawyers: string[];
+  allLawyers: string[];
+}
+
+export async function getStaffUsers(): Promise<StaffUser[]> {
+  return api<StaffUser[]>('/api/admin/users');
+}
+
+export async function createStaffUser(payload: { username: string; password: string; role: string; consultantName: string; managerUsername?: string }): Promise<StaffUser> {
+  return api<StaffUser>('/api/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateStaffUser(username: string, patch: { role?: string; consultantName?: string; managerUsername?: string; password?: string }): Promise<StaffUser> {
+  return api<StaffUser>(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'PUT', body: JSON.stringify(patch) });
+}
+
+export async function deleteStaffUser(username: string): Promise<void> {
+  await api(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+}
+
+export async function getStaffNames(): Promise<StaffNames> {
+  return api<StaffNames>('/api/admin/staff-names');
+}
