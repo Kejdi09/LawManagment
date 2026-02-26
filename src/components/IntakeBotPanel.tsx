@@ -17,6 +17,36 @@ import { useToast } from "@/hooks/use-toast";
 const WHATSAPP_NUMBER = "+355 69 69 52 989";
 const WHATSAPP_LINK = "https://wa.me/355696952989";
 
+// ── Shared validators ──
+const isEmailLike = (v: string) => /[@]/.test(v);
+const hasDigit = (v: string) => /\d/.test(v);
+const hasLetter = (v: string) => /[a-zA-Z]/.test(v);
+
+function validateName(label: string) {
+  return (v: string): string | null => {
+    if (isEmailLike(v)) return `Please enter your ${label}, not an email address.`;
+    if (hasDigit(v)) return `${label} should only contain letters — no numbers please.`;
+    if (v.trim().length < 2) return `Please enter a valid ${label} (at least 2 characters).`;
+    return null;
+  };
+}
+
+function validateText(label: string, minLen = 3) {
+  return (v: string): string | null => {
+    if (isEmailLike(v)) return `Please describe your ${label} — not an email address.`;
+    if (v.trim().length < minLen) return `Please provide a more complete answer for: ${label} (at least ${minLen} characters).`;
+    return null;
+  };
+}
+
+function validateId(v: string): string | null {
+  if (isEmailLike(v)) return 'Please enter your ID or passport number — not an email address.';
+  if (v.trim().length < 4) return 'That does not look like a valid ID/passport number. It should be at least 4 characters long.';
+  if (!hasLetter(v) && v.trim().length < 5) return 'Passport numbers typically contain both letters and numbers (e.g. AB1234567).';
+  if (/[^a-zA-Z0-9\-\s]/.test(v)) return 'ID/passport numbers should only contain letters, numbers, and hyphens.';
+  return null;
+}
+
 // ── Question definitions ──
 interface BotQuestion {
   id: keyof ProposalFields | "clientName" | "done";
@@ -26,6 +56,10 @@ interface BotQuestion {
   hint?: string;
   /** Numeric fields get parsed to number in buildProposalFields */
   isNumeric?: boolean;
+  /** Minimum integer value for numeric fields (default 0) */
+  minValue?: number;
+  /** Optional field-level validator — returns error string or null */
+  validate?: (val: string) => string | null;
   /** If defined, only show if a certain service is in the services list */
   onlyFor?: ServiceType[];
 }
@@ -36,11 +70,13 @@ const COMMON_QUESTIONS: BotQuestion[] = [
     id: "nationality",
     text: "What is your nationality?",
     placeholder: "e.g. Italian, German, Albanian",
+    validate: validateName("nationality"),
   },
   {
     id: "country",
     text: "What country do you currently reside in?",
     placeholder: "e.g. Germany, Italy, Albania",
+    validate: validateName("country"),
   },
   {
     id: "idPassportNumber",
@@ -48,6 +84,7 @@ const COMMON_QUESTIONS: BotQuestion[] = [
     placeholder: "e.g. AB1234567",
     optional: true,
     hint: 'Optional — type "skip" if you prefer to provide this later.',
+    validate: validateId,
   },
 ];
 
@@ -58,6 +95,7 @@ const REAL_ESTATE_QUESTIONS: BotQuestion[] = [
     text: "Please describe the property involved in this transaction.\nInclude the type (e.g. apartment, house, commercial unit), its intended use, and the approximate location.",
     placeholder: "e.g. Residential apartment in Tirana, Blloku area",
     onlyFor: ["real_estate"],
+    validate: validateText("property description", 8),
   },
   {
     id: "transactionValueEUR",
@@ -65,6 +103,7 @@ const REAL_ESTATE_QUESTIONS: BotQuestion[] = [
     placeholder: "e.g. 95000",
     onlyFor: ["real_estate"],
     isNumeric: true,
+    minValue: 1,
     hint: 'Enter the value in EUR as a number, e.g. 95000. Type "skip" if unknown.',
   },
 ];
@@ -143,12 +182,18 @@ const COMPANY_FORMATION_QUESTIONS: BotQuestion[] = [
     placeholder: "e.g. SH.P.K. (limited liability company)",
     onlyFor: ["company_formation"],
     hint: 'Most small/medium businesses choose SH.P.K. Type "unsure" if you need advice.',
+    validate: (v) => {
+      if (isEmailLike(v)) return 'Please enter a company type — not an email address.';
+      if (v.trim().length < 2) return 'Please enter the type of legal entity (e.g. SH.P.K., SH.A., Branch).';
+      return null;
+    },
   },
   {
     id: "businessActivity",
     text: "What is the primary business activity or purpose of the company?\n(Please be as specific as possible.)",
     placeholder: "e.g. Import and wholesale distribution of construction materials",
     onlyFor: ["company_formation"],
+    validate: validateText("business activity", 6),
   },
   {
     id: "numberOfShareholders",
@@ -156,6 +201,7 @@ const COMPANY_FORMATION_QUESTIONS: BotQuestion[] = [
     placeholder: "e.g. 1",
     onlyFor: ["company_formation"],
     isNumeric: true,
+    minValue: 1,
     hint: "Enter a number, e.g. 1 or 3.",
   },
   {
@@ -164,6 +210,7 @@ const COMPANY_FORMATION_QUESTIONS: BotQuestion[] = [
     placeholder: "e.g. 100",
     onlyFor: ["company_formation"],
     isNumeric: true,
+    minValue: 0,
     hint: 'Enter a number in ALL, e.g. 100 or 1000000. Type "skip" if undecided.',
     optional: true,
   },
@@ -176,12 +223,18 @@ const TAX_COMPLIANCE_QUESTIONS: BotQuestion[] = [
     text: "Please briefly describe your situation and what you need assistance with.\n(e.g. tax registration, annual filing, VAT compliance, transfer pricing, financial audit support)",
     placeholder: "e.g. I need to register for VAT and set up monthly reporting for my new Albanian company",
     onlyFor: ["tax_consulting", "compliance"],
+    validate: validateText("situation description", 10),
   },
   {
     id: "employmentType",
     text: "Are you acting as an individual, or on behalf of a company?",
     placeholder: "e.g. Individual, Company — SH.P.K., Foreign company with Albanian branch",
     onlyFor: ["tax_consulting", "compliance"],
+    validate: (v) => {
+      if (isEmailLike(v)) return 'Please describe whether you are an individual or a company — not an email address.';
+      if (v.trim().length < 3) return 'Please specify: Individual, Company, or describe your entity type.';
+      return null;
+    },
   },
 ];
 
@@ -382,7 +435,7 @@ export default function IntakeBotPanel({
         botMsg(`Thank you, ${clientName}. Your information has been submitted to the DAFKU Law Firm team.\n\nWe will review your answers and prepare a personalised proposal for you. You can expect to hear from us shortly.\n\nIf you have any immediate questions, please use the Messages tab or contact us directly on WhatsApp.`),
       ]);
       onSendSummaryMessage?.(summary);
-      setTimeout(() => onComplete?.(fields), 6000);
+      setTimeout(() => onComplete?.(fields), 10_000);
     }
   }
 
@@ -407,14 +460,32 @@ export default function IntakeBotPanel({
 
     const isSkip = text.toLowerCase() === "skip";
 
-    // Validate numeric fields (driven by isNumeric flag on each question)
+    // Validate numeric fields
     if (currentQ.isNumeric && !isSkip) {
       const v = parseFloat(text.replace(/[^0-9.]/g, ""));
-      if (isNaN(v) || v < 0) {
+      const min = currentQ.minValue ?? 0;
+      if (isNaN(v) || v < min) {
         setMessages((prev) => [
           ...prev,
           userMsg(text),
-          botMsg(`Please enter a valid number (e.g. ${currentQ.placeholder ?? "1"}). Type "skip" if you prefer to provide this information later.`),
+          botMsg(
+            `Please enter a valid number${
+              min > 0 ? ` (minimum: ${min})` : ""
+            } — e.g. ${currentQ.placeholder ?? "1"}. Type "skip" if you prefer to provide this information later.`
+          ),
+        ]);
+        return;
+      }
+    }
+
+    // Run field-level validator (for non-numeric, non-skip answers)
+    if (!isSkip && !currentQ.isNumeric && currentQ.validate) {
+      const err = currentQ.validate(text);
+      if (err) {
+        setMessages((prev) => [
+          ...prev,
+          userMsg(text),
+          botMsg(err),
         ]);
         return;
       }

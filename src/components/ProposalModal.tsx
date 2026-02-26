@@ -35,12 +35,12 @@ export interface ServiceContent {
   nextSteps: string[];
 }
 
-export function getServiceContent(services: ServiceType[], propertyDescription?: string): ServiceContent {
+export function getServiceContent(services: ServiceType[], fields: Partial<ProposalFields>): ServiceContent {
   // Use the primary (first) service to determine the main template
   const primary = services[0] ?? "residency_permit";
 
   if (primary === "real_estate") {
-    const desc = propertyDescription || "the property";
+    const desc = fields.propertyDescription || "the property";
     return {
       scopeParagraph: `This proposal outlines the provision of full legal assistance in connection with the purchase of ${desc} in Albania. The objective of the service is to ensure full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
       servicesSections: [
@@ -114,14 +114,18 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
 
   if (primary === "visa_c" || primary === "visa_d") {
     const visaLabel = primary === "visa_c" ? "Visa C (Short-Stay)" : "Visa D (Long-Stay)";
+    const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
+    const applicantsPart = fields.numberOfApplicants && fields.numberOfApplicants > 1
+      ? ` for ${fields.numberOfApplicants} applicant(s)`
+      : "";
     return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a ${visaLabel} for Albania. The objective of the service is to ensure full compliance with Albanian immigration requirements, protection of the Client's interests throughout the application process, and timely submission to the competent authorities.`,
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a ${visaLabel}${applicantsPart}${purposePart} in Albania. The objective of the service is to ensure full compliance with Albanian immigration requirements, protection of the Client's interests throughout the application process, and timely submission to the competent authorities.`,
       servicesSections: [
         {
           heading: "2.1 Eligibility Assessment",
           bullets: [
             "Review of the Client's personal and professional situation",
-            "Confirmation of visa category and sub-category applicable",
+            ...(fields.purposeOfStay ? [`Confirmation that a ${visaLabel} is the correct visa type for the stated purpose: ${fields.purposeOfStay}`] : ["Confirmation of visa category and sub-category applicable"]),
             "Assessment of supporting documentation requirements",
           ],
         },
@@ -143,17 +147,19 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
         },
       ],
       requiredDocs: [
-        "Valid passport (minimum 6 months validity beyond intended stay)",
+        `Valid passport (minimum 6 months validity beyond intended stay)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
         "Proof of purpose of stay (employment contract, invitation letter, enrolment letter, etc.)",
         "Proof of financial means (bank statements, sponsorship letter)",
         "Proof of accommodation in Albania (lease agreement, hotel booking, property deed)",
         "Passport-size photographs",
+        ...(fields.numberOfApplicants && fields.numberOfApplicants > 1 ? [`Documentation for all ${fields.numberOfApplicants} applicants`] : []),
+        ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals) ? [`Explanation letter / documentation regarding previous refusal: ${fields.previousRefusals}`] : []),
         "Any additional documents specific to the visa sub-category",
       ],
       timeline: [
         "Document review and preparation: approx. 3–5 business days",
         "Application submission: approx. 1–2 business days after document completion",
-        "Authority processing time: approx. 15–30 business days (subject to authority workload)",
+        `Authority processing time: approx. 15–30 business days (subject to authority workload${fields.numberOfApplicants && fields.numberOfApplicants > 1 ? ` — ${fields.numberOfApplicants} applicant(s)` : ""})`,
         "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
       ],
       nextSteps: [
@@ -168,14 +174,23 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
   }
 
   if (primary === "residency_permit") {
+    const purposePart = fields.purposeOfStay ? ` for the purpose of ${fields.purposeOfStay}` : "";
+    const employmentPart = fields.employmentType ? ` The client's current status is: ${fields.employmentType}.` : "";
+    const applicantsNote = fields.numberOfApplicants
+      ? ` This application covers ${fields.numberOfApplicants} applicant(s)${
+          fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0
+            ? `, of whom ${fields.numberOfFamilyMembers} are family member(s)/dependant(s)`
+            : ""
+        }.`
+      : "";
     return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a Residence Permit in Albania. The objective of the service is to ensure full compliance with Albanian immigration law, protection of the Client's interests, and successful registration of residence status with the competent authorities.`,
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for obtaining a Residence Permit in Albania${purposePart}.${employmentPart}${applicantsNote} The objective of the service is to ensure full compliance with Albanian immigration law, protection of the Client's interests, and successful registration of residence status with the competent authorities.`,
       servicesSections: [
         {
           heading: "2.1 Eligibility & Category Assessment",
           bullets: [
             "Review of the Client's personal, professional, and financial situation",
-            "Determination of the most suitable residence permit category",
+            ...(fields.employmentType ? [`Assessment of the Client's status as: ${fields.employmentType} — and the appropriate residence permit category`] : ["Determination of the most suitable residence permit category"]),
             "Legal advice on residency rights and obligations under Albanian law",
           ],
         },
@@ -205,18 +220,20 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
         },
       ],
       requiredDocs: [
-        "Valid passport (minimum 12 months validity)",
+        `Valid passport (minimum 12 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
         "Lease agreement or property ownership deed",
-        "Proof of financial means or proof of employment / self-employment",
+        ...(fields.employmentType ? [`Proof of ${fields.employmentType} status (employment contract, self-employment registration, pension statement, investment proof, etc.)`] : ["Proof of financial means or proof of employment / self-employment"]),
         "Health insurance (valid for Albania)",
-        "Certificate of no criminal record from country of origin (apostilled / legalised)",
+        `Certificate of no criminal record from country of origin${fields.country ? ` (${fields.country})` : ""} (apostilled / legalised)`,
         "Passport-size photographs",
+        ...(fields.numberOfFamilyMembers && fields.numberOfFamilyMembers > 0 ? [`Documents for ${fields.numberOfFamilyMembers} accompanying family member(s) / dependant(s) (passports, birth/marriage certificates, etc.)`] : []),
+        ...(fields.previousRefusals && !/^(none|no|skip|-)/i.test(fields.previousRefusals) ? [`Explanation letter regarding previous refusal: ${fields.previousRefusals}`] : []),
         "Power of Attorney (if the Client appoints a representative)",
       ],
       timeline: [
         "Document review and preparation: approx. 5–10 business days",
         "Application submission: approx. 1–2 business days after document completion",
-        "Authority processing time: approx. 30–60 business days (subject to authority workload and permit category)",
+        `Authority processing time: approx. 30–60 business days (subject to authority workload and permit category${fields.numberOfApplicants && fields.numberOfApplicants > 1 ? ` — ${fields.numberOfApplicants} applicant(s)` : ""})`,
         "NOTE: Indicative timelines may vary depending on the responsiveness of third parties and public authorities",
       ],
       nextSteps: [
@@ -231,21 +248,25 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
   }
 
   if (primary === "company_formation") {
+    const companyTypePart = fields.companyType ? ` — ${fields.companyType}` : "";
+    const activityPart = fields.businessActivity ? ` engaged in ${fields.businessActivity}` : "";
+    const shareholdersPart = fields.numberOfShareholders ? ` with ${fields.numberOfShareholders} shareholder(s)` : "";
+    const capitalPart = fields.shareCapitalALL ? ` Proposed registered capital: ${fields.shareCapitalALL.toLocaleString()} ALL.` : "";
     return {
-      scopeParagraph: `This proposal outlines the provision of full legal assistance for the formation and registration of a company in Albania. The objective of the service is to ensure full legal compliance with Albanian commercial law, protection of the Client's interests, and successful registration with the National Registration Centre (QKR).`,
+      scopeParagraph: `This proposal outlines the provision of full legal assistance for the formation and registration of a company in Albania${companyTypePart}${activityPart}${shareholdersPart}.${capitalPart} The objective of the service is to ensure full legal compliance with Albanian commercial law, protection of the Client's interests, and successful registration with the National Registration Centre (QKR).`,
       servicesSections: [
         {
           heading: "2.1 Legal & Structural Advisory",
           bullets: [
-            "Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)",
-            "Advice on shareholder structure, registered capital, and governance",
+            ...(fields.companyType ? [`Legal advisory on the chosen entity type: ${fields.companyType} — confirmation of suitability and legal requirements`] : ["Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)"]),
+            ...(fields.numberOfShareholders ? [`Advice on the shareholder structure (${fields.numberOfShareholders} shareholder(s)), registered capital, and governance`] : ["Advice on shareholder structure, registered capital, and governance"]),
             "Company name availability check with the National Registration Centre (QKR)",
           ],
         },
         {
           heading: "2.2 Document Preparation",
           bullets: [
-            "Drafting of the Articles of Association and Company Statute",
+            `Drafting of the Articles of Association and Company Statute${fields.businessActivity ? ` — business activity: ${fields.businessActivity}` : ""}`,
             "Preparation of all registration documents required by QKR",
             "Assistance with notarisation of required documents",
           ],
@@ -268,10 +289,10 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
         },
       ],
       requiredDocs: [
-        "Valid identification document (ID / Passport) for all shareholders and directors",
+        `Valid identification document (ID / Passport) for all shareholders and directors${fields.numberOfShareholders ? ` (${fields.numberOfShareholders} shareholder(s))` : ""}`,
         "Proposed company name (at least two options)",
-        "Shareholder structure and ownership percentages",
-        "Registered capital amount and intended business activity",
+        `Shareholder structure and ownership percentages${fields.numberOfShareholders ? ` — ${fields.numberOfShareholders} shareholder(s)` : ""}`,
+        `Registered capital amount${fields.shareCapitalALL ? ` — ${fields.shareCapitalALL.toLocaleString()} ALL` : ""} and intended business activity${fields.businessActivity ? `: ${fields.businessActivity}` : ""}`,
         "Registered office address in Albania",
         "Power of Attorney (if the Client appoints a representative)",
       ],
@@ -295,10 +316,12 @@ export function getServiceContent(services: ServiceType[], propertyDescription?:
   }
 
   // Default (tax_consulting / compliance / other)
+  const situationPart = fields.situationDescription ? ` The client requires assistance with: ${fields.situationDescription}.` : "";
+  const entityPart = fields.employmentType ? ` Acting as: ${fields.employmentType}.` : "";
   return {
     scopeParagraph: `This proposal outlines the provision of professional legal and ${
       primary === "tax_consulting" ? "tax consulting" : "compliance advisory"
-    } services. The objective of the service is to protect the Client's interests, ensure full compliance with applicable Albanian law and regulations, and provide expert guidance throughout the engagement.`,
+    } services.${situationPart}${entityPart} The objective of the service is to protect the Client's interests, ensure full compliance with applicable Albanian law and regulations, and provide expert guidance throughout the engagement.`,
     servicesSections: [
       {
         heading: "2.1 Initial Assessment",
@@ -381,6 +404,19 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
     nationality: customer.proposalFields?.nationality || customer.nationality || "",
     country: customer.proposalFields?.country || customer.country || "",
     idPassportNumber: customer.proposalFields?.idPassportNumber || "",
+    // Visa / Residency
+    purposeOfStay: customer.proposalFields?.purposeOfStay || "",
+    employmentType: customer.proposalFields?.employmentType || "",
+    numberOfApplicants: customer.proposalFields?.numberOfApplicants ?? undefined,
+    numberOfFamilyMembers: customer.proposalFields?.numberOfFamilyMembers ?? undefined,
+    previousRefusals: customer.proposalFields?.previousRefusals || "",
+    // Company formation
+    companyType: customer.proposalFields?.companyType || "",
+    businessActivity: customer.proposalFields?.businessActivity || "",
+    numberOfShareholders: customer.proposalFields?.numberOfShareholders ?? undefined,
+    shareCapitalALL: customer.proposalFields?.shareCapitalALL ?? undefined,
+    // Tax / Compliance
+    situationDescription: customer.proposalFields?.situationDescription || "",
   });
 
   const [fields, setFields] = useState<ProposalFields>(initFields);
@@ -403,7 +439,8 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
   const totalUSD = totalALL * USD_RATE;
   const totalGBP = totalALL * GBP_RATE;
 
-  const serviceContent = getServiceContent(customer.services || [], fields.propertyDescription);
+  // Proposal template is driven entirely by customer.services (saved in DB)
+  const serviceContent = getServiceContent(customer.services || [], fields);
 
   const displayDate = fields.proposalDate
     ? new Date(fields.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
@@ -554,6 +591,128 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                   placeholder="leave blank if not yet collected"
                 />
               </div>
+
+              {/* ── Service-specific fields ── */}
+              {(customer.services || []).some((s) => ["visa_c", "visa_d", "residency_permit"].includes(s)) && (
+                <>
+                  <div className="md:col-span-2 border-t pt-4">
+                    <p className="text-sm font-semibold mb-1 text-blue-700">
+                      {(customer.services || []).includes("residency_permit") ? "Residency Permit" : "Visa"} — Intake Fields
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-1">
+                    <Label>Purpose of stay / relocation</Label>
+                    <Input
+                      value={fields.purposeOfStay ?? ""}
+                      onChange={(e) => setField("purposeOfStay", e.target.value)}
+                      placeholder="e.g. employment, self-employment, property ownership, tourism"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Employment / income type</Label>
+                    <Input
+                      value={fields.employmentType ?? ""}
+                      onChange={(e) => setField("employmentType", e.target.value)}
+                      placeholder="e.g. Employed, Self-employed, Retired, Investor"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Number of applicants</Label>
+                    <Input
+                      type="number" min={1}
+                      value={fields.numberOfApplicants ?? ""}
+                      onChange={(e) => setField("numberOfApplicants", e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 1"
+                    />
+                  </div>
+                  {(customer.services || []).includes("residency_permit") && (
+                    <div className="space-y-1">
+                      <Label>Family members / dependants</Label>
+                      <Input
+                        type="number" min={0}
+                        value={fields.numberOfFamilyMembers ?? ""}
+                        onChange={(e) => setField("numberOfFamilyMembers", e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="e.g. 0"
+                      />
+                    </div>
+                  )}
+                  <div className="md:col-span-2 space-y-1">
+                    <Label>Previous permit / visa refusals</Label>
+                    <Input
+                      value={fields.previousRefusals ?? ""}
+                      onChange={(e) => setField("previousRefusals", e.target.value)}
+                      placeholder='"none" or describe briefly'
+                    />
+                  </div>
+                </>
+              )}
+
+              {(customer.services || []).includes("company_formation") && (
+                <>
+                  <div className="md:col-span-2 border-t pt-4">
+                    <p className="text-sm font-semibold mb-1 text-blue-700">Company Formation — Intake Fields</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Company type</Label>
+                    <Input
+                      value={fields.companyType ?? ""}
+                      onChange={(e) => setField("companyType", e.target.value)}
+                      placeholder="e.g. SH.P.K., SH.A., Branch, Representative Office"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Number of shareholders</Label>
+                    <Input
+                      type="number" min={1}
+                      value={fields.numberOfShareholders ?? ""}
+                      onChange={(e) => setField("numberOfShareholders", e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 1"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1">
+                    <Label>Business activity</Label>
+                    <Input
+                      value={fields.businessActivity ?? ""}
+                      onChange={(e) => setField("businessActivity", e.target.value)}
+                      placeholder="e.g. Import and wholesale distribution of construction materials"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Share capital (ALL)</Label>
+                    <Input
+                      type="number" min={0}
+                      value={fields.shareCapitalALL ?? ""}
+                      onChange={(e) => setField("shareCapitalALL", e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 100"
+                    />
+                  </div>
+                </>
+              )}
+
+              {(customer.services || []).some((s) => ["tax_consulting", "compliance"].includes(s)) && (
+                <>
+                  <div className="md:col-span-2 border-t pt-4">
+                    <p className="text-sm font-semibold mb-1 text-blue-700">Tax / Compliance — Intake Fields</p>
+                  </div>
+                  <div className="md:col-span-2 space-y-1">
+                    <Label>Client situation / needs</Label>
+                    <Textarea
+                      value={fields.situationDescription ?? ""}
+                      onChange={(e) => setField("situationDescription", e.target.value)}
+                      placeholder="e.g. needs to register for VAT and set up monthly reporting"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Acting as</Label>
+                    <Input
+                      value={fields.employmentType ?? ""}
+                      onChange={(e) => setField("employmentType", e.target.value)}
+                      placeholder="e.g. Individual, Company, Foreign company"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Fee section */}
               <div className="md:col-span-2 border-t pt-4">

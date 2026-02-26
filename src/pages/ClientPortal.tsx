@@ -133,6 +133,8 @@ export default function ClientPortalPage() {
   const [chatText, setChatText] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
+  // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
+  const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
   const proposalViewedRef = useRef(false);
@@ -187,11 +189,16 @@ export default function ClientPortalPage() {
           // Detect new lawyer messages and fire a browser notification
           const prev = prevMsgCountRef.current;
           const newLawyerMsgs = messages.slice(prev).filter((m) => m.senderType === 'lawyer');
-          if (newLawyerMsgs.length > 0 && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('New message from your lawyer', {
-              body: newLawyerMsgs[newLawyerMsgs.length - 1].text.slice(0, 100),
-              icon: '/favicon.ico',
-            });
+          if (newLawyerMsgs.length > 0) {
+            // Show the unread dot on the Messages tab
+            setUnreadFromLawyer(true);
+            // Also fire a browser notification if permitted
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('New message from your lawyer', {
+                body: newLawyerMsgs[newLawyerMsgs.length - 1].text.slice(0, 100),
+                icon: '/favicon.ico',
+              });
+            }
           }
           prevMsgCountRef.current = messages.length;
           setChatMessages(messages);
@@ -238,12 +245,12 @@ export default function ClientPortalPage() {
     );
   }
 
-  const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
+  const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
   const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
   const defaultTab = showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
-  // Unread indicator: any lawyer messages newer than the last visit
-  const hasNewMessages = chatMessages.some((m) => m.senderType === "lawyer" && !m.readByLawyer);
+  // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
+  const hasNewMessages = unreadFromLawyer;
 
   // Proposal computed values (only used when showProposalTab)
   const snap = data.proposalSnapshot;
@@ -258,7 +265,7 @@ export default function ClientPortalPage() {
   const pTotalEUR = pTotal * EUR_RATE;
   const pTotalUSD = pTotal * USD_RATE;
   const pTotalGBP = pTotal * GBP_RATE;
-  const pServiceContent = showProposalTab ? getServiceContent(data.client.services || [], snap?.propertyDescription) : null;
+  const pServiceContent = showProposalTab ? getServiceContent(data.client.services || [], snap ?? {}) : null;
   const pDisplayDate = snap?.proposalDate
     ? new Date(snap.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
     : "";
@@ -297,6 +304,10 @@ export default function ClientPortalPage() {
             if (tab === 'proposal' && !proposalViewedRef.current && token) {
               proposalViewedRef.current = true;
               markProposalViewed(token);
+            }
+            // Clear the unread dot as soon as the client opens the Messages tab
+            if (tab === 'messages') {
+              setUnreadFromLawyer(false);
             }
           }}>
           <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
