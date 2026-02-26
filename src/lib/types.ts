@@ -398,7 +398,6 @@ export interface DeletedRecord {
   customerName: string;
   deletedAt: string;
   deletedBy: string;
-  expiresAt: string;
   snapshot: {
     customer: Customer;
     cases: Case[];

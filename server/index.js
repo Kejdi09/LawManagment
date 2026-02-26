@@ -455,7 +455,6 @@ async function syncCustomerNotifications() {
           customerHistoryCol.find({ customerId: customer.customerId }).toArray(),
         ]);
         const autoNow = new Date().toISOString();
-        const autoExpiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
         await deletedRecordsCol.insertOne({
           recordId: genShortId('DR'),
           recordType: 'customer',
@@ -463,7 +462,6 @@ async function syncCustomerNotifications() {
           customerName: customer.name || customer.customerId,
           deletedAt: autoNow,
           deletedBy: 'system-auto',
-          expiresAt: autoExpiresAt,
           snapshot: { customer, cases: autoRelatedCases, caseHistory: autoCaseHistory, notes: autoNotes, tasks: autoTasks, customerHistory: autoCustomerHistory },
         });
         await Promise.all([
@@ -1164,7 +1162,6 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'customer',
@@ -1172,7 +1169,6 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customerName: current.name || id,
     deletedAt: now,
     deletedBy: req.user?.username || 'unknown',
-    expiresAt,
     snapshot: { customer: current, cases: relatedCases, caseHistory, notes, tasks, customerHistory },
   };
   await deletedRecordsCol.insertOne(deletedRecord);
@@ -1203,7 +1199,6 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 5 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'confirmedClient',
@@ -1211,7 +1206,6 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     customerName: current.name || id,
     deletedAt: now,
     deletedBy: req.user?.username || 'unknown',
-    expiresAt,
     snapshot: { customer: current, cases: relatedCases, caseHistory, notes, tasks, customerHistory },
   };
   await deletedRecordsCol.insertOne(deletedRecord);
@@ -1230,9 +1224,8 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
 // ── Admin: Deleted Records (soft-delete archive) ─────────────────────────────
 app.get("/api/admin/deleted-records", verifyAuth, async (req, res) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const now = new Date().toISOString();
   const records = await deletedRecordsCol
-    .find({ expiresAt: { $gt: now } })
+    .find({})
     .sort({ deletedAt: -1 })
     .project({ 'snapshot': 0 })
     .toArray();
@@ -1282,15 +1275,6 @@ app.post("/api/admin/deleted-records/:id/restore", verifyAuth, async (req, res) 
   await Promise.all(restoreOps);
   await deletedRecordsCol.deleteOne({ recordId: record.recordId });
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'restore', resource: 'deletedRecord', resourceId: record.recordId, details: { customerId: record.customerId, recordType } });
-  res.json({ ok: true });
-});
-
-app.delete("/api/admin/deleted-records/:id", verifyAuth, async (req, res) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const record = await deletedRecordsCol.findOne({ recordId: req.params.id });
-  if (!record) return res.status(404).json({ error: 'Not found' });
-  await deletedRecordsCol.deleteOne({ recordId: req.params.id });
-  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'purge', resource: 'deletedRecord', resourceId: req.params.id });
   res.json({ ok: true });
 });
 

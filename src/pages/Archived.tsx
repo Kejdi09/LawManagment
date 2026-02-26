@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "@/components/MainLayout";
 import { useAuth } from "@/lib/auth-context";
-import { getDeletedRecords, restoreDeletedRecord, purgeDeletedRecord, getDeletedRecord } from "@/lib/case-store";
+import { getDeletedRecords, restoreDeletedRecord, getDeletedRecord } from "@/lib/case-store";
 import { DeletedRecord } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
-function daysUntil(isoDate: string): number {
-  return Math.max(0, Math.round((new Date(isoDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-}
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
@@ -50,7 +46,6 @@ const ArchivedPage = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
-  const [purgeTarget, setPurgeTarget] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
@@ -105,23 +100,6 @@ const ArchivedPage = () => {
     }
   }
 
-  async function handlePurge() {
-    if (!purgeTarget) return;
-    setWorking(true);
-    try {
-      await purgeDeletedRecord(purgeTarget);
-      toast({ title: "Record permanently deleted" });
-      setPurgeTarget(null);
-      setDetailOpen(false);
-      setSelectedRecord(null);
-      loadRecords();
-    } catch {
-      toast({ title: "Failed to purge record", variant: "destructive" });
-    } finally {
-      setWorking(false);
-    }
-  }
-
   if (user?.role !== "admin") return null;
 
   return (
@@ -130,7 +108,7 @@ const ArchivedPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Deleted Records Archive</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            All deleted customers and clients are retained for 5 years. Admin can view, restore, or permanently purge them.
+            All deleted customers and clients are permanently retained. Admin can view or restore them. Only the system engineer can permanently remove records directly from the database.
           </p>
         </div>
 
@@ -153,42 +131,31 @@ const ArchivedPage = () => {
                     <TableHead>Type</TableHead>
                     <TableHead>Deleted</TableHead>
                     <TableHead>Deleted By</TableHead>
-                    <TableHead>Expires In</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {records.map((r) => {
-                    const daysLeft = daysUntil(r.expiresAt);
-                    const expiryVariant = daysLeft < 180 ? "destructive" : daysLeft < 365 ? "secondary" : "outline";
-                    return (
-                      <TableRow key={r.recordId}>
-                        <TableCell className="font-mono text-xs">{r.customerId}</TableCell>
-                        <TableCell className="font-medium">{r.customerName}</TableCell>
-                        <TableCell>
-                          <Badge variant={r.recordType === "confirmedClient" ? "default" : "secondary"}>
-                            {r.recordType === "confirmedClient" ? "Client" : "Customer"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDate(r.deletedAt)}</TableCell>
-                        <TableCell className="text-sm">{r.deletedBy}</TableCell>
-                        <TableCell>
-                          <Badge variant={expiryVariant}>{daysLeft}d</Badge>
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button size="sm" variant="outline" onClick={() => openDetail(r.recordId)}>
-                            View
-                          </Button>
-                          <Button size="sm" variant="secondary" onClick={() => setRestoreTarget(r.recordId)} disabled={working}>
-                            Restore
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => setPurgeTarget(r.recordId)} disabled={working}>
-                            Purge
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {records.map((r) => (
+                    <TableRow key={r.recordId}>
+                      <TableCell className="font-mono text-xs">{r.customerId}</TableCell>
+                      <TableCell className="font-medium">{r.customerName}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.recordType === "confirmedClient" ? "default" : "secondary"}>
+                          {r.recordType === "confirmedClient" ? "Client" : "Customer"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{formatDate(r.deletedAt)}</TableCell>
+                      <TableCell className="text-sm">{r.deletedBy}</TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button size="sm" variant="outline" onClick={() => openDetail(r.recordId)}>
+                          View
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setRestoreTarget(r.recordId)} disabled={working}>
+                          Restore
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}
@@ -215,7 +182,6 @@ const ArchivedPage = () => {
                 <div><span className="font-medium">Type:</span> {selectedRecord.recordType === "confirmedClient" ? "Confirmed Client" : "Customer"}</div>
                 <div><span className="font-medium">Deleted at:</span> {formatDate(selectedRecord.deletedAt)}</div>
                 <div><span className="font-medium">Deleted by:</span> {selectedRecord.deletedBy}</div>
-                <div><span className="font-medium">Expires at:</span> {formatDate(selectedRecord.expiresAt)} ({daysUntil(selectedRecord.expiresAt)} days)</div>
               </div>
               {selectedRecord.snapshot?.customer && (
                 <div>
@@ -252,9 +218,6 @@ const ArchivedPage = () => {
                 <Button variant="secondary" disabled={working} onClick={() => { setRestoreTarget(selectedRecord.recordId); setDetailOpen(false); }}>
                   Restore
                 </Button>
-                <Button variant="destructive" disabled={working} onClick={() => { setPurgeTarget(selectedRecord.recordId); setDetailOpen(false); }}>
-                  Purge
-                </Button>
               </>
             )}
           </DialogFooter>
@@ -277,21 +240,6 @@ const ArchivedPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Purge confirm */}
-      <Dialog open={!!purgeTarget} onOpenChange={(o) => { if (!o) setPurgeTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Permanently delete this record?</DialogTitle>
-            <DialogDescription>
-              This will permanently and irreversibly delete this record from the archive. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" disabled={working} onClick={() => setPurgeTarget(null)}>Cancel</Button>
-            <Button variant="destructive" disabled={working} onClick={handlePurge}>Permanently Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 };

@@ -516,6 +516,4 @@ export async function restoreDeletedRecord(recordId: string): Promise<void> {
   await api(`/api/admin/deleted-records/${recordId}/restore`, { method: 'POST' });
 }
 
-export async function purgeDeletedRecord(recordId: string): Promise<void> {
-  await api(`/api/admin/deleted-records/${recordId}`, { method: 'DELETE' });
-}
+

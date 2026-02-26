@@ -14,7 +14,8 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onCustomerCases = location.pathname.startsWith("/customer-cases");
   const onInvoices = location.pathname.startsWith("/invoices");
   const onChat = location.pathname.startsWith("/chat");
-  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat);
+  const onArchived = location.pathname.startsWith("/archived");
+  const onClientCases = location.pathname === "/" || (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat && !onArchived);
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -54,6 +55,9 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         )}
         {!isAuthLoading && (
           <Button className={itemClass} variant={onChat ? "default" : "ghost"} onClick={() => go("/chat")}>Chat</Button>
+        )}
+        {user?.role === "admin" && (
+          <Button className={itemClass} variant={onArchived ? "default" : "ghost"} onClick={() => go("/archived")}>Deleted Records</Button>
         )}
       </div>
       {showAccount && (

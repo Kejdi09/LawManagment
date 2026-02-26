@@ -33,6 +33,8 @@ export interface ServiceContent {
   requiredDocs: string[];
   timeline: string[];
   nextSteps: string[];
+  /** Service-aware text for Section 4.1 "General Legal Service Fee" */
+  feeDescription: string;
 }
 
 // Per-service content builders (TypeScript — types stripped at runtime by Node splice script)
@@ -96,6 +98,7 @@ function contentForRealEstate(fields: Partial<ProposalFields>): ServiceContent {
       "Assistance during notarial signing and payment coordination",
       "Follow-up and monitoring of ownership registration with ASHK",
     ],
+    feeDescription: "For real estate transactions, DAFKU Law Firm applies either a fixed legal service fee or a percentage-based fee typically ranging from 1% to 3% of the transaction value, depending on the complexity of the transaction, the nature of the property, and the level of legal assistance required. For this specific engagement, the fee is set out in Section 4.2 below.",
   };
 }
 
@@ -153,6 +156,7 @@ function contentForVisa(type: "visa_c" | "visa_d", fields: Partial<ProposalField
       `Submission of the ${visaLabel} application to the competent Albanian authority`,
       "Follow-up with the immigration authority on application status",
     ],
+    feeDescription: `For ${visaLabel} applications, DAFKU Law Firm applies a fixed legal service fee per application/applicant, depending on the visa category, number of applicants, and complexity of the case. For this specific engagement, the fee is set out in Section 4.2 below.`,
   };
 }
 
@@ -215,6 +219,7 @@ function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
         : []),
       "Power of Attorney (if the Client appoints a representative for residency)",
     ],
+    feeDescription: "For residence permit applications, DAFKU Law Firm applies a fixed legal service fee per applicant, depending on the permit category, duration, and complexity of the application. For this specific engagement, the fee is set out in Section 4.2 below.",
     timeline: [
       "Residency — Document review and preparation: approx. 5–10 business days",
       "Residency — Application submission: approx. 1–2 business days after document completion",
@@ -298,6 +303,7 @@ function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
       "Tax registration and issuance of NIPT",
       "Post-registration guidance and account opening support",
     ],
+    feeDescription: `For company registration and formation services, DAFKU Law Firm applies a fixed legal service fee depending on the entity type${fields.companyType ? ` (${fields.companyType})` : ""}, number of shareholders, and scope of post-registration assistance required. For this specific engagement, the fee is set out in Section 4.2 below.`,
   };
 }
 
@@ -343,6 +349,7 @@ function contentForTax(type: ServiceType, fields: Partial<ProposalFields>): Serv
       "Commencement of legal review and advisory work",
       "Ongoing communication and monitoring",
     ],
+    feeDescription: `For ${label.toLowerCase()} services, DAFKU Law Firm applies a fixed fee or an hourly/engagement-based fee depending on the scope, complexity, and duration of the work required. For this specific engagement, the fee is set out in Section 4.2 below.`,
   };
 }
 
@@ -370,6 +377,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
         ...s,
         heading: `2.${i + 1} ${s.heading}`,
       })),
+      feeDescription: p.feeDescription,
     };
   }
 
@@ -401,6 +409,9 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
     }
   }
 
+  // For combined services, merge unique fee description sentences
+  const combinedFeeDesc = parts.map((p) => p.feeDescription).join(" ");
+
   return {
     scopeParagraph: combinedScope,
     servicesSections: combinedSections,
@@ -412,6 +423,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
       ...parts.flatMap((p) => p.nextSteps),
       "Completion of all service engagements and issuance of final documents",
     ],
+    feeDescription: combinedFeeDesc,
   };
 }
 
@@ -604,29 +616,30 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 />
               </div>
 
-              {/* Property / subject description */}
-              <div className="md:col-span-2 space-y-1">
-                <Label>Subject / Property Description</Label>
-                <Input
-                  value={fields.propertyDescription ?? ""}
-                  onChange={(e) => setField("propertyDescription", e.target.value)}
-                  placeholder="e.g. a residential house and garage located in Durrës, Albania"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used in the Scope section of the proposal.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Transaction / Investment Value (EUR)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={fields.transactionValueEUR ?? ""}
-                  onChange={(e) => setField("transactionValueEUR", e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g. 100000"
-                />
-              </div>
+              {/* Property / transaction fields — only relevant for real estate */}
+              {(customer.services || []).includes("real_estate") && (
+                <>
+                  <div className="md:col-span-2 space-y-1">
+                    <Label>Property Description</Label>
+                    <Input
+                      value={fields.propertyDescription ?? ""}
+                      onChange={(e) => setField("propertyDescription", e.target.value)}
+                      placeholder="e.g. a residential house and garage located in Durrës, Albania"
+                    />
+                    <p className="text-xs text-muted-foreground">Used in the Scope section of the proposal.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Transaction Value (EUR)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={fields.transactionValueEUR ?? ""}
+                      onChange={(e) => setField("transactionValueEUR", e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 100000"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-1">
                 <Label>ID / Passport Number</Label>
@@ -937,9 +950,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 <p className="text-sm font-bold border-b pb-1 mb-2">4 — Fees & Costs</p>
 
                 <p className="text-sm font-semibold mb-0.5">4.1 General Legal Service Fee</p>
-                <p className="text-sm mb-3">
-                  For this type of service, DAFKU Law Firm applies either a fixed service fee, or a percentage-based fee ranging from 1% to 3% of the transaction value, depending on the complexity of the transaction and the level of legal assistance required. For this specific engagement, the fee is calculated as set out in Section 4.2 below.
-                </p>
+                <p className="text-sm mb-3">{serviceContent.feeDescription}</p>
 
                 <p className="text-sm font-semibold mb-1">4.2 Fees and Costs Applied to this Specific Case</p>
                 <table className="w-full border-collapse text-sm mb-4">
