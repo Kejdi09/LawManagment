@@ -29,16 +29,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
 function daysUntil(isoDate: string): number {
@@ -272,38 +262,36 @@ const ArchivedPage = () => {
       </Dialog>
 
       {/* Restore confirm */}
-      <AlertDialog open={!!restoreTarget} onOpenChange={(o) => { if (!o) setRestoreTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Restore this record?</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={!!restoreTarget} onOpenChange={(o) => { if (!o) setRestoreTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore this record?</DialogTitle>
+            <DialogDescription>
               The customer/client and all their cases, notes, and tasks will be restored to the active database.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={working}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={working} onClick={handleRestore}>Restore</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={working} onClick={() => setRestoreTarget(null)}>Cancel</Button>
+            <Button disabled={working} onClick={handleRestore}>Restore</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Purge confirm */}
-      <AlertDialog open={!!purgeTarget} onOpenChange={(o) => { if (!o) setPurgeTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Permanently delete this record?</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={!!purgeTarget} onOpenChange={(o) => { if (!o) setPurgeTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Permanently delete this record?</DialogTitle>
+            <DialogDescription>
               This will permanently and irreversibly delete this record from the archive. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={working}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={working} onClick={handlePurge} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Permanently Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={working} onClick={() => setPurgeTarget(null)}>Cancel</Button>
+            <Button variant="destructive" disabled={working} onClick={handlePurge}>Permanently Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };
