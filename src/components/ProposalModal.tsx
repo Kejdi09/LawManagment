@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ProposalModal
  * Opens when staff clicks "Generate Proposal" on a SEND_PROPOSAL customer.
  * Two tabs: Edit (fee form) and Preview (rendered proposal + print).
@@ -17,10 +17,9 @@ import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/typ
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
 import ProposalRenderer from "@/components/ProposalRenderer";
-import { evaluateConditions, getVisibleFields } from "@/lib/proposal-engine";
 
-// â”€â”€ Fixed conversion approximation (shown as indicative, source: xe.com) â”€â”€
-export const EUR_RATE = 0.01037032; // 1 ALL â†’ EUR
+// ── Fixed conversion approximation (shown as indicative, source: xe.com) ──
+export const EUR_RATE = 0.01037032; // 1 ALL → EUR
 export const USD_RATE = 0.01212463;
 export const GBP_RATE = 0.00902409;
 
@@ -28,7 +27,7 @@ export function fmt(n: number, decimals = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-// â”€â”€ Fee presets per service (suggested starting points, staff can adjust)
+// ── Fee presets per service (suggested starting points, staff can adjust)
 // Values in Albanian Lek (ALL). For multiple services, service fees are summed;
 // shared costs (consultation, POA, translation) use the maximum across services.
 const SVC_PRESETS: Partial<Record<ServiceType, { consultationFeeALL?: number; serviceFeeALL?: number; poaFeeALL?: number; translationFeeALL?: number }>> = {
@@ -55,11 +54,11 @@ export function computePresetFees(services: ServiceType[]): Pick<ProposalFields,
   return { consultationFeeALL, serviceFeeALL, poaFeeALL, translationFeeALL };
 }
 
-// â”€â”€ Service-specific content generators â”€â”€
+// ── Service-specific content generators ──
 export interface ServiceContent {
   scopeParagraph: string;
   servicesSections: Array<{ heading: string; bullets: string[] }>;
-  /** Step-by-step process overview â€” present only for template-specific services */
+  /** Step-by-step process overview — present only for template-specific services */
   processSteps?: Array<{ step: string; bullets: string[] }>;
   requiredDocs: string[];
   timeline: string[];
@@ -68,12 +67,12 @@ export interface ServiceContent {
   feeDescription: string;
 }
 
-// Per-service content builders (TypeScript â€” types stripped at runtime by Node splice script)
+// Per-service content builders (TypeScript — types stripped at runtime by Node splice script)
 
 function contentForRealEstate(fields: Partial<ProposalFields>): ServiceContent {
   const desc = fields.propertyDescription || "the property";
   return {
-    scopeParagraph: `Provision of full legal assistance for the purchase of ${desc} in Albania â€” ensuring full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
+    scopeParagraph: `Provision of full legal assistance for the purchase of ${desc} in Albania — ensuring full legal compliance of the transaction, protection of the Client's interests as buyer, and proper transfer and registration of ownership.`,
     servicesSections: [
       {
         heading: "Legal Due Diligence (Real Estate)",
@@ -117,10 +116,10 @@ function contentForRealEstate(fields: Partial<ProposalFields>): ServiceContent {
       "Power of Attorney (if required for real estate)",
     ],
     timeline: [
-      "Real Estate â€” Legal due diligence & document verification: approx. 3â€“5 business days",
-      "Real Estate â€” Contract review / finalization: approx. 3â€“7 business days",
-      "Real Estate â€” Notarial execution: subject to parties' availability",
-      "Real Estate â€” Registration with ASHK: approx. 15â€“30 business days",
+      "Real Estate — Legal due diligence & document verification: approx. 3–5 business days",
+      "Real Estate — Contract review / finalization: approx. 3–7 business days",
+      "Real Estate — Notarial execution: subject to parties' availability",
+      "Real Estate — Registration with ASHK: approx. 15–30 business days",
     ],
     nextSteps: [
       "Collection and review of property-related documents",
@@ -141,7 +140,7 @@ function contentForVisa(type: "visa_c" | "visa_d", fields: Partial<ProposalField
       ? ` for ${fields.numberOfApplicants} applicant(s)`
       : "";
   return {
-    scopeParagraph: `Provision of full legal assistance for obtaining a ${visaLabel}${applicantsPart}${purposePart} in Albania â€” ensuring full compliance with Albanian immigration requirements and timely submission to the competent authorities.`,
+    scopeParagraph: `Provision of full legal assistance for obtaining a ${visaLabel}${applicantsPart}${purposePart} in Albania — ensuring full compliance with Albanian immigration requirements and timely submission to the competent authorities.`,
     servicesSections: [
       {
         heading: `Eligibility Assessment (${visaLabel})`,
@@ -165,7 +164,7 @@ function contentForVisa(type: "visa_c" | "visa_d", fields: Partial<ProposalField
       },
     ],
     requiredDocs: [
-      `Valid passport (minimum 6 months validity)${fields.nationality ? ` â€” Nationality: ${fields.nationality}` : ""}`,
+      `Valid passport (minimum 6 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
       "Proof of purpose of stay (employment contract, invitation letter, etc.)",
       "Proof of financial means (bank statements)",
       "Proof of accommodation in Albania",
@@ -178,9 +177,9 @@ function contentForVisa(type: "visa_c" | "visa_d", fields: Partial<ProposalField
         : []),
     ],
     timeline: [
-      `${visaLabel} â€” Document review and preparation: approx. 3â€“5 business days`,
-      `${visaLabel} â€” Application submission: approx. 1â€“2 business days after document completion`,
-      `${visaLabel} â€” Authority processing time: approx. 15â€“30 business days`,
+      `${visaLabel} — Document review and preparation: approx. 3–5 business days`,
+      `${visaLabel} — Application submission: approx. 1–2 business days after document completion`,
+      `${visaLabel} — Authority processing time: approx. 15–30 business days`,
     ],
     nextSteps: [
       `Collection and review of required documents for ${visaLabel}`,
@@ -212,7 +211,7 @@ function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
           "Review of the Client's personal, professional, and financial situation",
           ...(fields.employmentType
             ? [
-                `Assessment of the Client's status as: ${fields.employmentType} â€” and the appropriate permit category`,
+                `Assessment of the Client's status as: ${fields.employmentType} — and the appropriate permit category`,
               ]
             : ["Determination of the most suitable residence permit category"]),
           "Legal advice on residency rights and obligations under Albanian law",
@@ -230,7 +229,7 @@ function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
       },
     ],
     requiredDocs: [
-      `Valid passport (minimum 12 months validity)${fields.nationality ? ` â€” Nationality: ${fields.nationality}` : ""}`,
+      `Valid passport (minimum 12 months validity)${fields.nationality ? ` — Nationality: ${fields.nationality}` : ""}`,
       "Lease agreement or property ownership deed",
       ...(fields.employmentType
         ? [
@@ -252,11 +251,11 @@ function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
     ],
     feeDescription: "For residence permit applications, DAFKU Law Firm applies a fixed legal service fee per applicant, depending on the permit category, duration, and complexity of the application. For this specific engagement, the fee is set out in Section 4.2 below.",
     timeline: [
-      "Residency â€” Document review and preparation: approx. 5â€“10 business days",
-      "Residency â€” Application submission: approx. 1â€“2 business days after document completion",
-      `Residency â€” Authority processing time: approx. 30â€“60 business days${
+      "Residency — Document review and preparation: approx. 5–10 business days",
+      "Residency — Application submission: approx. 1–2 business days after document completion",
+      `Residency — Authority processing time: approx. 30–60 business days${
         fields.numberOfApplicants && fields.numberOfApplicants > 1
-          ? ` â€” ${fields.numberOfApplicants} applicant(s)`
+          ? ` — ${fields.numberOfApplicants} applicant(s)`
           : ""
       }`,
     ],
@@ -270,7 +269,7 @@ function contentForResidency(fields: Partial<ProposalFields>): ServiceContent {
 }
 
 function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
-  const companyTypePart = fields.companyType ? ` â€” ${fields.companyType}` : "";
+  const companyTypePart = fields.companyType ? ` — ${fields.companyType}` : "";
   const activityPart = fields.businessActivity ? ` engaged in ${fields.businessActivity}` : "";
   const shareholdersPart = fields.numberOfShareholders
     ? ` with ${fields.numberOfShareholders} shareholder(s)`
@@ -286,7 +285,7 @@ function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
         bullets: [
           ...(fields.companyType
             ? [
-                `Legal advisory on the chosen entity type: ${fields.companyType} â€” confirmation of suitability`,
+                `Legal advisory on the chosen entity type: ${fields.companyType} — confirmation of suitability`,
               ]
             : ["Legal advice on the most suitable company type (SH.P.K., SH.A., branch, etc.)"]),
           ...(fields.numberOfShareholders
@@ -301,7 +300,7 @@ function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
         heading: "Document Preparation & Registration (Company Formation)",
         bullets: [
           `Drafting of the Articles of Association${
-            fields.businessActivity ? ` â€” business activity: ${fields.businessActivity}` : ""
+            fields.businessActivity ? ` — business activity: ${fields.businessActivity}` : ""
           }`,
           "Preparation of all registration documents required by QKR",
           "Submission to QKR and coordination with the tax authority for NIPT",
@@ -322,10 +321,10 @@ function contentForCompany(fields: Partial<ProposalFields>): ServiceContent {
       "Power of Attorney (if the Client appoints a representative for company registration)",
     ],
     timeline: [
-      "Company Formation â€” Advisory and document preparation: approx. 3â€“5 business days",
-      "Company Formation â€” Notarisation and submission to QKR: approx. 1â€“2 business days",
-      "Company Formation â€” QKR registration processing: approx. 1â€“3 business days",
-      "Company Formation â€” Tax registration (NIPT): approx. 2â€“5 business days",
+      "Company Formation — Advisory and document preparation: approx. 3–5 business days",
+      "Company Formation — Notarisation and submission to QKR: approx. 1–2 business days",
+      "Company Formation — QKR registration processing: approx. 1–3 business days",
+      "Company Formation — Tax registration (NIPT): approx. 2–5 business days",
     ],
     nextSteps: [
       "Collection of required documents and information for company formation",
@@ -371,9 +370,9 @@ function contentForTax(type: ServiceType, fields: Partial<ProposalFields>): Serv
       "Power of Attorney (if the Client appoints a representative)",
     ],
     timeline: [
-      `${label} â€” Initial review and assessment: approx. 3â€“7 business days`,
-      `${label} â€” Advisory and documentation phase: approx. 5â€“15 business days`,
-      `${label} â€” Authority interaction: subject to authority processing times`,
+      `${label} — Initial review and assessment: approx. 3–7 business days`,
+      `${label} — Advisory and documentation phase: approx. 5–15 business days`,
+      `${label} — Authority interaction: subject to authority processing times`,
     ],
     nextSteps: [
       `Collection of required documents for ${label}`,
@@ -384,9 +383,9 @@ function contentForTax(type: ServiceType, fields: Partial<ProposalFields>): Serv
   };
 }
 
-// â”€â”€ NOTE: For residency_pensioner, visa_d (employment), company_formation, and real_estate
+// ── NOTE: For residency_pensioner, visa_d (employment), company_formation, and real_estate
 //    the Preview tab renders verbatim docx content directly (see PreviewTab in JSX below).
-//    The legacy content functions below are kept only for other service types. â”€â”€
+//    The legacy content functions below are kept only for other service types. ──
 
 function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): ServiceContent {
   const hasDependents = (fields.numberOfFamilyMembers ?? 0) > 0 || !!fields.dependentName;
@@ -394,7 +393,7 @@ function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): S
     scopeParagraph: `Provision of full legal assistance for obtaining a Residence Permit in Albania as a Pensioner${hasDependents ? ", including Family Reunification for a dependent family member" : ""}. This covers the complete procedure from document collection through to the final biometric residence permit card.`,
     servicesSections: [
       {
-        heading: "Services â€“ Residency Permit Procedure",
+        heading: "Services – Residency Permit Procedure",
         bullets: [
           "Full legal guidance during the entire application process",
           "Pre-check and verification of all documents",
@@ -414,11 +413,11 @@ function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): S
     ],
     processSteps: [
       {
-        step: "STEP 1: Residency Permit for the Main Applicant â€“ Pensioner",
+        step: "STEP 1: Residency Permit for the Main Applicant – Pensioner",
         bullets: [
           "Documents collection and preparation (see below)",
           "Government Fees payment by us",
-          "Residency Permit Application Submission at the Local Directorate for Border and Migration in DurrÃ«s",
+          "Residency Permit Application Submission at the Local Directorate for Border and Migration in Durrës",
           "Receiving Provisional Residency Permit",
           "Final Decision on Residency Permit",
           "Address Registration at Civil Registry Office",
@@ -428,7 +427,7 @@ function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): S
       },
       ...(hasDependents
         ? [{
-            step: "STEP 2: Residency Permit for Dependent â€“ Family Reunification",
+            step: "STEP 2: Residency Permit for Dependent – Family Reunification",
             bullets: [
               "Same procedure as Step 1",
               "Submission after main applicant's Residency Permit is granted",
@@ -437,34 +436,34 @@ function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): S
         : []),
     ],
     requiredDocs: [
-      "â€” For the Main Applicant (Pensioner) â€”",
+      "— For the Main Applicant (Pensioner) —",
       "Photocopy of valid travel document (valid at least 3 months beyond permit period, with at least 2 blank pages)",
-      "Individual declarations for reason of staying in Albania â€” We prepare in Albanian & English, you sign",
-      "Proof of insurance in Albania â€” We arrange at our associate insurance company",
-      "Evidence from a bank in Albania for transfer of pension income â€” We support with bank account opening",
-      "Legalized criminal record from country of origin (issued within last 6 months, translated & notarized) â€” We handle",
-      "Evidence of annual pension income exceeding 1,200,000 ALL â€” We handle legal translation and notary",
-      "Proof of Residency Permit Government Fee Payment â€” We pay at the bank and provide the mandate",
-      "Passport-size photograph (47mm Ã— 36mm, taken within last 6 months, white background, neutral expression)",
+      "Individual declarations for reason of staying in Albania — We prepare in Albanian & English, you sign",
+      "Proof of insurance in Albania — We arrange at our associate insurance company",
+      "Evidence from a bank in Albania for transfer of pension income — We support with bank account opening",
+      "Legalized criminal record from country of origin (issued within last 6 months, translated & notarized) — We handle",
+      "Evidence of annual pension income exceeding 1,200,000 ALL — We handle legal translation and notary",
+      "Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate",
+      "Passport-size photograph (47mm × 36mm, taken within last 6 months, white background, neutral expression)",
       "Proof of accommodation in Albania (residential rental contract in accordance with Albanian standards)",
       ...(hasDependents
         ? [
-            "â€” For the Dependent (Family Reunification) â€”",
+            "— For the Dependent (Family Reunification) —",
             "Photocopy of dependent's valid travel document",
-            "Marriage certificate (apostilled/legalized, translated and notarized if not issued in Albania) â€” We handle",
-            "Proof of insurance in Albania for dependent â€” We arrange",
+            "Marriage certificate (apostilled/legalized, translated and notarized if not issued in Albania) — We handle",
+            "Proof of insurance in Albania for dependent — We arrange",
             "Copy of main applicant's residence permit in Albania",
-            "Proof of Government Fee Payment for dependent â€” We pay and provide the mandate",
-            "Passport-size photograph of dependent (47mm Ã— 36mm)",
+            "Proof of Government Fee Payment for dependent — We pay and provide the mandate",
+            "Passport-size photograph of dependent (47mm × 36mm)",
             "Proof of accommodation in Albania",
             "Evidence of sufficient financial resources during the stay in Albania",
           ]
         : []),
     ],
     timeline: [
-      "Preparation and application submission: 3â€“5 business days",
-      "Provisional Residency Permit: approx. 10â€“15 business days",
-      "Final Decision on Residency Permit: approx. 30â€“45 business days",
+      "Preparation and application submission: 3–5 business days",
+      "Provisional Residency Permit: approx. 10–15 business days",
+      "Final Decision on Residency Permit: approx. 30–45 business days",
       "Residency Permit Card issuance: approx. 2 calendar weeks",
     ],
     nextSteps: [
@@ -479,13 +478,13 @@ function contentForPensionerResidency_UNUSED(fields: Partial<ProposalFields>): S
   };
 }
 
-// â”€â”€ (renamed to avoid routing conflicts â€” preview uses hardcoded JSX) â”€â”€
+// ── (renamed to avoid routing conflicts — preview uses hardcoded JSX) ──
 function contentForVisaDEmployment_UNUSED(fields: Partial<ProposalFields>): ServiceContent {
   return {
     scopeParagraph: `Provision of full legal assistance for obtaining a Type D Visa and Residence Permit in Albania for employment purposes${fields.nationality ? ` (Nationality: ${fields.nationality})` : ""}. This covers the complete process from visa application through to the final biometric residence permit card.`,
     servicesSections: [
       {
-        heading: "Services â€“ Visa and Residency Permit Procedure",
+        heading: "Services – Visa and Residency Permit Procedure",
         bullets: [
           "Full legal guidance during the entire application process",
           "Pre-check and verification of all documents",
@@ -529,27 +528,27 @@ function contentForVisaDEmployment_UNUSED(fields: Partial<ProposalFields>): Serv
       },
     ],
     requiredDocs: [
-      "â€” For the Type D Visa Application (Employee) â€”",
-      "Passport-size photograph (47mm Ã— 36mm, taken within last 6 months, white background, neutral expression) â€” Provided by applicant",
-      "Photocopy of valid travel document (valid at least 3 months beyond visa period, with at least 2 blank pages) â€” Provided by applicant",
-      "Document certifying accommodation in Albania (notarized rental contract or hosting declaration) â€” We arrange",
-      "Document proving professional/commercial activity in applicant's country related to visa purpose â€” Provided by applicant",
+      "— For the Type D Visa Application (Employee) —",
+      "Passport-size photograph (47mm × 36mm, taken within last 6 months, white background, neutral expression) — Provided by applicant",
+      "Photocopy of valid travel document (valid at least 3 months beyond visa period, with at least 2 blank pages) — Provided by applicant",
+      "Document certifying accommodation in Albania (notarized rental contract or hosting declaration) — We arrange",
+      "Document proving professional/commercial activity in applicant's country related to visa purpose — Provided by applicant",
       "Residence Permit (12+ months) from country of residence if different from nationality country (valid 3+ additional months beyond visa period)",
-      "Document proving legal status of the inviting entity â€” We obtain from accountant",
-      "Invitation signed by the host â€” We prepare, applicant signs",
-      "Employment contract drafted according to Albanian Labor Code â€” We prepare",
-      "â€” For the Residency Permit Application (Employee) â€”",
+      "Document proving legal status of the inviting entity — We obtain from accountant",
+      "Invitation signed by the host — We prepare, applicant signs",
+      "Employment contract drafted according to Albanian Labor Code — We prepare",
+      "— For the Residency Permit Application (Employee) —",
       "Photocopy of valid travel document",
-      "Proof of Residency Permit Government Fee Payment â€” We pay at the bank and provide the mandate",
+      "Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate",
       "Passport-size photograph (two printed copies + digital copy sent to us via email)",
       "Proof of accommodation in Albania (notarized rental contract)",
-      "Employment contract according to Albanian Labor Code â€” We prepare",
+      "Employment contract according to Albanian Labor Code — We prepare",
       "Proof of professional qualification (diploma / certificate / reference / self-declaration)",
     ],
     timeline: [
-      "Documents preparation: approx. 3â€“5 business days",
-      "Visa processing: approx. 15â€“30 business days",
-      "Residency Permit: approx. 30â€“45 business days",
+      "Documents preparation: approx. 3–5 business days",
+      "Visa processing: approx. 15–30 business days",
+      "Residency Permit: approx. 30–45 business days",
       "Residency Permit ID Card: approx. 2 calendar weeks",
     ],
     nextSteps: [
@@ -565,13 +564,13 @@ function contentForVisaDEmployment_UNUSED(fields: Partial<ProposalFields>): Serv
   };
 }
 
-// â”€â”€ (renamed to avoid routing conflicts â€” preview uses hardcoded JSX) â”€â”€
+// ── (renamed to avoid routing conflicts — preview uses hardcoded JSX) ──
 function contentForCompanySelfEmployed_UNUSED(fields: Partial<ProposalFields>): ServiceContent {
   return {
     scopeParagraph: `Provision of full legal assistance for Company Registration and Management in Albania, combined with a Type D Visa and Residence Permit as Self-Employed/Business Owner${fields.nationality ? ` (Nationality: ${fields.nationality})` : ""}. This engagement covers both the legal establishment of the company and the complete immigration procedure.`,
     servicesSections: [
       {
-        heading: "Services â€“ Company Formation in Albania",
+        heading: "Services – Company Formation in Albania",
         bullets: [
           "Legal consultation and structuring of the company",
           "Selection and reservation of the company name",
@@ -584,7 +583,7 @@ function contentForCompanySelfEmployed_UNUSED(fields: Partial<ProposalFields>): 
         ],
       },
       {
-        heading: "Services â€“ Visa and Residency Permit Procedure",
+        heading: "Services – Visa and Residency Permit Procedure",
         bullets: [
           "Full legal guidance during the entire application process",
           "Pre-check and verification of all documents",
@@ -631,7 +630,7 @@ function contentForCompanySelfEmployed_UNUSED(fields: Partial<ProposalFields>): 
       },
     ],
     requiredDocs: [
-      "â€” For Company Registration â€”",
+      "— For Company Registration —",
       "Valid passport copy (for each shareholder and administrator)",
       "Contact details and residential address (foreign address)",
       "Company name proposal (at least two options)",
@@ -640,27 +639,27 @@ function contentForCompanySelfEmployed_UNUSED(fields: Partial<ProposalFields>): 
       "Shareholding structure details",
       "Company address in Albania",
       "Power of Attorney (notarized and apostilled/legalized, if registration is done remotely)",
-      "â€” For Type D Visa (Self-Employed) â€”",
-      "Passport-size photograph (47mm Ã— 36mm, within last 6 months, white background, neutral expression)",
+      "— For Type D Visa (Self-Employed) —",
+      "Passport-size photograph (47mm × 36mm, within last 6 months, white background, neutral expression)",
       "Photocopy of valid travel document (valid at least 3 months beyond visa period, with at least 2 blank pages)",
       "Certification of professional capacity (diploma, certificate, qualifications related to self-employment)",
-      "Business Registration Certificate â€” We provide upon company registration",
-      "Document certifying accommodation in Albania (rental contract or accommodation declaration) â€” We can arrange",
+      "Business Registration Certificate — We provide upon company registration",
+      "Document certifying accommodation in Albania (rental contract or accommodation declaration) — We can arrange",
       "Bank statement covering the last 12 months (income and outgoings)",
-      "â€” For Residency Permit (Self-Employed) â€”",
+      "— For Residency Permit (Self-Employed) —",
       "Photocopy of valid travel document",
-      "Project idea for the business/activity (as required by the National Employment and Labor Agency) â€” We prepare",
-      "Proof of sufficient financial means (minimum 500,000 ALL or equivalent) â€” We open the bank account; you make the deposit",
+      "Project idea for the business/activity (as required by the National Employment and Labor Agency) — We prepare",
+      "Proof of sufficient financial means (minimum 500,000 ALL or equivalent) — We open the bank account; you make the deposit",
       "Document proving necessary skills (certificate / diploma or equivalent)",
-      "Proof of registration of the activity in QKB â€” We provide upon company registration",
-      "Payment Mandate of Government fee â€” We pay and provide the document",
-      "Passport-size photograph (47mm Ã— 36mm)",
-      "Proof of accommodation in Albania (rental contract) â€” We can arrange",
+      "Proof of registration of the activity in QKB — We provide upon company registration",
+      "Payment Mandate of Government fee — We pay and provide the document",
+      "Passport-size photograph (47mm × 36mm)",
+      "Proof of accommodation in Albania (rental contract) — We can arrange",
     ],
     timeline: [
-      "Company Registration: approx. 3â€“5 business days",
-      "Visa processing: approx. 15â€“30 business days",
-      "Residency Permit: approx. 30â€“45 business days",
+      "Company Registration: approx. 3–5 business days",
+      "Visa processing: approx. 15–30 business days",
+      "Residency Permit: approx. 30–45 business days",
       "Residency Permit ID Card: approx. 2 calendar weeks",
     ],
     nextSteps: [
@@ -689,7 +688,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
   });
 
   if (parts.length === 1) {
-    // Single service â€” wrap scope with intro and number sections
+    // Single service — wrap scope with intro and number sections
     const p = parts[0];
     return {
       ...p,
@@ -704,7 +703,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
     };
   }
 
-  // Multiple services â€” merge content from all
+  // Multiple services — merge content from all
   const serviceNames = all.map((s) => SERVICE_LABELS[s] || s).join(", ");
   const combinedScope =
     `This proposal outlines the provision of integrated legal assistance covering the following services: ${serviceNames}.\n\n` +
@@ -719,7 +718,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
     }
   }
 
-  // Merge required docs â€” deduplicate
+  // Merge required docs — deduplicate
   const seenDocs = new Set<string>();
   const combinedDocs: string[] = [];
   for (const p of parts) {
@@ -750,7 +749,7 @@ export function getServiceContent(services: ServiceType[], fields: Partial<Propo
   };
 }
 
-// â”€â”€ Main component â”€â”€
+// ── Main component ──
 interface ProposalModalProps {
   customer: Customer;
   open: boolean;
@@ -773,7 +772,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
       if (svcs.includes("residency_pensioner")) return "Residence Permit for Pensioner and Family Reunification";
       if (svcs.includes("company_formation")) return "Company Registration and Management + Type D Visa & Residence Permit as Self-Employed/Business Owner";
       if (svcs.includes("visa_d")) return "Type D Visa & Residence Permit for Employees";
-      return `Legal Assistance â€” ${svcs.map((s) => SERVICE_LABELS[s] || s).join(", ")}`;
+      return `Legal Assistance — ${svcs.map((s) => SERVICE_LABELS[s] || s).join(", ")}`;
     })();
     // Auto-apply standard fee presets when no custom fees have been set yet
     const hasCustomFees = (customer.proposalFields?.serviceFeeALL ?? 0) > 0;
@@ -816,7 +815,6 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
 
   const [fields, setFields] = useState<ProposalFields>(initFields);
   const [saving, setSaving] = useState(false);
-  const [previewReady, setPreviewReady] = useState(false);
 
   function setField<K extends keyof ProposalFields>(key: K, value: ProposalFields[K]) {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -835,10 +833,8 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
   const totalUSD = totalALL * USD_RATE;
   const totalGBP = totalALL * GBP_RATE;
 
-  // Proposal template is driven entirely by customer.services (saved in DB)
+  // Proposal template is driven entirely by customer.services
   const svcs = (customer.services || []) as ServiceType[];
-  const conditions = evaluateConditions(fields);
-  const visibleFields = getVisibleFields(svcs, conditions);
 
   const displayDate = fields.proposalDate
     ? new Date(fields.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
@@ -882,7 +878,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head>
-      <title>Service Proposal â€” ${customer.name}</title>
+      <title>Service Proposal — ${customer.name}</title>
       <meta charset="utf-8"/>
       <style>
         *, *::before, *::after { box-sizing: border-box; }
@@ -916,7 +912,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
       <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">
-            Generate Proposal â€” {customer.name}
+            Generate Proposal — {customer.name}
           </DialogTitle>
         </DialogHeader>
 
@@ -929,7 +925,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
             <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
 
-          {/* â”€â”€ EDIT TAB â”€â”€ */}
+          {/* ── EDIT TAB ── */}
           <TabsContent value="edit" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 pt-4">
               {/* Proposal basics */}
@@ -956,11 +952,11 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 <Input
                   value={fields.nationality ?? ""}
                   onChange={(e) => setField("nationality", e.target.value)}
-                  placeholder="e.g. German, Frenchâ€¦"
+                  placeholder="e.g. German, French…"
                 />
               </div>
 
-              {/* Property / transaction fields â€” only relevant for real estate */}
+              {/* Property / transaction fields — only relevant for real estate */}
               {(customer.services || []).includes("real_estate") && (
                 <>
                   <div className="md:col-span-2 space-y-1">
@@ -968,7 +964,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                     <Input
                       value={fields.propertyDescription ?? ""}
                       onChange={(e) => setField("propertyDescription", e.target.value)}
-                      placeholder="e.g. a residential house and garage located in DurrÃ«s, Albania"
+                      placeholder="e.g. a residential house and garage located in Durrës, Albania"
                     />
                     <p className="text-xs text-muted-foreground">Used in the Scope section of the proposal.</p>
                   </div>
@@ -994,12 +990,12 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 />
               </div>
 
-              {/* â”€â”€ Service-specific fields â”€â”€ */}
+              {/* ── Service-specific fields ── */}
               {(customer.services || []).some((s) => ["visa_c", "visa_d", "residency_permit", "residency_pensioner"].includes(s)) && (
                 <>
                   <div className="md:col-span-2 border-t pt-4">
                     <p className="text-sm font-semibold mb-1 text-blue-700">
-                      {(customer.services || []).some((s) => ["residency_permit", "residency_pensioner"].includes(s)) ? "Residency Permit" : "Visa"} â€” Intake Fields
+                      {(customer.services || []).some((s) => ["residency_permit", "residency_pensioner"].includes(s)) ? "Residency Permit" : "Visa"} — Intake Fields
                     </p>
                   </div>
                   <div className="md:col-span-2 space-y-1">
@@ -1047,11 +1043,11 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                     />
                   </div>
 
-                  {/* Dependent / Family Member â€” only for Pensioner template */}
+                  {/* Dependent / Family Member — only for Pensioner template */}
                   {(customer.services || []).includes("residency_pensioner") && (
                     <>
                       <div className="md:col-span-2 border-t pt-4">
-                        <p className="text-sm font-semibold mb-1 text-blue-700">Dependent (Spouse / Family Member â€“ Family Reunification)</p>
+                        <p className="text-sm font-semibold mb-1 text-blue-700">Dependent (Spouse / Family Member – Family Reunification)</p>
                         <p className="text-xs text-muted-foreground">Leave blank if there is no accompanying dependent.</p>
                       </div>
                       <div className="space-y-1">
@@ -1067,7 +1063,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                         <Input
                           value={fields.dependentNationality ?? ""}
                           onChange={(e) => setField("dependentNationality", e.target.value)}
-                          placeholder="e.g. USA, Britishâ€¦"
+                          placeholder="e.g. USA, British…"
                         />
                       </div>
                       <div className="space-y-1">
@@ -1086,7 +1082,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               {(customer.services || []).includes("company_formation") && (
                 <>
                   <div className="md:col-span-2 border-t pt-4">
-                    <p className="text-sm font-semibold mb-1 text-blue-700">Company Formation â€” Intake Fields</p>
+                    <p className="text-sm font-semibold mb-1 text-blue-700">Company Formation — Intake Fields</p>
                   </div>
                   <div className="space-y-1">
                     <Label>Company type</Label>
@@ -1128,7 +1124,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               {(customer.services || []).some((s) => ["tax_consulting", "compliance"].includes(s)) && (
                 <>
                   <div className="md:col-span-2 border-t pt-4">
-                    <p className="text-sm font-semibold mb-1 text-blue-700">Tax / Compliance â€” Intake Fields</p>
+                    <p className="text-sm font-semibold mb-1 text-blue-700">Tax / Compliance — Intake Fields</p>
                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <Label>Client situation / needs</Label>
@@ -1245,60 +1241,38 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 <div className="flex justify-between"><span>Additional Costs Subtotal</span><span className="font-mono">{fmt(additionalSubtotal, 0)} ALL</span></div>
                 <div className="flex justify-between font-semibold border-t mt-1 pt-1">
                   <span>TOTAL</span>
-                  <span className="font-mono">{fmt(totalALL, 0)} ALL â‰ˆ {fmt(totalEUR)} EUR</span>
+                  <span className="font-mono">{fmt(totalALL, 0)} ALL ≈ {fmt(totalEUR)} EUR</span>
                 </div>
               </div>
             </div>
 
             <div className="flex gap-2 mt-6">
-              <Button onClick={() => setPreviewReady(true)} variant="outline">
-                <Wand2 className="h-4 w-4 mr-1.5" />
-                Generate Preview
-              </Button>
               <Button onClick={handleSave} disabled={saving} variant="secondary">
-                {saving ? "Savingâ€¦" : "Save"}
+                {saving ? "Saving..." : "Save"}
               </Button>
               <Button onClick={handleSendProposal} disabled={saving}>
                 <Send className="h-4 w-4 mr-1.5" />
-                {saving ? "Sendingâ€¦" : "Send Proposal"}
+                {saving ? "Sending..." : "Send Proposal"}
               </Button>
             </div>
           </TabsContent>
 
-          {/* â”€â”€ PREVIEW TAB â”€â”€ */}
-          <TabsContent value="preview" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
-            {!previewReady ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-4 text-muted-foreground">
-                <Wand2 className="h-10 w-10 opacity-30" />
-                <p className="text-sm">Fill in the fields on the Edit tab, then click <strong>Generate Preview</strong>.</p>
-                <Button variant="outline" onClick={() => setPreviewReady(true)}>
-                  <Wand2 className="h-4 w-4 mr-1.5" />
-                  Generate Preview Now
-                </Button>
-              </div>
-            ) : (
-              <div className="pt-4">
-                <div className="flex justify-end gap-2 mb-3">
-                  <Button variant="outline" size="sm" onClick={() => setPreviewReady(false)}>
-                    â† Back to Edit
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handlePrint}>
-                    ðŸ–¨ Print / Save PDF
-                  </Button>
-                  <Button size="sm" onClick={handleSendProposal} disabled={saving}>
-                    <Send className="h-4 w-4 mr-1.5" />
-                    {saving ? "Sendingâ€¦" : "Send Proposal"}
-                  </Button>
-                </div>
-                <ProposalRenderer
-                  clientName={customer.name}
-                  clientId={customer.customerId}
-                  services={svcs}
-                  fields={fields}
-                  innerRef={printRef}
-                />
-              </div>
-            )}
+          {/* -- PREVIEW TAB -- */}
+          <TabsContent value="preview" className="flex-1 overflow-y-auto mt-0">
+            <div className="flex justify-end px-6 pt-3 pb-2">
+              <Button variant="outline" size="sm" onClick={handlePrint}>
+                Print / Save PDF
+              </Button>
+            </div>
+            <div className="px-6 pb-6">
+              <ProposalRenderer
+                clientName={customer.name}
+                clientId={customer.customerId}
+                services={svcs}
+                fields={fields}
+                innerRef={printRef}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>
