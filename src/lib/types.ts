@@ -96,6 +96,11 @@ export interface ProposalFields {
   // ── Tax / Compliance specific ──
   /** Free-text description of the client's situation or what they need */
   situationDescription?: string;
+  // ── Real Estate specific ──
+  /** True when the property is off-plan / under construction (adds monitoring retainer section) */
+  isOffPlan?: boolean;
+  /** Expected construction completion year, e.g. "2027" (used when isOffPlan is true) */
+  propertyCompletionYear?: string;
 }
 
 export interface Customer {
@@ -269,13 +274,23 @@ export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {
   referral: "Referral",
 };
 
+/** The 4 services available in the proposal system — each maps to one DOCX template */
+export const PROPOSAL_SERVICES = [
+  "residency_pensioner",
+  "visa_d",
+  "company_formation",
+  "real_estate",
+] as const satisfies ServiceType[];
+
 export const SERVICE_LABELS: Record<ServiceType, string> = {
-  visa_c: "Visa C",
-  visa_d: "Visa D",
-  residency_permit: "Residency Permit",
+  // ── 4 proposal-eligible services (shown in registration + proposal UI) ──
   residency_pensioner: "Residency Permit – Pensioner",
-  company_formation: "Company Formation",
-  real_estate: "Real Estate",
+  visa_d: "Type D Visa & Residence Permit (Employment)",
+  company_formation: "Company Formation + Visa D (Self-Employed)",
+  real_estate: "Real Estate Investment",
+  // ── Legacy service types (kept for backward compatibility, not shown in UI) ──
+  visa_c: "Visa C",
+  residency_permit: "Residency Permit",
   tax_consulting: "Tax Consulting",
   compliance: "Compliance",
 };

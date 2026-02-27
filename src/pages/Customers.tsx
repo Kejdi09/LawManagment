@@ -18,6 +18,7 @@ import {
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
+  PROPOSAL_SERVICES,
   CONTACT_CHANNEL_LABELS,
   LEAD_STATUS_LABELS,
   LAWYERS,
@@ -361,7 +362,8 @@ const Customers = () => {
     setSelectedCategories([...CATEGORY_OPTIONS]);
   };
 
-  const serviceEntries = Object.entries(SERVICE_LABELS);
+  // Only the 4 proposal-eligible services are available for registration
+  const serviceEntries = PROPOSAL_SERVICES.map((key) => [key, SERVICE_LABELS[key]] as [string, string]);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
   const statusEntriesBase = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
   // Allow intake users to choose CLIENT via the form, but we'll require assignment when they do.
