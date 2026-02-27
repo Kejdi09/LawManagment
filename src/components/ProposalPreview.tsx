@@ -124,95 +124,113 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
       </div>
     );
 
-    const FeeTable = () => (
-      <>
-        <table className="w-full border-collapse text-sm mb-4">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-3 py-1.5 text-left">Description of the Service</th>
-              <th className="border px-3 py-1.5 text-right">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border px-3 py-1.5">Consultation fee</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(consultationFee, 0)} ALL</td>
-            </tr>
-            <tr>
-              <td className="border px-3 py-1.5">Service fee for the assistance</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFee, 0)} ALL</td>
-            </tr>
-            <tr className="bg-gray-50 font-semibold">
-              <td className="border px-3 py-1.5">Service Fees Subtotal</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFeeSubtotal, 0)} ALL</td>
-            </tr>
-          </tbody>
-        </table>
-        <table className="w-full border-collapse text-sm mb-4">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-3 py-1.5 text-left">Additional Costs</th>
-              <th className="border px-3 py-1.5 text-right w-24">Unit Cost</th>
-              <th className="border px-3 py-1.5 text-right w-24">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border px-3 py-1.5">Power of Attorney</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
-            </tr>
-            <tr>
-              <td className="border px-3 py-1.5">Documents Legal Translation and Notary{fields.additionalCostsNote ? ` (${fields.additionalCostsNote})` : " (to be specified later upon documents collection)"}</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
-            </tr>
-            <tr>
-              <td className="border px-3 py-1.5">Other fees</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
-            </tr>
-            <tr className="bg-gray-50 font-semibold">
-              <td className="border px-3 py-1.5">Additional Costs Subtotal</td>
-              <td className="border px-3 py-1.5"></td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(additionalSubtotal, 0)} ALL</td>
-            </tr>
-            <tr className="bg-gray-100 font-bold">
-              <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
-              <td className="border px-3 py-1.5"></td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalALL, 0)} ALL</td>
-            </tr>
-          </tbody>
-        </table>
-        <table className="w-full border-collapse text-sm mb-4">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-3 py-1.5 text-left">Currency</th>
-              <th className="border px-3 py-1.5 text-right">Conversion Rate</th>
-              <th className="border px-3 py-1.5 text-right">Value after Conversion</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border px-3 py-1.5">EUR</td>
-              <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {EUR_RATE.toFixed(8)} EUR</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalEUR)} EUR</td>
-            </tr>
-            <tr>
-              <td className="border px-3 py-1.5">USD</td>
-              <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {USD_RATE.toFixed(8)} USD</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalUSD)} USD</td>
-            </tr>
-            <tr>
-              <td className="border px-3 py-1.5">GBP</td>
-              <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {GBP_RATE.toFixed(8)} GBP</td>
-              <td className="border px-3 py-1.5 text-right font-mono">{fmt(totalGBP)} GBP</td>
-            </tr>
-          </tbody>
-        </table>
-        <p className="text-xs text-gray-500 mb-4">Conversion Source: https://www.xe.com/ (indicative rates — subject to change)</p>
-      </>
-    );
+    // ── Template-specific fee tables (each template has its own FeeTable) ──
+    // Defined below inside each template block.
+    // Shared currency conversion table used by all templates
+    const CurrencyTable = ({ total }: { total: number }) => {
+      const eur = total * EUR_RATE;
+      const usd = total * USD_RATE;
+      const gbp = total * GBP_RATE;
+      return (
+        <>
+          <table className="w-full border-collapse text-sm mb-1">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border px-3 py-1.5 text-left">Currency</th>
+                <th className="border px-3 py-1.5 text-right">Conversion Rate</th>
+                <th className="border px-3 py-1.5 text-right">Value after Conversion</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border px-3 py-1.5">EUR</td>
+                <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {EUR_RATE.toFixed(8)} EUR</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(eur)} EUR</td>
+              </tr>
+              <tr>
+                <td className="border px-3 py-1.5">USD</td>
+                <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {USD_RATE.toFixed(8)} USD</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(usd)} USD</td>
+              </tr>
+              <tr>
+                <td className="border px-3 py-1.5">GBP</td>
+                <td className="border px-3 py-1.5 text-right font-mono">1.00 ALL = {GBP_RATE.toFixed(8)} GBP</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(gbp)} GBP</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-xs text-gray-500 mb-4">Conversion Source: https://www.xe.com/ (indicative rates — subject to change)</p>
+        </>
+      );
+    };
+
+    // Keep a generic FeeTable for the fallback renderer
+    const FeeTable = () => {
+      const total = serviceFeeSubtotal + additionalSubtotal;
+      return (
+        <>
+          <table className="w-full border-collapse text-sm mb-4">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border px-3 py-1.5 text-left">Description of the Service</th>
+                <th className="border px-3 py-1.5 text-right">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border px-3 py-1.5">Consultation fee</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(consultationFee, 0)} ALL</td>
+              </tr>
+              <tr>
+                <td className="border px-3 py-1.5">Service fee for the assistance</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFee, 0)} ALL</td>
+              </tr>
+              <tr className="bg-gray-50 font-semibold">
+                <td className="border px-3 py-1.5">Service Fees Subtotal</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(serviceFeeSubtotal, 0)} ALL</td>
+              </tr>
+            </tbody>
+          </table>
+          <table className="w-full border-collapse text-sm mb-4">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border px-3 py-1.5 text-left">Additional Costs</th>
+                <th className="border px-3 py-1.5 text-right w-24">Unit Cost</th>
+                <th className="border px-3 py-1.5 text-right w-24">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border px-3 py-1.5">Power of Attorney</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(poaFee, 0)} ALL</td>
+              </tr>
+              <tr>
+                <td className="border px-3 py-1.5">Documents Legal Translation and Notary{fields.additionalCostsNote ? ` (${fields.additionalCostsNote})` : " (to be specified later upon documents collection)"}</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(translationFee, 0)} ALL</td>
+              </tr>
+              <tr>
+                <td className="border px-3 py-1.5">Other fees</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(otherFees, 0)} ALL</td>
+              </tr>
+              <tr className="bg-gray-50 font-semibold">
+                <td className="border px-3 py-1.5">Additional Costs Subtotal</td>
+                <td className="border px-3 py-1.5"></td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(additionalSubtotal, 0)} ALL</td>
+              </tr>
+              <tr className="bg-gray-100 font-bold">
+                <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
+                <td className="border px-3 py-1.5"></td>
+                <td className="border px-3 py-1.5 text-right font-mono">{fmt(total, 0)} ALL</td>
+              </tr>
+            </tbody>
+          </table>
+          <CurrencyTable total={total} />
+        </>
+      );
+    };
 
     const wrapperClass = "bg-white text-gray-900 rounded-lg border shadow-sm p-10 font-serif text-[13px] leading-relaxed";
     const serif = { fontFamily: "Georgia, 'Times New Roman', serif" };
@@ -297,28 +315,28 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
             <p className="text-sm font-bold border-b pb-1 mb-3">Required Documents</p>
             <p className="text-sm font-semibold mb-1">For the Main Applicant (Pensioner):</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
-              <li>Photocopy of valid travel document (valid at least 3 months beyond the permit period, with at least 2 blank pages) — Provided by the Applicant</li>
-              <li>Individual declarations for reason of staying in Albania — We prepare both in Albanian and English; you sign</li>
-              <li>Proof of insurance in Albania — We arrange at our associate insurance company</li>
-              <li>Evidence from a bank in Albania for the transfer of pension income — We support with bank account opening</li>
-              <li>Legalized criminal record from the country of origin (issued within the last 6 months, translated and notarized) — We handle</li>
-              <li>Evidence of an annual pension income exceeding 1,200,000 ALL — We handle legal translation and notary</li>
-              <li>Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate</li>
-              <li>Passport-size photograph (47mm × 36mm, taken within the last 6 months, white background, neutral expression)</li>
-              <li>Proof of accommodation in Albania (residential rental contract in accordance with Albanian standards)</li>
+              <li>Photocopy of the valid travel document, which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as the photocopy of the pages with notes of interest for the trip. – Provided by the Applicant.</li>
+              <li>Individual declarations for reason of staying in Albania – We prepare both in Albanian and English; you sign.</li>
+              <li>Proof of insurance in Albania – We purchase for you at our associate insurance company.</li>
+              <li>Evidence from a bank in Albania for the transfer of pension income – We support with bank account opening.</li>
+              <li>Legalized criminal record from the country of origin (issued within the last 6 months, translated and notarized) – We do the legal translation and notary at our associated partners.</li>
+              <li>Evidence of an annual pension income exceeding 1,200,000 ALL – We do the legal translation and notary at our associated partners.</li>
+              <li>Proof of Residency Permit Government Fee Payment – We pay for you at the bank and provide the payment mandate.</li>
+              <li>Photograph of the applicant, which must be taken not before 6 (six) months from the date of application, measuring 47 mm x 36 mm, taken on a plane with a white background, visibly and clearly focused. The photo should show the person front, with a neutral expression and eyes open and visible.</li>
+              <li>Proof of accommodation made in Albania, certificate, residential rental contract in accordance with the standards in Albania.</li>
             </ul>
             {fields.dependentName && (
               <>
-                <p className="text-sm font-semibold mb-1">For the Dependent (Family Reunification):</p>
+                <p className="text-sm font-semibold mb-1">For Your Family (Family Reunification), after your permit is granted:</p>
                 <ul className="list-disc pl-5 space-y-0.5 text-sm">
-                  <li>Photocopy of the dependent&apos;s valid travel document — Provided by the Applicant</li>
-                  <li>Marriage certificate (apostilled/legalized, translated and notarized if not issued in Albania) — We handle</li>
-                  <li>Proof of insurance in Albania for the dependent — We arrange at our associate insurance company</li>
-                  <li>Copy of the main applicant&apos;s residence permit in Albania</li>
-                  <li>Proof of Residency Permit Government Fee Payment for the dependent — We pay at the bank and provide the mandate</li>
-                  <li>Passport-size photograph of the dependent (47mm × 36mm, taken within the last 6 months, white background, neutral expression)</li>
-                  <li>Proof of accommodation in Albania</li>
-                  <li>Evidence of sufficient financial resources during the stay in Albania</li>
+                  <li>Photocopy of the valid travel document, which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as the photocopy of the pages with notes of interest for the trip.</li>
+                  <li>Marriage certificate (issued within the last 6 months, legalized, translated, notarized, if it is not issued in Albania) – We do the legal translation and notary at our associated partners.</li>
+                  <li>Proof of insurance in Albania – We purchase for you at our associate insurance company.</li>
+                  <li>Copy of the identity document of the invitee and the residence permit in Albania.</li>
+                  <li>Proof of Payment of Residency Permit Government Fee – We pay for you at the bank and provide the payment mandate.</li>
+                  <li>Photograph of the applicant, which must be taken not before 6 (six) months from the date of application, measuring 47 mm x 36 mm, taken on a plane with a white background, visibly and clearly focused. The photo should show the person front, with a neutral expression and eyes open and visible. – Two printed copies and a digital copy emailed to us.</li>
+                  <li>Proof of accommodation made in Albania, certificate, residential rental contract in accordance with the standards in Albania.</li>
+                  <li>Evidence of sufficient resources to live during the stay in Albania for the required period – We do the legal translation and notary at our associated partners.</li>
                 </ul>
               </>
             )}
@@ -328,7 +346,127 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Fees &amp; Costs</p>
             <p className="text-sm mb-3">For Residency Permit applications as Pensioner with Family Reunification, DAFKU Law Firm applies a fixed legal service fee per applicant, covering all procedural steps from document preparation through to the final permit card.</p>
-            <FeeTable />
+
+            {/* Pensioner-specific fee table matching the document exactly */}
+            {(() => {
+              const mainFee = 45_000;
+              const depFee = fields.dependentName ? 45_000 : 0;
+              const svcSubtotal = mainFee + depFee;
+              const rpGovMain = 5_100;
+              const rpGovDep = fields.dependentName ? 5_100 : 0;
+              const idCardCoupon = fields.dependentName ? 11_400 : 5_700; // 5700 × 2 or ×1
+              const idCardUnit = fields.dependentName ? 5_700 : 5_700;
+              const idCardQty = fields.dependentName ? 2 : 1;
+              const healthInsQty = fields.dependentName ? 2 : 1;
+              const healthIns = healthInsQty * 5_000;
+              const addSubtotal = rpGovMain + rpGovDep + idCardCoupon + (translationFee) + healthIns;
+              const grandTotal = svcSubtotal + addSubtotal;
+              return (
+                <>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Description of the service</th>
+                        <th className="border px-3 py-1.5 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Consultation fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Residency service fee – Main applicant – Pensioner</div>
+                          <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                            <li>Documents check and preparation</li>
+                            <li>Employment Contract drafting/adjustment</li>
+                            <li>Residency Permit Application</li>
+                            <li>Follow-up with immigration Office</li>
+                            <li>Assistance with Registry Office</li>
+                            <li>Assistance with Biometric Card and Fingerprints</li>
+                          </ul>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">45.000 ALL</td>
+                      </tr>
+                      {fields.dependentName && (
+                        <tr>
+                          <td className="border px-3 py-1.5">
+                            <div>Residency service fee – Dependent – Family Reunification</div>
+                            <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                              <li>Same procedure as above</li>
+                            </ul>
+                          </td>
+                          <td className="border px-3 py-1.5 text-right font-mono align-top">45.000 ALL</td>
+                        </tr>
+                      )}
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Service fees Subtotal</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(svcSubtotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Additional costs</th>
+                        <th className="border px-3 py-1.5 text-right w-16">Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Cost</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit government fee – Pensioner</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">1</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.100 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.100 ALL</td>
+                      </tr>
+                      {fields.dependentName && (
+                        <tr>
+                          <td className="border px-3 py-1.5">Residency Permit government fee – Family Reunification</td>
+                          <td className="border px-3 py-1.5 text-right font-mono">1</td>
+                          <td className="border px-3 py-1.5 text-right font-mono">5.100 ALL</td>
+                          <td className="border px-3 py-1.5 text-right font-mono">5.100 ALL</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit ID Card Coupon</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{idCardQty}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(idCardUnit, 0)} ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(idCardCoupon, 0)} ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Documents legal Translation and Notary (to be specified later)</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Other fees – Health Insurance</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{healthInsQty}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.000 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(healthIns, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Additional costs Subtotal</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(addSubtotal, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-100 font-bold">
+                        <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(grandTotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <CurrencyTable total={grandTotal} />
+                </>
+              );
+            })()}
+
             <p className="text-sm font-semibold mb-1">Costs Not Included</p>
             <p className="text-sm mb-1">The legal fee does not include:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
@@ -345,8 +483,14 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           {/* Payment Terms */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Payment Terms</p>
-            <p className="text-sm">50% upon contract signing / file opening.</p>
-            <p className="text-sm">50% before submission of the residency permit application for family reunification for the dependent.</p>
+            <p className="text-sm mb-1">Our office, applies the following payment terms:</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm">
+              <li>50% of the service fee is payable upon contract signing / file opening.</li>
+              <li>50% is payable before submission of the residency permit application for family reunification for the dependent.</li>
+              <li>Government fees are paid upfront before application submission.</li>
+              <li>All payments are non-refundable once the application has been submitted to the authorities.</li>
+              <li>Payments can be made in cash, card, bank transaction, PayPal, etc.</li>
+            </ul>
           </div>
 
           {/* Timeline */}
@@ -464,25 +608,25 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           {/* Required Documents */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Required Documents</p>
-            <p className="text-sm font-semibold mb-1">For the Type D Visa Application (Employee):</p>
+            <p className="text-sm font-semibold mb-1">For the Type D Visa Application for Employee:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
-              <li>Passport-size photograph (47mm × 36mm, taken within the last 6 months, white background, neutral expression) — Provided by the Applicant</li>
-              <li>Photocopy of valid travel document (valid at least 3 months beyond the visa period, with at least 2 blank pages) — Provided by the Applicant</li>
-              <li>Document certifying accommodation in Albania (notarized rental contract or hosting declaration) — We arrange</li>
-              <li>Document proving professional/commercial activity in the applicant&apos;s country related to the visa purpose — Provided by the Applicant</li>
-              <li>Residence Permit (12+ months) from country of residence if different from nationality country (valid 3+ additional months beyond visa period)</li>
-              <li>Document proving legal status of the inviting entity — We obtain from accountant</li>
-              <li>Invitation signed by the host — We prepare; applicant signs</li>
-              <li>Employment contract drafted according to Albanian Labor Code — We prepare</li>
+              <li>Photograph of the applicant, which should have been taken no earlier than 6 (six) months before the application date, measuring 47 mm x 36 mm, taken in a frontal view with a white background, clearly and distinctly focused. The photograph should show the person facing the camera, with a neutral expression and the eyes open and visible. – Provided by the applicant.</li>
+              <li>Photocopy of the valid travel document which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as a photocopy of the pages with notes of interest for the trip. – Provided by the applicant.</li>
+              <li>Document certifying accommodation in the territory of the Republic of Albania. – A notarized rental contract or a hosting declaration prepared before the application submission.</li>
+              <li>Document proving the activity or professional, commercial ability in the applicant&apos;s country, which is related to the motives of the applicant&apos;s visa application, in the case of Type D visa applications. – Provided by the applicant.</li>
+              <li>Residence Permit more than 12 months, issued from the country of residence, with a validity period of at least 3 additional months than the duration period of the required visa (if you are residing in another country, rather than your nationality).</li>
+              <li>Document proving the legal status of the inviting entity. – We get them from the accountant.</li>
+              <li>Invitation signed by the host. – We prepare it, you sign it.</li>
+              <li>The employment contract with the employer, drawn up according to the Labor Code of the Republic of Albania. – We will prepare the contract.</li>
             </ul>
-            <p className="text-sm font-semibold mb-1">For the Residency Permit Application (Employee):</p>
+            <p className="text-sm font-semibold mb-1">For the Residency Permit Application for Employee:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Photocopy of valid travel document — Provided by the Applicant</li>
-              <li>Proof of Residency Permit Government Fee Payment — We pay at the bank and provide the mandate</li>
-              <li>Passport-size photograph (two printed copies + digital copy sent to us via email)</li>
-              <li>Proof of accommodation in Albania (notarized rental contract)</li>
-              <li>Employment contract according to Albanian Labor Code — We prepare</li>
-              <li>Proof of professional qualification (diploma / certificate / reference / self-declaration)</li>
+              <li>Photocopy of the valid travel document, which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as the photocopy of the pages with notes of interest for the trip.</li>
+              <li>Proof of Residency Permit Government Fee Payment – We pay it for you at the bank and provide the payment mandate.</li>
+              <li>Photograph of the applicant, which must be taken not before 6 (six) months from the date of application, measuring 47 mm x 36 mm, taken on a plane with a white background, visibly and clearly focused. The photo should show the person front, with a neutral expression and eyes open and visible. – Two printed pieces and a digital copy sent to us via email.</li>
+              <li>Proof of accommodation made in Albania, certificate, residential rental contract in accordance with the standards in Albania. – A notarised rental contract prepared before the application submission.</li>
+              <li>The employment contract with the employer, drawn up according to the Labor Code of the Republic of Albania. – We will prepare the contract.</li>
+              <li>Proof of professional qualification (diploma/professional certificate/reference) or self-declaration from the subject, or self-declaration from the foreigner in the form of a curriculum vitae (CV), which proves the foreigner&apos;s previous professional skills/experience, in relation to the profession defined in the employment contract work, in the Albanian language. – Provided by the applicant.</li>
             </ul>
           </div>
 
@@ -490,7 +634,140 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Fees &amp; Costs</p>
             <p className="text-sm mb-3">For Type D Visa and Residency Permit applications for employment, DAFKU Law Firm applies a fixed legal service fee per applicant, covering all procedural steps from visa application through to the final permit card.</p>
-            <FeeTable />
+
+            {/* Visa D employment-specific fee table matching the document exactly */}
+            {(() => {
+              const n = fields.numberOfApplicants && fields.numberOfApplicants > 1 ? fields.numberOfApplicants : 1;
+              const unitFee = 75_000;
+              const discountPerUnit = n > 1 ? 20_000 : 0;
+              const discountedUnit = unitFee - discountPerUnit;
+              const svcSubtotal = discountedUnit * n;
+              // Government fees per person
+              const visaGovFee = 2_100 * n;
+              const rpGovFee = 8_600 * n;
+              const idCard = 5_700 * n;
+              const addSubtotal = visaGovFee + rpGovFee + idCard + translationFee + otherFees;
+              const grandTotal = svcSubtotal + addSubtotal;
+              return (
+                <>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Description of the service</th>
+                        <th className="border px-3 py-1.5 text-right w-16">Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Cost/Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Consultation fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Visa and Residency Permit service fee – Employee</div>
+                          <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                            <li>Job Contract Preparation</li>
+                            <li>Documentation Collection and Checking</li>
+                            <li>Visa Application and Follow-Up</li>
+                            <li>Payment of government fees</li>
+                            <li>Residency Permit Application</li>
+                            <li>Follow-Up of the process</li>
+                            <li>Representation and support with immigration office</li>
+                            <li>Support with Registry Office for address registration</li>
+                            <li>Fingerprints setting support for ID Card</li>
+                          </ul>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">{n}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">75.000 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">{fmt(unitFee * n, 0)} ALL</td>
+                      </tr>
+                      {n > 1 && (
+                        <>
+                          <tr>
+                            <td className="border px-3 py-1.5">Discount on group application</td>
+                            <td className="border px-3 py-1.5 text-right font-mono">{n}</td>
+                            <td className="border px-3 py-1.5 text-right font-mono text-red-600">-20.000 ALL</td>
+                            <td className="border px-3 py-1.5 text-right font-mono text-red-600">-{fmt(discountPerUnit * n, 0)} ALL</td>
+                          </tr>
+                          <tr>
+                            <td className="border px-3 py-1.5">Visa and Residency Permit service fee after discount</td>
+                            <td className="border px-3 py-1.5 text-right font-mono">{n}</td>
+                            <td className="border px-3 py-1.5 text-right font-mono">55.000 ALL</td>
+                            <td className="border px-3 py-1.5 text-right font-mono">{fmt(discountedUnit * n, 0)} ALL</td>
+                          </tr>
+                        </>
+                      )}
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Service fees Subtotal</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(svcSubtotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Additional costs</th>
+                        <th className="border px-3 py-1.5 text-right w-16">Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Cost/Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Visa government fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{n}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">2.100 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(visaGovFee, 0)} ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit government fee – Self employment</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{n}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">8.600 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(rpGovFee, 0)} ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit ID Card Coupon</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{n}</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.700 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(idCard, 0)} ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Documents legal Translation and Notary (to be specified later)</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Other fees (residence contract, and related supporting service upon request)</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Additional costs Subtotal</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(addSubtotal, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-100 font-bold">
+                        <td className="border px-3 py-1.5">TOTAL</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(grandTotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <CurrencyTable total={grandTotal} />
+                </>
+              );
+            })()}
+
             <p className="text-sm font-semibold mb-1">Costs Not Included</p>
             <p className="text-sm mb-1">The legal fee does not include:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
@@ -643,35 +920,43 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Required Documents</p>
             <p className="text-sm font-semibold mb-1">For Company Registration:</p>
-            <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
-              <li>Valid passport copy (for each shareholder and administrator)</li>
+            <p className="text-sm font-semibold text-gray-600 mb-1">For the Shareholder(s) and Administrator(s):</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm mb-2">
+              <li>Valid passport copy</li>
               <li>Contact details and residential address (foreign address)</li>
-              <li>Company name proposal (at least two options)</li>
+            </ul>
+            <p className="text-sm font-semibold text-gray-600 mb-1">Corporate &amp; Legal Documentation:</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm mb-2">
+              <li>Company name proposal</li>
               <li>Description of business activity</li>
               <li>Appointment details of the company administrator</li>
               <li>Shareholding structure details</li>
-              <li>Company address in Albania</li>
-              <li>Power of Attorney (notarized and apostilled/legalized, if registration is done remotely)</li>
+              <li>Company address</li>
             </ul>
-            <p className="text-sm font-semibold mb-1">For Type D Visa (Self-Employed):</p>
+            <p className="text-sm font-semibold text-gray-600 mb-1">If Registration Is Done Remotely:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
-              <li>Passport-size photograph (47mm × 36mm, taken within the last 6 months, white background, neutral expression)</li>
-              <li>Photocopy of valid travel document (valid at least 3 months beyond the visa period, with at least 2 blank pages)</li>
-              <li>Certification of professional capacity (diploma, certificate, qualifications related to self-employment)</li>
-              <li>Business Registration Certificate — We provide upon company registration</li>
-              <li>Document certifying accommodation in Albania (rental contract or accommodation declaration) — We can arrange</li>
-              <li>Bank statement covering the last 12 months (income and outgoings)</li>
+              <li>Power of Attorney (notarized and legalized/apostilled)</li>
             </ul>
-            <p className="text-sm font-semibold mb-1">For Residency Permit (Self-Employed):</p>
+            <p className="text-sm font-semibold mb-1">For Visa for self-employed people (Type D):</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
+              <li>Photograph of the applicant, which should have been taken no earlier than 6 (six) months before the application date, measuring 47 mm x 36 mm, taken in a frontal view with a white background, clearly and distinctly focused. The photograph should show the person facing the camera, with a neutral expression and the eyes open and visible.</li>
+              <li>Photocopy of the valid travel document which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as a photocopy of the pages with notes of interest for the trip.</li>
+              <li>Certification of professional capacity related to the approval of self-employment (diploma, certificate, training, various qualifications).</li>
+              <li>The document of the legal status of the entity (Business Registration Certificate). – We provide it.</li>
+              <li>Document certifying accommodation in the territory of the Republic of Albania. (Rental contract or accommodation reservation declaration). – We can make it for you as an extra service through a power of attorney.</li>
+              <li>Residence permit more than 12 months, issued from the country of residence, with a validity period of at least 3 additional months than the duration period of the required visa (if you are resident in another country rather than your nationality).</li>
+              <li>The full bank statement showing the money going in and money leaving your account for the last 12 months.</li>
+            </ul>
+            <p className="text-sm font-semibold mb-1">For Residency Permit Application as Self-Employed/Business Owner:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Photocopy of valid travel document</li>
-              <li>Project idea for the business/activity (as required by the National Employment and Labor Agency) — We prepare</li>
-              <li>Proof of sufficient financial means (minimum 500,000 ALL or equivalent) — We open the bank account; you make the deposit</li>
-              <li>Document proving necessary skills (certificate / diploma or equivalent)</li>
-              <li>Proof of registration of the activity in QKB — We provide upon company registration</li>
-              <li>Payment Mandate of Government fee — We pay and provide the document</li>
-              <li>Passport-size photograph (47mm × 36mm)</li>
-              <li>Proof of accommodation in Albania (rental contract) — We can arrange</li>
+              <li>Photocopy of the valid travel document, which must be valid for at least 3 months longer than the requested visa period and have at least 2 blank pages, on which the visa stamp will be placed, as well as the photocopy of the pages with notes of interest for the trip.</li>
+              <li>Project idea for the business/activity (reflecting the minimum elements recommended by the National Employment and Labor Agency). – We prepare it for you.</li>
+              <li>The document proving that there are sufficient financial means, not less than 500,000 (five hundred thousand) ALL or the equivalent value of one dollar or euro. – We open the bank account for you and you have to make the deposit.</li>
+              <li>Document proving the necessary skills (certificate/diploma or equivalent document).</li>
+              <li>Proof of registration of the activity in the QKB. – We provide it upon company registration.</li>
+              <li>Payment Mandate of Government fee. – We pay and provide the document.</li>
+              <li>Photograph of the applicant, which must be taken not before 6 (six) months from the date of application, measuring 47 mm x 36 mm, taken on a plane with a white background, visibly and clearly focused. The photo should show the person front, with a neutral expression and eyes open and visible.</li>
+              <li>Proof of accommodation made in Albania, certificate, residential rental contract in accordance with the standards in Albania. – We can rent a place for you upon your request as an extra service through a power of attorney.</li>
             </ul>
           </div>
 
@@ -679,40 +964,174 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Fees &amp; Costs</p>
             <p className="text-sm mb-3">For Company Formation combined with Type D Visa and Residency Permit, DAFKU Law Firm applies a fixed service fee covering both the company registration process and the complete immigration procedure.</p>
-            <FeeTable />
+
+            {/* Company formation exact fee table from document */}
+            {(() => {
+              const companyFee = 85_000;
+              const visaRpFee = 75_000;
+              const svcSubtotal = companyFee + visaRpFee;
+              const visaGovFee = 4_500;
+              const rpGovFee = 8_800;
+              const idCard = 5_700;
+              const addSubtotal = visaGovFee + rpGovFee + idCard;
+              const grandTotal = svcSubtotal + addSubtotal;
+              return (
+                <>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Description of the service</th>
+                        <th className="border px-3 py-1.5 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Consultation fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Company Formation service fee which includes:</div>
+                          <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                            <li>Power of Attorney</li>
+                            <li>Name check and reservation</li>
+                            <li>Statute and Establishment Act Drafting</li>
+                            <li>Company Registration Application</li>
+                            <li>Company Registration with relevant authorities</li>
+                            <li>Accounting and Virtual Office for 1 month</li>
+                            <li>Bank Account Opening Support</li>
+                            <li>Business Plan Drafting</li>
+                          </ul>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">85.000 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Visa and Residency Permit service fee – Main Applicant</div>
+                          <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                            <li>Documentation Checking</li>
+                            <li>Visa Application and Follow-Up</li>
+                            <li>Residency Permit Application and Follow-Up</li>
+                            <li>Payment of government fees</li>
+                            <li>Representation and support with immigration office</li>
+                            <li>Support with Registry Office and Fingerprints</li>
+                          </ul>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">75.000 ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Service fees Subtotal</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">160.000 ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Additional costs</th>
+                        <th className="border px-3 py-1.5 text-right w-16">Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Cost</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Visa government fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">1</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">4.500 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">4.500 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit government fee – Self employment</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">1</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">8.800 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">8.800 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Residency Permit ID Card Coupon</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">1</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.700 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">5.700 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Documents legal Translation and Notary (to be specified later)</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Other fees</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Additional costs Subtotal</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(addSubtotal, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-100 font-bold">
+                        <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(grandTotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <CurrencyTable total={grandTotal} />
+                </>
+              );
+            })()}
 
             <p className="text-sm font-semibold mb-2 mt-4">Company Management Costs</p>
+            <p className="text-xs text-gray-600 mb-2"><strong>Fixed fees:</strong> The maintenance service fees listed below are the minimum fees applied for new businesses initially registered in Albania. These fees remain fixed at this amount for businesses with an annual turnover of 5,000,000 ALL (50,000 EUR). Above this limit, the fees will increase accordingly depending on the administrative and legal support required.</p>
             <table className="w-full border-collapse text-sm mb-2">
               <thead>
                 <tr className="bg-gray-100">
                   <th className="border px-3 py-1.5 text-left">Service</th>
-                  <th className="border px-3 py-1.5 text-right">Cost / Month (ALL)</th>
+                  <th className="border px-3 py-1.5 text-right">Unit</th>
+                  <th className="border px-3 py-1.5 text-right">Value</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td className="border px-3 py-1.5">Accounting services</td><td className="border px-3 py-1.5 text-right font-mono">5,000 ALL</td></tr>
-                <tr><td className="border px-3 py-1.5">Legal services</td><td className="border px-3 py-1.5 text-right font-mono">5,000 ALL</td></tr>
-                <tr><td className="border px-3 py-1.5">Virtual office</td><td className="border px-3 py-1.5 text-right font-mono">5,000 ALL</td></tr>
-                <tr className="bg-gray-50 font-semibold"><td className="border px-3 py-1.5">Total Monthly</td><td className="border px-3 py-1.5 text-right font-mono">15,000 ALL / month</td></tr>
+                <tr><td className="border px-3 py-1.5">Accounting</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">5.000 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Legal Support</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">5.000 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Virtual Office</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">5.000 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Electronic Fiscal Certificate</td><td className="border px-3 py-1.5 text-right">Annual</td><td className="border px-3 py-1.5 text-right font-mono">4.500 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Invoicing Software</td><td className="border px-3 py-1.5 text-right">Annual</td><td className="border px-3 py-1.5 text-right font-mono">7.500 ALL</td></tr>
               </tbody>
             </table>
-            <p className="text-xs text-gray-500 mb-3">Note: The above are ongoing monthly management costs and are separate from the one-time service fee above.</p>
+            <p className="text-xs text-gray-600 mb-3"><strong>Non-fixed fees:</strong> The maintenance service fees listed below are calculated based on our experience with other clients and in reference to the market prices.</p>
+            <table className="w-full border-collapse text-sm mb-2">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border px-3 py-1.5 text-left">Service</th>
+                  <th className="border px-3 py-1.5 text-right">Unit</th>
+                  <th className="border px-3 py-1.5 text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td className="border px-3 py-1.5">Office rent</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">30.000 – 50.000 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Social and Health Security</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">12.000 – 15.000 ALL</td></tr>
+                <tr><td className="border px-3 py-1.5">Local Municipal Taxes</td><td className="border px-3 py-1.5 text-right">Month</td><td className="border px-3 py-1.5 text-right font-mono">25.000 – 40.000 ALL</td></tr>
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-500 mb-4">Note: The above are ongoing management costs and are separate from the one-time service fee above.</p>
 
             <p className="text-sm font-semibold mb-2">Taxation Overview (Albania)</p>
             <table className="w-full border-collapse text-sm mb-4">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="border px-3 py-1.5 text-left">Tax Type</th>
-                  <th className="border px-3 py-1.5 text-right">Rate</th>
+                  <th className="border px-3 py-1.5 text-left">Tax</th>
+                  <th className="border px-3 py-1.5 text-right">Below turnover</th>
+                  <th className="border px-3 py-1.5 text-right">Above turnover</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td className="border px-3 py-1.5">Corporate Income Tax (CIT)</td><td className="border px-3 py-1.5 text-right">15%</td></tr>
-                <tr><td className="border px-3 py-1.5">Value Added Tax (VAT)</td><td className="border px-3 py-1.5 text-right">20%</td></tr>
-                <tr><td className="border px-3 py-1.5">Personal Income Tax – Employment</td><td className="border px-3 py-1.5 text-right">0–23%</td></tr>
-                <tr><td className="border px-3 py-1.5">Social Security Contributions (Employee)</td><td className="border px-3 py-1.5 text-right">11.2%</td></tr>
-                <tr><td className="border px-3 py-1.5">Social Security Contributions (Employer)</td><td className="border px-3 py-1.5 text-right">16.7%</td></tr>
-                <tr><td className="border px-3 py-1.5">Dividend Tax (Withholding)</td><td className="border px-3 py-1.5 text-right">8%</td></tr>
+                <tr><td className="border px-3 py-1.5">VAT – Turnover 10,000,000 ALL</td><td className="border px-3 py-1.5 text-right">0%</td><td className="border px-3 py-1.5 text-right">20%</td></tr>
+                <tr><td className="border px-3 py-1.5">Corporate Tax – Turnover 14,000,000 ALL</td><td className="border px-3 py-1.5 text-right">0%</td><td className="border px-3 py-1.5 text-right">15%</td></tr>
+                <tr><td className="border px-3 py-1.5">Dividend Tax – Flat Rate</td><td className="border px-3 py-1.5 text-right">8%</td><td className="border px-3 py-1.5 text-right">8%</td></tr>
               </tbody>
             </table>
 
@@ -749,17 +1168,28 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           {/* Important Notes */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">Important Notes &amp; Legal Disclaimers</p>
-            <p className="text-sm mb-1 font-semibold">Company management:</p>
+            <p className="text-sm mb-1 font-semibold">For Company Management &amp; Ongoing Requirements – Key Points:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>All legal services are provided based on the documentation and information made available by the Client and third parties.</li>
-              <li>The company registration timeline is subject to the processing speed of the National Business Center (QKB).</li>
-              <li>Monthly management costs are billed separately and in advance.</li>
+              <li>The company must have a registered business address in Albania which can be provided by our office through a virtual office or by renting physical premises.</li>
+              <li>A licensed accountant is mandatory.</li>
+              <li>The company must pay applicable taxes, depending on activity and turnover, such as: Corporate income tax, VAT (if applicable), Local municipal taxes.</li>
+              <li>Social and health contributions must be paid for each employee.</li>
+              <li>Employment contracts and payroll declarations must comply with Albanian law.</li>
+              <li>The company must operate through an Albanian corporate bank account.</li>
+              <li>Monthly and annual tax declarations are mandatory.</li>
+              <li>Annual financial statements must be submitted.</li>
+              <li>Any changes to company details (address, administrator, activity) must be officially registered.</li>
+              <li>The company must remain active and compliant to support residence permit validity and renewals.</li>
+              <li>Non-compliance may result in penalties and may affect residency permit status.</li>
             </ul>
-            <p className="text-sm mb-1 font-semibold">Visa and Residency Permit:</p>
+            <p className="text-sm mb-1 font-semibold">For Visa and Residency Permit procedure:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Processing times are estimates and may vary due to institutional workload or additional requirements.</li>
-              <li>Public authorities may request additional documents or clarifications at any stage of the process.</li>
-              <li>The Firm cannot guarantee timelines or decisions made by public authorities.</li>
+              <li>The Applicant should be outside the Albanian territory when the visa application is submitted.</li>
+              <li>As soon as the visa is approved, the applicant should enter the Albanian territory in order for the Residency permit procedure to start processing.</li>
+              <li>All visa and residency decisions are made exclusively by Albanian authorities; our office cannot influence the outcome.</li>
+              <li>Processing times are estimated and may vary based on internal procedures or workload.</li>
+              <li>Authorities may request additional documents or clarifications at any stage.</li>
+              <li>Our office is not responsible for delays or decisions made by the authorities.</li>
             </ul>
           </div>
 
@@ -795,59 +1225,77 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
           {/* Section 1 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">1 — Scope of the Proposal</p>
-            <p className="text-sm">This proposal is prepared by DAFKU Law Firm for the provision of legal services in connection with the purchase of a {propDesc}. The total estimated transaction value is {txVal}. The services outlined below cover the full scope of legal assistance required for a secure and compliant property acquisition in Albania.</p>
+            <p className="text-sm mb-1">This proposal outlines the provision of comprehensive legal, advisory, and procedural assistance in connection with the purchase of a {propDesc}. The total estimated transaction value is {txVal}.</p>
+            <p className="text-sm mb-1">The property forms part of a residential development currently under construction. Given the off-plan nature of the investment and the extended construction period, this engagement is structured to provide not only transactional legal support, but also ongoing legal monitoring and safeguarding of the Client&apos;s interests until final handover and ownership registration.</p>
+            <p className="text-sm mb-1">The objectives of this engagement are:</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm">
+              <li>To ensure full legal compliance of the transaction at all stages</li>
+              <li>To mitigate legal and contractual risks associated with off-plan property purchases</li>
+              <li>To protect the Client&apos;s interests as buyer throughout the construction period</li>
+              <li>To ensure proper handover, ownership transfer, and registration of the property</li>
+            </ul>
           </div>
 
           {/* Section 2 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">2 — Scope of Services Provided</p>
+            <p className="text-sm mb-2">The Firm&apos;s services are divided into transactional assistance and post-contract monitoring, reflecting the lifecycle of an off-plan real estate investment.</p>
 
-            <p className="text-sm font-semibold mb-1">2.1 Due Diligence and Title Verification</p>
+            <p className="text-sm font-semibold mb-1">2.1 Legal Due Diligence &amp; Project Verification</p>
+            <p className="text-sm mb-1">The Firm shall conduct a comprehensive legal due diligence process aimed at verifying the legality, validity, and risk profile of the project and the transaction. This includes, but is not limited to:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>Full legal review of the property&apos;s title and ownership chain</li>
-              <li>Verification of the property&apos;s registration status at the Immovable Property Registration Office (ZRPP)</li>
-              <li>Search for any encumbrances, mortgages, liens, or legal disputes affecting the property</li>
-              <li>Verification of the seller&apos;s legal capacity and authority to sell</li>
-              <li>Verification of building permits, urban planning approvals, and compliance with applicable construction regulations</li>
-              <li>Identification and disclosure of any legal risks or irregularities affecting the transaction</li>
+              <li>Verification of the ownership title of the land on which the project is being developed, through the Albanian State Cadastre (ASHK)</li>
+              <li>Review and verification of the construction permit (Leje Ndërtimi) and approved project documentation</li>
+              <li>Examination of the legal status, registration, and authority of the developer / construction company</li>
+              <li>Verification of the developer&apos;s right to pre-sell residential units under Albanian law</li>
+              <li>Confirmation of the allocation of the specific apartment intended for purchase</li>
+              <li>Verification of any encumbrances or restrictions affecting the land or the project (mortgages, liens, seizures, or other legal burdens)</li>
+              <li>Consistency check between contractual documentation, cadastral records, and factual project status</li>
+              <li>Legal risk assessment related to construction timelines, delivery obligations, and buyer safeguards</li>
             </ul>
 
-            <p className="text-sm font-semibold mb-1">2.2 Contract Drafting and Review</p>
+            <p className="text-sm font-semibold mb-1">2.2 Contractual Documentation &amp; Legal Structuring</p>
+            <p className="text-sm mb-1">The Firm shall provide full legal assistance in relation to the contractual framework governing the off-plan purchase. This includes:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>Drafting or reviewing of the Preliminary Sale-Purchase Agreement (Compromis / Promesë Shitje)</li>
-              <li>Drafting or reviewing of the Final Sale-Purchase Agreement for notarial execution</li>
-              <li>Advising on contractual terms, conditions, and legal protections for the buyer</li>
-              <li>Reviewing and advising on any side agreements, addenda, or developer agreements</li>
+              <li>Legal review and, where required, drafting or amendment of: Reservation agreements; Preliminary Sale and Purchase Agreements</li>
+              <li>Detailed review of contractual clauses related to: Construction deadlines and delivery timelines; Penalties and remedies in case of delay or non-performance; Payment schedules and legal safeguards; Termination rights and refund mechanisms</li>
+              <li>Ensuring that contractual obligations are balanced and aligned with Albanian law</li>
+              <li>Legal coordination and negotiation support with the developer, real estate agency, and notary public</li>
             </ul>
 
-            <p className="text-sm font-semibold mb-1">2.3 Liaison with Third Parties</p>
+            <p className="text-sm font-semibold mb-1">2.3 Representation &amp; Communication with Third Parties</p>
+            <p className="text-sm mb-1">Throughout the transaction, the Firm shall act as the Client&apos;s legal point of contact with all relevant parties involved in the investment process. This includes communication and coordination with:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>Coordination with the seller&apos;s legal counsel, real estate agents, and developer representatives</li>
-              <li>Liaison with the notary public for the preparation and execution of the notarial deed</li>
-              <li>Coordination with the ZRPP for title registration in the buyer&apos;s name</li>
-              <li>Liaising with tax authorities for property transfer tax declarations and payments</li>
+              <li>The real estate agency and agent involved in the transaction</li>
+              <li>The construction company / developer</li>
+              <li>The notary public</li>
+              <li>Relevant public authorities, where necessary</li>
             </ul>
 
-            <p className="text-sm font-semibold mb-1">2.4 Notarial Act and Registration</p>
+            <p className="text-sm font-semibold mb-1">2.4 Notarial Transaction Assistance</p>
+            <p className="text-sm mb-1">The Firm shall provide legal assistance during the execution of contractual documentation before the notary public. This includes:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>Attendance and legal representation at the notarial act signing</li>
-              <li>Preparation and submission of all required documentation for the ZRPP registration</li>
-              <li>Monitoring of the ZRPP registration process until completion</li>
-              <li>Obtaining and delivering the certified title extract confirming the buyer&apos;s ownership</li>
+              <li>Legal review of notarial deeds prior to execution</li>
+              <li>Verification of the identity and legal authority of the selling party</li>
+              <li>Ensuring that the notarial act reflects the agreed contractual terms</li>
+              <li>Legal presence during signing to address issues that may arise in real time</li>
             </ul>
 
-            <p className="text-sm font-semibold mb-1">2.5 Payment Coordination and Escrow Advice</p>
+            <p className="text-sm font-semibold mb-1">2.5 Payment Coordination &amp; Legal Guidance</p>
+            <p className="text-sm mb-1">The Firm shall provide legal guidance related to the execution of payments associated with the transaction, including:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm mb-3">
-              <li>Advising on the payment structure and schedule in accordance with the purchase agreement</li>
-              <li>Issuing payment instructions and confirming the release of funds at each contractual milestone</li>
-              <li>Advising on payment methods (bank transfer, cash, escrow, or other arrangements)</li>
+              <li>Advice on secure and legally compliant payment methods (bank transfers)</li>
+              <li>Coordination of payment timing in line with contractual obligations</li>
+              <li>Ensuring legal linkage between payments and contractual milestones</li>
             </ul>
 
-            <p className="text-sm font-semibold mb-1">2.6 Post-Acquisition Monitoring (Off-Plan Projects)</p>
+            <p className="text-sm font-semibold mb-1">2.6 Long-Term Legal Monitoring Until Project Completion</p>
+            <p className="text-sm mb-1">Given the off-plan nature of the investment, the Firm shall remain legally engaged on an ongoing basis following contract execution. The monitoring service includes:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Monitoring of construction progress and developer obligations until project handover</li>
-              <li>Reviewing any change orders, amendments, or developer communications affecting the buyer</li>
-              <li>Advising on handover procedures, snagging, and final title transfer upon project completion</li>
+              <li>Ongoing legal availability for advisory support related to the contractual relationship</li>
+              <li>Review of communications, notices, or updates issued by the developer</li>
+              <li>Legal advice and basic intervention in cases of: construction delays; non-compliance with contractual obligations; proposed changes affecting the Client&apos;s rights</li>
+              <li>Assistance and coordination until: final handover of the apartment; delivery of keys; registration of ownership with ASHK; issuance of ownership documentation in the Client&apos;s name</li>
             </ul>
           </div>
 
@@ -856,72 +1304,161 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
             <p className="text-sm font-bold border-b pb-1 mb-3">3 — Required Documents</p>
             <p className="text-sm mb-1">Required Documentation from the Client:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Valid passport or national identity document</li>
-              <li>Proof of residential address (utility bill, bank statement, or equivalent — issued within the last 3 months)</li>
-              <li>Tax identification number (TIN) — from the buyer&apos;s country of residence or Albania</li>
-              <li>Source of funds documentation (bank statement, employment contract, or equivalent) — as required for due diligence and compliance purposes</li>
+              <li>Valid identification document (ID / Passport)</li>
+              <li>Available project-related documentation (reservation or preliminary contracts, if any)</li>
+              <li>Payment method details</li>
+              <li>Power of Attorney (if representation is required)</li>
             </ul>
           </div>
 
           {/* Section 4 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">4 — Fees &amp; Costs</p>
-            <p className="text-sm mb-3">DAFKU Law Firm charges a fixed legal service fee for the provision of the services described in this proposal. The fee is structured as follows:</p>
 
-            <p className="text-sm font-semibold mb-1">Phase 1 — Legal Due Diligence, Contract and Transaction Management</p>
-            <p className="text-sm mb-2">A fixed fee for legal due diligence, contract drafting and review, notarial attendance, title registration, and payment coordination.</p>
-            <FeeTable />
+            <p className="text-sm font-semibold mb-1">4.1 General Legal Service Fee</p>
+            <p className="text-sm mb-3">For real estate transactions, particularly off-plan purchases, DAFKU Law Firm applies either a fixed fee or a percentage-based fee, depending on complexity, duration, and risk exposure. For this specific transaction, a hybrid structure is applied, consisting of a fixed transactional fee and a monthly monitoring retainer.</p>
 
-            <p className="text-sm font-semibold mb-1 mt-2">Phase 2 — Post-Acquisition Monitoring (monthly retainer)</p>
-            <table className="w-full border-collapse text-sm mb-4">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border px-3 py-1.5 text-left">Service</th>
-                  <th className="border px-3 py-1.5 text-right">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td className="border px-3 py-1.5">Monthly retainer for post-acquisition monitoring and developer liaison</td><td className="border px-3 py-1.5 text-right font-mono">€50 / month</td></tr>
-              </tbody>
-            </table>
-            <p className="text-xs text-gray-500 mb-4">The monthly retainer applies from the date of preliminary agreement signing until the project handover and final title transfer (estimated completion: 2027).</p>
+            <p className="text-sm font-semibold mb-1">4.2. Fees and Costs applied to this specific case</p>
+            <p className="text-sm mb-1"><strong>Phase 1 – Transaction &amp; Contractual Assistance (Fixed Fee)</strong></p>
+            <p className="text-sm mb-2">This phase covers all legal services from engagement commencement until completion of notarial signing. This includes all services described below:</p>
 
-            <p className="text-sm font-semibold mb-1">Costs Not Included</p>
+            {(() => {
+              const mainFee = serviceFee || 95_000;
+              const grandTotal = mainFee;
+              return (
+                <>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Description of the service</th>
+                        <th className="border px-3 py-1.5 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">Consultation fee</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Comprehensive legal assistance for off-plan real estate investment, including:</div>
+                          <ul className="list-disc pl-5 text-xs text-gray-600 mt-1 space-y-0.5">
+                            <li>Legal due diligence of the project, land ownership, construction permit, and developer documentation</li>
+                            <li>Legal review and negotiation of reservation and preliminary sale contracts</li>
+                            <li>Representation and coordination with the real estate agency, developer, notary, and authorities</li>
+                            <li>Legal assistance and presence during notarial signing</li>
+                            <li>Payment coordination and legal safeguards</li>
+                          </ul>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono align-top">{fmt(mainFee, 0)} ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Service fees Subtotal</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(mainFee, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse text-sm mb-4">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-3 py-1.5 text-left">Additional costs</th>
+                        <th className="border px-3 py-1.5 text-right w-16">Unit</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Cost</th>
+                        <th className="border px-3 py-1.5 text-right w-28">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Power of Attorney</div>
+                          <div className="text-xs text-gray-600">Needed in case of representation without the presence of the client</div>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">
+                          <div>Documents legal Translation and Notary</div>
+                          <div className="text-xs text-gray-600">To be specified later upon documents collection and calculated based on the documents volume</div>
+                        </td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr>
+                        <td className="border px-3 py-1.5">Other fees</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr className="bg-gray-50 font-semibold">
+                        <td className="border px-3 py-1.5">Additional costs Subtotal</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">0 ALL</td>
+                      </tr>
+                      <tr className="bg-gray-100 font-bold">
+                        <td className="border px-3 py-1.5">FINAL COST TOTAL</td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5"></td>
+                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(grandTotal, 0)} ALL</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <CurrencyTable total={grandTotal} />
+                </>
+              );
+            })()}
+
+            <p className="text-sm font-semibold mb-1 mt-2">Phase 2 – Long-Term Legal Monitoring (Monthly Retainer)</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-sm mb-4">
+              <li>Monitoring fee: EUR 50 per month</li>
+              <li>Billing: payable monthly or quarterly in advance, at the Client&apos;s discretion</li>
+              <li>Duration: from contract execution until project completion, handover, and registration</li>
+            </ul>
+            <p className="text-sm mb-2">The monitoring service includes advisory support and reasonable legal communication. Any complex dispute, prolonged negotiation, formal legal action, or litigation shall fall outside the scope of monitoring and be billed separately.</p>
+            <p className="text-sm mb-4">Hourly rate for out-of-scope services: EUR 100 / hour</p>
+
+            <p className="text-sm font-semibold mb-1">4.3. Costs Not Included</p>
             <p className="text-sm mb-1">The legal fee does not include:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Notary fees related to the execution of agreements and notarization of documents.</li>
-              <li>Government fees and taxes, including property transfer tax and registration fees.</li>
-              <li>Real estate agency or third-party professional commissions, if applicable.</li>
-              <li>Bank charges related to payment transfers (domestic or international).</li>
-              <li>Translation and sworn translation costs, if documents are issued in a foreign language.</li>
-              <li>Apostille or legalization costs, where required for foreign documents.</li>
-              <li>Courier or administrative expenses, including document delivery or official filings.</li>
-              <li>Any third-party professional fees, such as surveyors, engineers, or technical experts, if required.</li>
+              <li>Notary fees</li>
+              <li>Government taxes and registration fees</li>
+              <li>Real estate agency commissions</li>
+              <li>Bank transfer fees</li>
+              <li>Translation, sworn translation, apostille, or legalization costs</li>
+              <li>Power of Attorney preparation and notarization fees</li>
+              <li>Courier or administrative expenses</li>
+              <li>Any third-party professional fees (engineers, surveyors, experts)</li>
             </ul>
           </div>
 
           {/* Section 5 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">5 — Payment Terms</p>
+            <p className="text-sm mb-1">Our office applies the following payment terms for the provision of legal services related to real estate purchase transactions:</p>
             <ul className="list-disc pl-5 space-y-1 text-sm">
-              <li>50% of the Phase 1 fee is payable upon signing of the engagement agreement.</li>
-              <li>50% of the Phase 1 fee is payable upon execution of the Final Notarial Sale-Purchase Agreement.</li>
-              <li>The Phase 2 monthly retainer is payable monthly in advance, commencing from the date of the preliminary agreement signing.</li>
-              <li>Government fees, notary fees, and any third-party costs are payable separately and in advance, before the relevant service or submission to the competent authorities.</li>
-              <li>All legal service fees are non-refundable once the service has commenced and/or once any documentation has been submitted to a notary or public authority.</li>
-              <li>Payments may be made via bank transfer, cash, card payment, PayPal, or other agreed payment methods.</li>
+              <li>50% payable upon signing of the engagement agreement</li>
+              <li>50% payable prior to notarial execution of contractual documentation</li>
+              <li>Third-party and government costs payable separately and in advance</li>
+              <li>Legal fees are non-refundable once services have commenced</li>
+              <li>Payments accepted via bank transfer, cash, card, PayPal, or other agreed methods.</li>
             </ul>
           </div>
 
           {/* Section 6 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">6 — Timeline Overview</p>
+            <p className="text-sm mb-1">Based on our experience, and taking into consideration that there will be no delays by the client and third parties, the approximate timeline for each service component will be:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Legal due diligence and title verification – 5 – 10 business days from receipt of all required documents</li>
-              <li>Preliminary agreement drafting and signing – within 3 – 5 business days from due diligence completion</li>
-              <li>Notarial act execution and ZRPP registration – upon project completion and final payment (estimated: 2027)</li>
-              <li>Post-acquisition monitoring – ongoing, from preliminary agreement signing until final handover</li>
+              <li>Legal due diligence &amp; document verification: approx. 5–10 business days</li>
+              <li>Contract review &amp; coordination: approx. 5–10 business days</li>
+              <li>Notarial execution: subject to parties&apos; availability</li>
+              <li>Construction completion &amp; handover: expected in 2027</li>
+              <li>Ownership registration after completion: approx. 15–30 business days</li>
             </ul>
+            <p className="text-xs text-gray-500 mt-1">Timelines are indicative and subject to third-party and institutional responsiveness.</p>
           </div>
 
           {/* Section 7 */}
@@ -929,26 +1466,25 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
             <p className="text-sm font-bold border-b pb-1 mb-3">7 — Important Notes &amp; Legal Disclaimers</p>
             <p className="text-sm mb-1">It is important for the Client to be aware of the following:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>All legal services are provided based on the documentation and information made available by the Client and third parties.</li>
-              <li>The due diligence and legal review are limited to documents and information accessible through official Albanian public records and registers.</li>
-              <li>The Firm is not responsible for delays or refusals caused by incomplete, inaccurate, or late documentation provided by third parties, including the developer or seller.</li>
-              <li>The Firm cannot guarantee timelines or decisions made by notaries, banks, the ZRPP, or public authorities.</li>
-              <li>Legal fees do not include government fees, notary fees, or any third-party costs unless explicitly stated.</li>
-              <li>For off-plan properties, completion timelines are subject to the developer&apos;s construction schedule and are beyond the control of the Firm.</li>
+              <li>Services are based on documentation provided by the Client and third parties</li>
+              <li>The Firm does not guarantee construction timelines or third-party performance</li>
+              <li>Public authorities may request additional documentation at any stage</li>
+              <li>Legal fees exclude government, notary, and third-party costs unless explicitly stated.</li>
             </ul>
           </div>
 
           {/* Section 8 */}
           <div className="mt-6">
             <p className="text-sm font-bold border-b pb-1 mb-3">8 — Next Steps</p>
-            <p className="text-sm mb-1">Upon your approval of this proposal, the following steps will be taken:</p>
+            <p className="text-sm mb-1">Upon approval of this proposal:</p>
             <ul className="list-disc pl-5 space-y-0.5 text-sm">
-              <li>Execution of the legal service engagement agreement.</li>
-              <li>Payment of the initial portion of the legal fee as agreed.</li>
-              <li>Commencement of legal due diligence and title verification.</li>
-              <li>Drafting and review of the Preliminary Sale-Purchase Agreement.</li>
-              <li>Coordination with the notary for the execution of the final agreement.</li>
-              <li>Post-acquisition monitoring until project completion and final title transfer.</li>
+              <li>Execution of the legal services engagement agreement</li>
+              <li>Payment of the initial legal fee</li>
+              <li>Commencement of legal due diligence</li>
+              <li>Contract review and coordination</li>
+              <li>Notarial assistance and payment coordination</li>
+              <li>Ongoing legal monitoring until project completion</li>
+              <li>Completion upon issuance of ownership documentation in the Client&apos;s name</li>
             </ul>
           </div>
 
