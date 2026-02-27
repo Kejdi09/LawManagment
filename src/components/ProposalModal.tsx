@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Printer, Save, Send, Wand2 } from "lucide-react";
+import { Send, Wand2 } from "lucide-react";
 import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/types";
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
@@ -918,7 +918,7 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
         <Tabs defaultValue="edit" className="flex flex-col flex-1 overflow-hidden">
           <TabsList className="mx-6 mt-2 w-fit shrink-0">
             <TabsTrigger value="edit">Edit Fields</TabsTrigger>
-            <TabsTrigger value="preview">Preview / Print</TabsTrigger>
+            <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
 
           {/* ── EDIT TAB ── */}
@@ -1243,10 +1243,6 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
             </div>
 
             <div className="flex gap-2 mt-6">
-              <Button variant="outline" onClick={handleSave} disabled={saving}>
-                <Save className="h-4 w-4 mr-1.5" />
-                {saving ? "Saving…" : "Save Draft"}
-              </Button>
               <Button onClick={handleSendProposal} disabled={saving}>
                 <Send className="h-4 w-4 mr-1.5" />
                 {saving ? "Sending…" : "Send Proposal"}
@@ -1256,12 +1252,6 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
 
           {/* ── PREVIEW TAB ── */}
           <TabsContent value="preview" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
-            <div className="flex justify-end mt-3 mb-4">
-              <Button onClick={handlePrint} variant="outline">
-                <Printer className="h-4 w-4 mr-1.5" />
-                Print / Save as PDF
-              </Button>
-            </div>
 
             {/* ── Shared cover block (used by all templates) ── */}
             {(() => {

@@ -14,7 +14,7 @@ import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/componen
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -145,6 +145,41 @@ export default function ClientPortalPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
   const proposalViewedRef = useRef(false);
+  const portalPrintRef = useRef<HTMLDivElement>(null);
+
+  function handlePortalPrint() {
+    const content = portalPrintRef.current;
+    if (!content) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const clientName = data?.client?.name ?? "Client";
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Service Proposal — ${clientName}</title>
+      <meta charset="utf-8"/>
+      <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
+        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
+        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
+        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
+        .cover-block p { margin: 3px 0; font-size: 13px; }
+        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
+        p, li { font-size: 13px; line-height: 1.7; margin: 4px 0; }
+        ul { padding-left: 20px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border: 1px solid #ccc; }
+        td { padding: 6px 10px; border: 1px solid #ddd; }
+        .total-row td { font-weight: bold; background: #f8f8f8; }
+        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 12px; font-size: 11px; color: #777; text-align: center; }
+        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
+      </style>
+    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
 
   // Load portal data
   useEffect(() => {
@@ -436,7 +471,14 @@ export default function ClientPortalPage() {
                   <span><strong>This proposal has expired.</strong> Please contact your lawyer to request an updated proposal.</span>
                 </div>
               )}
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={handlePortalPrint} className="gap-1.5">
+                  <FileDown className="h-4 w-4" />
+                  Save as PDF
+                </Button>
+              </div>
               <div
+                ref={portalPrintRef}
                 className="bg-white text-gray-900 rounded-lg border shadow-sm p-8 font-serif text-[13px] leading-relaxed"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
