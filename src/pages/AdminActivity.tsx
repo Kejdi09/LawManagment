@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getAuditLogs, getTeamSummary } from "@/lib/case-store";
-import { AuditLogRecord, TeamSummary } from "@/lib/types";
+import { getAuditLogs, getTeamSummary, getDeletedChats } from "@/lib/case-store";
+import { AuditLogRecord, TeamSummary, DeletedChatRecord } from "@/lib/types";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -24,7 +24,11 @@ const AdminActivity = () => {
   const [toDate, setToDate] = useState("");
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
   const [teamSummary, setTeamSummary] = useState<TeamSummary[]>([]);
-  const [activeTab, setActiveTab] = useState<"logs" | "team">("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "team" | "deleted_chats">("logs");
+  const [deletedChats, setDeletedChats] = useState<DeletedChatRecord[]>([]);
+  const [chatSearch, setChatSearch] = useState("");
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -146,7 +150,134 @@ const AdminActivity = () => {
           >
             Team Summary
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("deleted_chats");
+              if (deletedChats.length === 0) {
+                setChatsLoading(true);
+                getDeletedChats().then(setDeletedChats).catch(() => {}).finally(() => setChatsLoading(false));
+              }
+            }}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "deleted_chats" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Deleted Chats
+          </button>
         </div>
+
+        {activeTab === "deleted_chats" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input
+                value={chatSearch}
+                onChange={(e) => setChatSearch(e.target.value)}
+                placeholder="Search by customer name…"
+                className="max-w-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setChatsLoading(true);
+                  getDeletedChats().then(setDeletedChats).catch(() => {}).finally(() => setChatsLoading(false));
+                }}
+              >
+                Refresh
+              </Button>
+            </div>
+            {chatsLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+            ) : (
+              <Card>
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Deleted At</TableHead>
+                        <TableHead>Deleted By</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Messages</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deletedChats
+                        .filter((c) =>
+                          !chatSearch.trim() ||
+                          c.customerName.toLowerCase().includes(chatSearch.trim().toLowerCase())
+                        )
+                        .map((chat) => (
+                          <Fragment key={chat.deletedChatId}>
+                            <TableRow key={chat.deletedChatId}>
+                              <TableCell className="text-sm font-medium">{chat.customerName}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{formatDate(chat.deletedAt, true)}</TableCell>
+                              <TableCell className="text-sm">{chat.deletedBy}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {chat.reason === 'customer-deleted' ? 'Customer Deleted' : 'Manual'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm">{chat.messages.length}</TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="h-auto p-0 text-xs"
+                                  onClick={() =>
+                                    setExpandedChatId(
+                                      expandedChatId === chat.deletedChatId ? null : chat.deletedChatId
+                                    )
+                                  }
+                                >
+                                  {expandedChatId === chat.deletedChatId ? 'Hide' : 'View'} messages
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                            {expandedChatId === chat.deletedChatId && (
+                              <TableRow key={`${chat.deletedChatId}-messages`}>
+                                <TableCell colSpan={6} className="bg-muted/20 p-3">
+                                  <div className="max-h-64 overflow-y-auto space-y-1.5 text-xs">
+                                    {chat.messages.length === 0 ? (
+                                      <span className="text-muted-foreground">(No messages)</span>
+                                    ) : (
+                                      chat.messages.map((msg) => (
+                                        <div key={msg.messageId} className="flex gap-2">
+                                          <span className="text-muted-foreground shrink-0">
+                                            [{formatDate(msg.createdAt, true)}]
+                                          </span>
+                                          <span className="font-medium shrink-0">
+                                            {msg.senderName || msg.senderType}:
+                                          </span>
+                                          <span className="break-words">{msg.text}</span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        ))}
+                      {deletedChats.filter((c) =>
+                        !chatSearch.trim() ||
+                        c.customerName.toLowerCase().includes(chatSearch.trim().toLowerCase())
+                      ).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                            No deleted chats found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         {activeTab === "team" && (
           <Card>

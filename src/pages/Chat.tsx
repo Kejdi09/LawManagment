@@ -334,16 +334,20 @@ const Chat = () => {
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
-                    disabled={deletingChat || chatMessages.length === 0}
+                    disabled={deletingChat}
                     onClick={async () => {
                       if (!selectedId) return;
-                      if (!window.confirm(`Delete the entire chat history with ${selectedPerson?.name}? This cannot be undone.`)) return;
+                      if (!window.confirm(`Delete the entire chat with ${selectedPerson?.name}? This will archive all messages and remove them from the list. This cannot be undone.`)) return;
                       setDeletingChat(true);
                       try {
                         await deletePortalChat(selectedId);
+                        const deletedId = selectedId;
                         setChatMessages([]);
-                        setChatUnreadCounts((prev) => ({ ...prev, [selectedId]: 0 }));
-                        toast({ title: "Chat cleared", description: "All messages have been deleted." });
+                        setChatUnreadCounts((prev) => { const next = { ...prev }; delete next[deletedId]; return next; });
+                        setPeople((prev) => prev.filter((p) => p.customerId !== deletedId));
+                        setSelectedId(null);
+                        setMobileShowChat(false);
+                        toast({ title: "Chat deleted", description: "Archived and removed from the list." });
                       } catch (err) {
                         toast({ title: "Error", description: String(err), variant: "destructive" });
                       } finally {
@@ -352,7 +356,7 @@ const Chat = () => {
                     }}
                   >
                     {deletingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    Clear Chat
+                    Delete Chat
                   </Button>
                 </div>
               </div>

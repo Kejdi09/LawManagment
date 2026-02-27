@@ -368,6 +368,24 @@ export interface Invoice {
 export type CommChannel = "email" | "whatsapp" | "phone" | "inperson";
 export type CommDirection = "inbound" | "outbound";
 
+export interface DeletedChatMessage {
+  messageId: string;
+  text: string;
+  senderType: string;
+  senderName?: string;
+  createdAt: string;
+}
+
+export interface DeletedChatRecord {
+  deletedChatId: string;
+  customerId: string;
+  customerName: string;
+  deletedAt: string;
+  deletedBy: string;
+  reason: 'manual' | 'customer-deleted';
+  messages: DeletedChatMessage[];
+}
+
 export interface CommEntry {
   commId: string;
   caseId: string;
@@ -419,7 +437,7 @@ export interface DeletedRecord {
 }
 
 export interface PortalData {
-  client: { name: string; customerId: string; services: ServiceType[]; status: string };
+  client: { name: string; customerId: string; services: ServiceType[]; status: string; proposalFields?: ProposalFields };
   cases: Array<{
     caseId: string;
     title?: string;

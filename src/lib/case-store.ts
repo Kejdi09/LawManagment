@@ -519,6 +519,11 @@ export async function getChatUnreadCounts(): Promise<Array<{ customerId: string;
   return api<Array<{ customerId: string; unreadCount: number }>>(`/api/portal-chat/unread-counts`);
 }
 
+// ── Admin: Deleted Chats ──
+export async function getDeletedChats(): Promise<import('./types').DeletedChatRecord[]> {
+  return api<import('./types').DeletedChatRecord[]>('/api/admin/deleted-chats');
+}
+
 // ── Admin: Deleted Records ──
 export async function getDeletedRecords(): Promise<DeletedRecord[]> {
   return api<DeletedRecord[]>('/api/admin/deleted-records');

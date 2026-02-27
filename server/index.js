@@ -122,6 +122,7 @@ let auditLogsCol;
 let portalNotesCol;
 let portalMessagesCol;
 let deletedRecordsCol;
+let deletedChatsCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -169,6 +170,7 @@ async function connectDb() {
   portalNotesCol = db.collection("portalNotes");
   portalMessagesCol = db.collection("portalMessages");
   deletedRecordsCol = db.collection("deletedRecords");
+  deletedChatsCol = db.collection("deletedChats");
 }
 
 async function seedIfEmpty() {
@@ -1203,6 +1205,18 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
+  const chatMessages = await portalMessagesCol.find({ customerId: id }).sort({ createdAt: 1 }).toArray();
+  if (chatMessages.length > 0) {
+    await deletedChatsCol.insertOne({
+      deletedChatId: genShortId('DC'),
+      customerId: id,
+      customerName: current.name || id,
+      deletedAt: now,
+      deletedBy: req.user?.username || 'unknown',
+      reason: 'customer-deleted',
+      messages: chatMessages,
+    });
+  }
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'customer',
@@ -1220,6 +1234,7 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     customerHistoryCol.deleteMany({ customerId: id }),
     customersCol.deleteOne({ customerId: id, ...customerScope }),
+    portalMessagesCol.deleteMany({ customerId: id }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'soft-delete', resource: 'customer', resourceId: id });
   res.json({ ok: true });
@@ -1240,6 +1255,18 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
+  const chatMessages = await portalMessagesCol.find({ customerId: id }).sort({ createdAt: 1 }).toArray();
+  if (chatMessages.length > 0) {
+    await deletedChatsCol.insertOne({
+      deletedChatId: genShortId('DC'),
+      customerId: id,
+      customerName: current.name || id,
+      deletedAt: now,
+      deletedBy: req.user?.username || 'unknown',
+      reason: 'customer-deleted',
+      messages: chatMessages,
+    });
+  }
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'confirmedClient',
@@ -1257,6 +1284,7 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     tasksCol.deleteMany({ caseId: { $in: relatedCaseIds } }),
     customerHistoryCol.deleteMany({ customerId: id }),
     confirmedClientsCol.deleteOne({ customerId: id, ...customerScope }),
+    portalMessagesCol.deleteMany({ customerId: id }),
   ]);
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'soft-delete', resource: 'confirmedClient', resourceId: id });
   res.json({ ok: true });
@@ -2252,7 +2280,7 @@ app.get('/api/portal/:token', async (req, res) => {
     portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray(),
   ]);
   res.json({
-    client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status },
+    client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status, proposalFields: client.proposalFields || null },
     cases: cases.map(c => ({
       caseId: c.caseId,
       title: c.title,
@@ -2578,10 +2606,34 @@ app.delete('/api/portal-chat/:customerId/:messageId', verifyAuth, async (req, re
   res.json({ ok: true });
 });
 
-// Delete entire chat history for a customer
+// Delete entire chat history for a customer (archives to deletedChats)
 app.delete('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   const customerId = String(req.params.customerId).trim();
   if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
+  const messages = await portalMessagesCol.find({ customerId }).sort({ createdAt: 1 }).toArray();
+  const [cust, cli] = await Promise.all([
+    customersCol.findOne({ customerId }, { projection: { name: 1 } }),
+    confirmedClientsCol.findOne({ customerId }, { projection: { name: 1 } }),
+  ]);
+  const customerName = (cust || cli)?.name || customerId;
+  await deletedChatsCol.insertOne({
+    deletedChatId: genShortId('DC'),
+    customerId,
+    customerName,
+    deletedAt: new Date().toISOString(),
+    deletedBy: req.user?.username || 'unknown',
+    reason: 'manual',
+    messages,
+  });
   await portalMessagesCol.deleteMany({ customerId });
   res.json({ ok: true });
+});
+
+// ── Admin: Deleted Chats ──────────────────────────────────────────────────────
+app.get('/api/admin/deleted-chats', verifyAuth, async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const q = req.query.search ? String(req.query.search).trim() : '';
+  const filter = q ? { customerName: { $regex: q, $options: 'i' } } : {};
+  const chats = await deletedChatsCol.find(filter).sort({ deletedAt: -1 }).toArray();
+  res.json(chats);
 });
