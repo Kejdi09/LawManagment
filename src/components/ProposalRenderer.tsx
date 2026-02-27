@@ -1,14 +1,15 @@
 ﻿/**
  * ProposalRenderer
- * Renders a professional service proposal document from structured template data.
- * Supports single and multi-service proposals. Conditions (has_spouse, is_off_plan)
- * drive conditional sections automatically from the intake form fields.
+ * Renders a professional service proposal document.
+ * Supports single and multi-service proposals.
+ * Conditions (has_spouse, is_off_plan) drive conditional sections
+ * from intake form fields.
  */
 import React from "react";
 import { ServiceType, ProposalFields } from "@/lib/types";
 import { evaluateConditions, Conditions } from "@/lib/proposal-engine";
 
-// --- Currency rates (indicative) ---
+// ---- Currency helpers ----
 export const EUR_RATE = 0.01037032;
 export const USD_RATE = 0.01212463;
 export const GBP_RATE = 0.00902409;
@@ -20,7 +21,7 @@ export function fmt(n: number, decimals = 2) {
   });
 }
 
-// --- Template data model ---
+// ---- Data model ----
 
 interface CaseOverviewRow {
   label: string;
@@ -58,7 +59,7 @@ interface TemplateData {
   nextSteps: string[];
 }
 
-// --- Per-service data builders ---
+// ---- Data builders ----
 
 function buildPensioner(
   clientName: string,
@@ -69,69 +70,68 @@ function buildPensioner(
   return {
     svcKey: "residency_pensioner",
     serviceTitle: dep
-      ? "Residence Permit for Pensioner + Residence Permit for Family Reunification"
+      ? "Residence Permit for Pensioner + Family Reunification"
       : "Residence Permit for Pensioner",
     contactBar: "relocate",
     caseOverviewSections: [
       {
         sectionTitle: "Main Applicant",
         rows: [
-          { label: "Name", value: clientName },
+          { label: "Full Name", value: clientName },
           { label: "Nationality", value: fields.nationality || "-" },
           { label: "Occupation", value: fields.employmentType || "-" },
-          { label: "Relocation motive", value: "Pensioner" },
+          { label: "Application Type", value: "Residency Permit (Pensioner)" },
         ],
       },
       ...(dep
         ? [
             {
-              sectionTitle: "Dependent (Spouse)",
+              sectionTitle: "Dependent — Spouse",
               rows: [
-                { label: "Name", value: fields.dependentName || "-" },
+                { label: "Full Name", value: fields.dependentName || "-" },
                 { label: "Nationality", value: fields.dependentNationality || "-" },
                 { label: "Occupation", value: fields.dependentOccupation || "-" },
-                { label: "Relocation motive", value: "Family Reunification" },
+                { label: "Application Type", value: "Family Reunification" },
               ],
             },
           ]
         : []),
     ],
-    scopeIntro: "Services related to the Residency Permit procedure:",
+    scopeIntro:
+      "Full legal representation and management of the Residency Permit procedure, including:",
     scopeBullets: [
-      "Full legal guidance during the entire application process",
-      "Pre-check and verification of all documents",
-      "Assistance with translations, notarization, and legalization if required",
-      "Preparing all declarations required by the authorities",
-      "Completing the residence permit application(s)",
+      "Pre-check and verification of all documents before submission",
+      "Assistance with translations, notarization, and apostille/legalization where required",
+      "Preparation of all declarations required by Albanian authorities",
+      "Completing and submitting the residence permit application(s)",
       "Scheduling all appointments with the relevant institutions",
-      "Submission of the application at the Local Directorate for Border and Migration",
-      "Follow-up with the authorities until final approval",
-      "Assistance with Civil Registry address registration",
+      "Submission at the Local Directorate for Border and Migration",
+      "Follow-up with authorities until final approval",
+      "Civil Registry address registration assistance",
       "Accompanying the applicant for biometric fingerprints",
-      "Guidance until the applicant receives the final residence permit card",
-      "Payment of government or third-party fees on behalf of the applicant",
-      "Documents translation, apostille/legalization, or notary (if needed)",
+      "Guidance through receipt of the final residence permit card",
+      "Payment of government and third-party fees on behalf of the applicant",
     ],
     processSteps: [
       {
-        stepTitle: "Residency Permit for the Main Applicant (Pensioner)",
+        stepTitle: "Residency Permit — Main Applicant (Pensioner)",
         bullets: [
-          "Documents collection and preparation (see required documents below)",
-          "Government fees payment by us",
-          "Residency Permit Application submission at the Local Directorate for Border and Migration",
-          "Receiving the Provisional Residency Permit",
+          "Documents collection and preparation (see Required Documents below)",
+          "Government fees payment on behalf of the applicant",
+          "Application submission at the Local Directorate for Border and Migration",
+          "Issuance of Provisional Residency Permit",
           "Final Decision on Residency Permit",
           "Address Registration at the Civil Registry Office",
           "Application for biometric Residency Permit Card",
-          "Obtaining the biometric residence card",
+          "Collection of the biometric residence card",
         ],
       },
       ...(dep
         ? [
             {
-              stepTitle: "Residency Permit for Dependent (Family Reunification)",
+              stepTitle: "Residency Permit — Dependent (Family Reunification)",
               bullets: [
-                "Same procedure as above for the main applicant",
+                "Same procedure as above for the dependent",
                 "Submitted after the main applicant's Residency Permit is granted",
               ],
             },
@@ -140,65 +140,64 @@ function buildPensioner(
     ],
     docSections: [
       {
-        heading: "For the Main Applicant (Pensioner)",
+        heading: "Main Applicant (Pensioner)",
         items: [
-          "Photocopy of valid travel document (valid for at least 3 months beyond the permit period, with at least 2 blank pages) - provided by the applicant",
-          "Individual declarations for the reason for staying in Albania - we prepare in Albanian and English; you sign",
-          "Proof of insurance in Albania - we arrange at our associate insurance company",
-          "Evidence from an Albanian bank confirming transfer of pension income - we assist with bank account opening",
-          "Legalized criminal record from country of origin (issued within the last 6 months, translated and notarized) - we handle",
-          "Evidence of annual pension income exceeding 1,200,000 ALL - we handle legal translation and notary",
-          "Proof of Residency Permit Government Fee Payment - we pay at the bank and provide the mandate",
-          "Passport-size photograph (47mm x 36mm, taken within the last 6 months, white background)",
-          "Proof of accommodation in Albania - residential rental contract",
+          "Valid travel document — photocopy (valid at least 3 months beyond the permit period, with 2 blank pages) — provided by applicant",
+          "Individual declarations for reason of stay in Albania — we prepare in Albanian and English; applicant signs",
+          "Proof of insurance in Albania — we arrange at our associate insurance company",
+          "Albanian bank evidence confirming transfer of pension income — we assist with bank account opening",
+          "Legalized criminal record from country of origin (issued within last 6 months, translated and notarized) — we handle",
+          "Evidence of annual pension income exceeding 1,200,000 ALL — we handle legal translation and notary",
+          "Proof of Residency Permit Government Fee Payment — we pay and provide the mandate",
+          "Passport-size photograph (47mm x 36mm, taken within last 6 months, white background)",
+          "Proof of accommodation in Albania (residential rental contract)",
         ],
       },
       ...(dep
         ? [
             {
-              heading: "For the Dependent (Family Reunification) - submitted after main permit is granted",
+              heading: "Dependent — Spouse (submitted after main permit is granted)",
               items: [
-                "Photocopy of valid travel document (same requirements as main applicant) - provided by the applicant",
-                "Marriage certificate (issued within the last 6 months, legalized, translated and notarized if not issued in Albania) - we handle",
-                "Proof of insurance in Albania - we arrange at our associate insurance company",
+                "Valid travel document — photocopy (same requirements as main applicant) — provided by applicant",
+                "Marriage certificate (issued within last 6 months, legalized, translated and notarized if not issued in Albania) — we handle",
+                "Proof of insurance in Albania — we arrange at our associate insurance company",
                 "Copy of the main applicant's residence permit in Albania",
-                "Proof of Residency Permit Government Fee Payment - we pay at the bank and provide the mandate",
-                "Passport-size photograph (47mm x 36mm, taken within the last 6 months) - two printed copies and a digital copy emailed to us",
-                "Proof of accommodation in Albania - residential rental contract",
-                "Evidence of sufficient financial resources during the stay in Albania - we handle legal translation and notary",
+                "Proof of Residency Permit Government Fee Payment — we pay and provide the mandate",
+                "Passport-size photograph (47mm x 36mm, taken within last 6 months) — two printed copies + digital copy",
+                "Proof of accommodation in Albania (residential rental contract)",
+                "Evidence of sufficient financial resources during the stay — we handle legal translation and notary",
               ],
             },
           ]
         : []),
     ],
     timeline: [
-      "Preparation and application submission: 3-5 business days",
-      "Provisional Residency Permit: approx. 10-15 business days",
-      "Final Decision on Residency Permit: approx. 30-45 business days",
-      "Residency Permit Card issue: approx. 2 calendar weeks",
+      "Documents preparation and application submission: 3–5 business days",
+      "Provisional Residency Permit: approx. 10–15 business days",
+      "Final Decision on Residency Permit: approx. 30–45 business days",
+      "Biometric Residency Permit Card: approx. 2 calendar weeks after final decision",
     ],
     paymentTerms: [
-      "50% of the service fee is payable upon contract signing / file opening.",
+      "50% of the service fee is payable upon contract signing and file opening.",
       dep
-        ? "50% is payable before submission of the residency permit application for the dependent (family reunification)."
+        ? "50% is payable before submission of the residency permit application for the dependent."
         : "50% is payable before submission of the residency permit application.",
       "Government fees are paid upfront before application submission.",
-      "All payments are non-refundable once the application has been submitted to the authorities.",
-      "Payments can be made in cash, card, bank transfer, PayPal, etc.",
+      "All payments are non-refundable once the application has been submitted.",
+      "Accepted payment methods: cash, card, bank transfer, PayPal, and others.",
     ],
-    disclaimerIntro: "Important notes for the Residency Permit procedure:",
+    disclaimerIntro: "Please note the following regarding the Residency Permit procedure:",
     disclaimers: [
       "All residency decisions are made exclusively by Albanian authorities; our office cannot influence the outcome.",
-      "Processing times are estimated and may vary based on institutional workload.",
+      "Processing times are estimates and may vary based on institutional workload.",
       "Authorities may request additional documents or clarifications at any stage.",
       "Our office is not responsible for delays or decisions made by the authorities.",
     ],
     nextSteps: [
-      "Execution of the service agreement and initial payment.",
+      "Execution of the service agreement and payment of the initial fee.",
       "Documents collection and preparation.",
       "Residency Permit application submission.",
-      "Follow-up with the authorities until the final decision.",
-      "Biometric fingerprints appointment and Residency Permit Card collection.",
+      "Follow-up with authorities through to the final decision.",
     ],
   };
 }
@@ -208,118 +207,101 @@ function buildEmployment(
   fields: Partial<ProposalFields>,
   _c: Conditions
 ): TemplateData {
+  const n = fields.numberOfApplicants ?? 1;
+  const plural = n > 1;
   return {
     svcKey: "visa_d",
-    serviceTitle: "Type D Visa & Residence Permit for Employment",
+    serviceTitle: "Type D Visa & Residence Permit for Employee(s)",
     contactBar: "relocate",
     caseOverviewSections: [
       {
-        sectionTitle: "Client Details",
         rows: [
-          { label: "Name", value: clientName },
+          { label: "Applicant(s)", value: plural ? `${n} employees` : clientName },
           { label: "Nationality", value: fields.nationality || "-" },
-          { label: "Occupation", value: fields.employmentType || "-" },
-          { label: "Relocation motive", value: "Employment" },
+          { label: "Purpose of Stay", value: "Employment / Work" },
+          {
+            label: "Employer",
+            value: fields.companyName || fields.propertyDescription || "-",
+          },
         ],
       },
     ],
-    scopeIntro: "Services related to the Visa and Residency Permit procedure:",
+    scopeIntro: "Full legal assistance for the Type D Visa and Residence Permit procedure for employee(s), including:",
     scopeBullets: [
-      "Full legal guidance during the entire application process",
       "Pre-check and verification of all documents",
-      "Assistance with translations, notarization, and legalization if required",
-      "Preparing all declarations required by the authorities",
-      "Payment of government or third-party fees",
-      "Completing the visa and residence permit applications",
-      "Scheduling all appointments with the relevant institutions",
-      "Submission of applications at the competent authorities",
-      "Follow-up with authorities until final approval",
-      "Assistance with Civil Registry address registration",
-      "Accompanying the applicant for biometric fingerprints",
-      "Guidance until the applicant receives the final residence permit card",
-    ],
+      "Preparation of all required declarations and forms",
+      "Type D Long-Stay Visa application support (submitted at Albanian Embassy/Consulate abroad)",
+      "Residence Permit application upon arrival in Albania",
+      "Scheduling appointments with immigration authorities",
+      "Submission and follow-up at the Local Directorate for Border and Migration",
+      "Work permit coordination (if applicable)",
+      "Civil Registry address registration",
+      "Guidance through receipt of the biometric Residency Permit Card",
+      plural ? `Fee applies per applicant (${n} applicants covered under this engagement)` : "",
+    ].filter(Boolean),
     processSteps: [
       {
-        stepTitle: "Type D Visa Processing",
+        stepTitle: "Type D Long-Stay Visa Application",
         bullets: [
-          "Issuing Power of Attorney (if needed)",
-          "Preparation of employment contract",
-          "Preparation of accommodation proof (contract or declaration)",
-          "Documents collection and preparation (see below)",
-          "Visa and Residency Permit Government Fees payment by us",
-          "Visa application submission",
-          "Decision on the visa approval",
+          "Documents collection and preparation",
+          "Application submitted at the Albanian Embassy or Consulate in the applicant's country of residence",
+          "Visa issuance and travel to Albania",
         ],
       },
       {
-        stepTitle: "Residency Permit Processing",
+        stepTitle: "Residence Permit Application (in Albania)",
         bullets: [
-          "As soon as your visa is approved and you enter the Albanian border, the Residency Permit procedure starts automatically",
-          "Delivering original documents and the Residency Permit application at the Local Directorate for Border and Migration",
-          "Receiving the Provisional Residency Permit",
+          "Application submitted at the Local Directorate for Border and Migration within 30 days of entry",
+          "Government fees payment on behalf of the applicant",
+          "Issuance of Provisional Residency Permit",
+          "Address registration at the Civil Registry Office",
           "Final Decision on Residency Permit",
-          "Address Registration at the Civil Registry Office",
-          "Application for biometric Residency Permit Card",
-          "Obtaining the biometric residence card",
+          "Application for and collection of biometric Residency Permit Card",
         ],
       },
     ],
     docSections: [
       {
-        heading: "For the Type D Visa Application (Employee)",
         items: [
-          "Passport-size photograph (47mm x 36mm, not older than 6 months, white background) - provided by the applicant",
-          "Photocopy of valid travel document (valid at least 3 months beyond the visa period, with at least 2 blank pages) - provided by the applicant",
-          "Document certifying accommodation in Albania - notarized rental contract or hosting declaration",
-          "Document proving professional or commercial activity in the applicant's country - provided by the applicant",
-          "Residence Permit >12 months from country of residence (if residing in a third country), valid 3+ additional months",
-          "Document proving the legal status of the inviting entity - we obtain from the accountant",
-          "Invitation signed by the host - we prepare it, you sign it",
-          "Employment contract drawn up according to the Albanian Labor Code - we prepare the contract",
-        ],
-      },
-      {
-        heading: "For the Residency Permit Application (Employee)",
-        items: [
-          "Photocopy of valid travel document (valid at least 3 months beyond the permit period, with at least 2 blank pages)",
-          "Proof of Residency Permit Government Fee Payment - we pay at the bank and provide the mandate",
-          "Passport-size photograph (47mm x 36mm) - two printed copies and a digital copy sent via email",
-          "Proof of accommodation in Albania - notarized rental contract",
-          "Employment contract drawn up according to the Albanian Labor Code - we prepare the contract",
-          "Proof of professional qualification (diploma/certificate/reference) or self-declaration - provided by the applicant",
+          "Valid passport (valid at least 6 months beyond the permit period, with 2 blank pages) — provided by applicant",
+          "Employment contract with Albanian employer (signed, stamped) — provided by applicant / employer",
+          "Work permit (if required — we advise and assist)",
+          "Passport-size photographs (per Albanian authority requirements)",
+          "Employer registration certificate and fiscal certificate — we assist in obtaining",
+          "Proof of accommodation in Albania (rental contract or hotel confirmation)",
+          "Criminal record from country of origin (issued within last 6 months, notarized and translated) — we handle",
+          "Health/travel insurance valid in Albania",
+          "Individual declarations prepared by us — applicant signs",
         ],
       },
     ],
     timeline: [
-      "Documents preparation: approx. 3-5 business days",
-      "Visa processing: approx. 15-30 business days",
-      "Residency Permit: approx. 30-45 business days",
-      "Residency Permit ID Card: approx. 2 calendar weeks",
+      "Type D Visa (at Embassy abroad): 5–15 business days depending on consulate workload",
+      "Residence Permit submission: within 30 days of arriving in Albania",
+      "Provisional Residency Permit: approx. 10–15 business days",
+      "Final Residency Permit decision: approx. 30–45 business days",
+      "Biometric card: approx. 2 calendar weeks after final decision",
     ],
     paymentTerms: [
-      "50% of the service fee is payable upon contract signing / file opening.",
-      "30% is payable after visa issuance and before submission of the residency permit application.",
-      "20% is payable upon approval of the residency permit and before fingerprint appointment for the ID card.",
-      "Government fees and additional costs are paid upfront with the initial 50%.",
-      "All payments are non-refundable once the application has been submitted to the authorities.",
-      "Payments can be made in cash, card, bank transfer, PayPal, etc.",
-    ],
-    disclaimerIntro: "Important notes for the Visa and Residency Permit procedure:",
+      "50% of the service fee is payable upon contract signing and file opening.",
+      "50% is payable before submission of the Residence Permit application in Albania.",
+      "Government fees are paid upfront before application submission.",
+      "All payments are non-refundable once applications have been submitted.",
+      plural ? `Fee applies per applicant; total reflects ${n} applicants.` : "",
+    ].filter(Boolean),
+    disclaimerIntro: "Please note the following regarding the Type D Visa & Residence Permit procedure:",
     disclaimers: [
-      "The applicant must be outside Albanian territory when the visa application is submitted.",
-      "As soon as the visa is approved, the applicant must enter Albania for the Residency Permit procedure to start.",
-      "The applicant can begin working legally once the visa is issued, even while the residency permit is pending.",
-      "All visa and residency decisions are made exclusively by Albanian authorities.",
-      "Processing times are estimated and may vary based on institutional workload.",
-      "Authorities may request additional documents or clarifications at any stage.",
+      "Visa and permit decisions are made exclusively by Albanian authorities.",
+      "Type D Visa must be applied for at an Albanian Embassy or Consulate abroad.",
+      "Processing times are estimates and may vary.",
+      "Employers must hold valid Albanian business registration.",
     ],
     nextSteps: [
       "Execution of the service agreement and initial payment.",
-      "Documents collection and preparation.",
-      "Visa application submission.",
-      "Residency Permit application submission after visa approval.",
-      "Follow-up with the authorities until the final decision.",
-      "Biometric fingerprints appointment and Residency Permit Card collection.",
+      "Documents collection.",
+      "Type D Visa application (if not yet obtained).",
+      "Residency Permit application upon entry to Albania.",
+      "Follow-up through to card issuance.",
     ],
   };
 }
@@ -329,142 +311,120 @@ function buildCompany(
   fields: Partial<ProposalFields>,
   _c: Conditions
 ): TemplateData {
+  const shareholders = Math.max(1, fields.numberOfShareholders ?? 1);
+  const multiSh = shareholders > 1;
   return {
     svcKey: "company_formation",
     serviceTitle:
-      "Company Registration & Management + Type D Visa & Residence Permit (Self-Employed)",
-    contactBar: "relocate",
+      "Company Formation & Management + Type D Visa & Residence Permit (Self-Employed / Business Owner)",
+    contactBar: "dafku",
     caseOverviewSections: [
       {
-        sectionTitle: "Main Applicant",
         rows: [
-          { label: "Name", value: clientName },
+          { label: "Applicant", value: clientName },
           { label: "Nationality", value: fields.nationality || "-" },
-          { label: "Occupation", value: fields.employmentType || "-" },
-          { label: "Relocation motive", value: "Self-Employment / Company Registration" },
+          { label: "Company Name", value: fields.businessActivity ? `(${fields.businessActivity})` : "(to be confirmed)" },
+          { label: "Business Activity", value: fields.businessActivity || "-" },
+          { label: "Shareholders", value: String(shareholders) },
+          { label: "Relocation Purpose", value: "Business Owner / Self-Employed" },
         ],
       },
     ],
-    scopeIntro: undefined,
+    scopeIntro:
+      "Full legal assistance for establishing an Albanian company and obtaining the Type D Visa and Residence Permit as a business owner/self-employed individual, including:",
     scopeBullets: [
-      "COMPANY FORMATION",
-      "Legal consultation and company structure planning",
-      "Selection and reservation of the company name",
-      "Drafting of the Founding Act and Company Statute",
-      "Registration of the company with the National Business Center (QKB)",
-      "Issuance of company registration certificate and NUIS (tax number)",
-      "Registration with the tax authorities (VAT and contributions if applicable)",
-      "Assistance with opening a corporate bank account",
-      "Preparation of company documentation required for residency permit purposes",
-      "VISA & RESIDENCY PERMIT",
-      "Full legal guidance during the entire application process",
-      "Pre-check and verification of all documents",
-      "Assistance with translations, notarization, and legalization if required",
-      "Preparing all declarations required by the authorities",
-      "Completing the visa and residence permit applications",
-      "Scheduling all appointments with the relevant institutions",
-      "Submission of applications at the Migration Office",
-      "Follow-up with authorities until final approval",
-      "Assistance with Civil Registry address registration",
-      "Accompanying the applicant for biometric fingerprints",
-      "Guidance until the applicant receives the final residence permit card",
-      "Payment of government or third-party fees",
-      "Documents translation, apostille/legalization, or notary",
-    ],
+      "Legal advice on company structure and applicable regulations",
+      "Company name reservation at the National Business Centre (QKB)",
+      "Drafting and notarizing the Articles of Association",
+      "Registration at the National Business Centre (QKB) and tax registration",
+      "Opening a corporate bank account (assistance)",
+      "Obtaining all required licenses and permits for the business activity",
+      multiSh
+        ? `Documentation for all ${shareholders} shareholders`
+        : "",
+      "Type D Visa application support",
+      "Residence Permit application and follow-up",
+      "Post-registration company management support (annual declarations, accounting coordination)",
+    ].filter(Boolean),
     processSteps: [
       {
         stepTitle: "Company Formation",
         bullets: [
-          "Issuing Power of Attorney",
-          "Registration documents preparation",
-          "Company registration submission at QKB",
-          "Obtaining TAX ID / NIPT",
-          "Obtaining Registration Certificate",
-          "Employee declaration",
-        ],
+          "Company name approval",
+          "Drafting and notarizing the Articles of Association",
+          multiSh
+            ? `Gathering documents from all ${shareholders} shareholders`
+            : "Gathering required founder documents",
+          "Registration at the National Business Centre (QKB)",
+          "Tax registration and fiscal number issuance",
+          "Corporate bank account opening (assistance)",
+          "Obtaining required business licenses",
+        ].filter(Boolean),
       },
       {
-        stepTitle: "Visa & Residency Permit (Self-Employed)",
+        stepTitle: "Type D Visa & Residence Permit as Business Owner",
         bullets: [
-          "Documents collection and preparation (see below)",
-          "Visa and Residency Permit Government Fees payment by us",
-          "Visa application submission",
-          "Decision on the visa approval",
-          "Entry into Albania - Residency Permit procedure starts automatically",
-          "Residency Permit application submission at the Local Directorate for Border and Migration",
-          "Receiving the Provisional Residency Permit",
-          "Final Decision on Residency Permit",
-          "Address Registration at the Civil Registry Office",
-          "Application for biometric Residency Permit Card",
-          "Obtaining the biometric residence card",
+          "Type D Visa application at Albanian Embassy/Consulate (if applicable)",
+          "Residence Permit application in Albania (within 30 days of entry)",
+          "Government fees payment on behalf of the applicant",
+          "Submission and follow-up at the Local Directorate for Border and Migration",
+          "Address registration at the Civil Registry",
+          "Final Decision and biometric card collection",
         ],
       },
     ],
     docSections: [
       {
-        heading: "For Company Registration",
+        heading: "Founder / Shareholder Documents",
         items: [
-          "For shareholder(s) and administrator(s): valid passport copy, contact details, and residential address (foreign address)",
-          "Corporate & Legal documentation: company name proposal, description of business activity, administrator appointment details, shareholding structure, company address in Albania",
-          "If registration is done remotely: Power of Attorney (notarized and legalized/apostilled)",
-        ],
+          "Valid passport — provided by applicant",
+          "Criminal record from country of origin (issued within last 6 months, translated and notarized) — we handle",
+          "Power of Attorney (if applying through a representative) — we draft",
+          "Proof of initial share capital deposit",
+          multiSh
+            ? `Same set of documents required from each of the ${shareholders} shareholders`
+            : "",
+        ].filter(Boolean),
       },
       {
-        heading: "For the Type D Visa (Self-Employed)",
+        heading: "Residence Permit Documents",
         items: [
-          "Passport-size photograph (47mm x 36mm, not older than 6 months, white background)",
-          "Photocopy of valid travel document (valid at least 3 months beyond the visa period, with at least 2 blank pages)",
-          "Certification of professional capacity related to self-employment (diploma, certificate, qualifications)",
-          "Business Registration Certificate - we provide it upon company registration",
-          "Document certifying accommodation in Albania (rental contract or declaration)",
-          "Residence Permit >12 months from country of residence (if living in a third country), with at least 3 additional months validity",
-          "Full bank statement showing money in/out for the last 12 months",
-        ],
-      },
-      {
-        heading: "For the Residency Permit (Self-Employed / Business Owner)",
-        items: [
-          "Photocopy of valid travel document (valid at least 3 months beyond the permit period, with at least 2 blank pages)",
-          "Project idea for the business/activity (minimum elements per the National Employment and Labor Agency) - we prepare it",
-          "Document proving sufficient financial means (not less than 500,000 ALL or equivalent) - we open the bank account; you make the deposit",
-          "Document proving necessary skills (certificate, diploma, or equivalent)",
-          "Proof of registration of the activity in QKB - we provide it upon company registration",
-          "Payment mandate for government fee - we pay and provide the document",
-          "Passport-size photograph (47mm x 36mm, taken within the last 6 months)",
-          "Proof of accommodation in Albania - rental contract",
+          "Proof of company registration (certificate from QKB) — obtained as part of this service",
+          "Evidence of business activity and income — we assist",
+          "Proof of accommodation in Albania (rental contract)",
+          "Health insurance valid in Albania",
+          "Passport-size photographs",
+          "Individual declarations — we prepare; applicant signs",
         ],
       },
     ],
     timeline: [
-      "Company registration: approx. 3-5 business days",
-      "Visa processing: approx. 15-30 business days",
-      "Residency Permit: approx. 30-45 business days",
-      "Residency Permit ID Card: approx. 2 calendar weeks",
+      "Company formation and registration: 5–10 business days",
+      "Type D Visa (if needed, at Embassy abroad): 5–15 business days",
+      "Residence Permit submission: within 30 days of arrival",
+      "Provisional Residency Permit: approx. 10–15 business days",
+      "Final Residency Permit decision: approx. 30–45 business days",
+      "Biometric card: approx. 2 calendar weeks after final decision",
     ],
     paymentTerms: [
-      "50% of the service fee is payable upon contract signing / file opening.",
-      "50% is payable before submission of the residency permit application.",
-      "Government fees are paid upfront before application submission.",
-      "All payments are non-refundable once the application has been submitted to the authorities.",
-      "Payments can be made in cash, card, bank transfer, PayPal, etc.",
+      "50% of the service fee is payable upon contract signing and file opening.",
+      "50% is payable before submission of the Residence Permit application.",
+      "Government and notary fees are paid upfront before each relevant stage.",
+      "All payments are non-refundable once the application has been submitted.",
     ],
-    disclaimerIntro: "Important compliance notes for Company Management:",
+    disclaimerIntro: "Please note the following:",
     disclaimers: [
-      "The company must have a registered business address in Albania (virtual office available through our office).",
-      "A licensed accountant is mandatory.",
-      "Applicable taxes: corporate income tax, VAT (if applicable), local municipal taxes.",
-      "Social and health contributions must be paid for each employee; monthly and annual declarations are mandatory.",
-      "The company must remain active and compliant to support residence permit validity and renewals.",
-      "The applicant must be outside Albanian territory when the visa application is submitted.",
-      "All visa and residency decisions are made exclusively by Albanian authorities.",
+      "Company registration decisions are made by Albanian authorities (QKB).",
+      "Visa and Residence Permit decisions are made by immigration authorities.",
+      "Processing times are estimates and may vary.",
+      "Business licenses or sector-specific permits may involve additional fees.",
     ],
     nextSteps: [
       "Execution of the service agreement and initial payment.",
-      "Documents collection and preparation.",
-      "Company Registration submission.",
-      "Visa and Residency Permit application submission.",
-      "Follow-up with the authorities until the final decision.",
-      "Biometric fingerprints appointment and Residency Permit Card collection.",
+      "Documents collection from all founders/shareholders.",
+      "Company name reservation and formation process.",
+      "Type D Visa and Residence Permit applications.",
+      "Post-registration company management setup.",
     ],
   };
 }
@@ -474,87 +434,87 @@ function buildRealEstate(
   fields: Partial<ProposalFields>,
   c: Conditions
 ): TemplateData {
-  const propDesc = fields.propertyDescription || "the property";
-  const txValue = fields.transactionValueEUR
-    ? `EUR ${Number(fields.transactionValueEUR).toLocaleString()}`
-    : "";
-  const year = fields.propertyCompletionYear || "the scheduled year";
   const offPlan = c.is_off_plan;
-
+  const desc = fields.propertyDescription || "the property";
+  const txValue = fields.transactionValueEUR
+    ? `approximately EUR ${fields.transactionValueEUR.toLocaleString()}`
+    : "as agreed";
   return {
     svcKey: "real_estate",
-    serviceTitle: offPlan
-      ? "Off-Plan Real Estate Investment in Albania"
-      : "Real Estate Purchase Assistance in Albania",
+    serviceTitle: "Real Estate Legal Assistance — Property Purchase in Albania",
     contactBar: "dafku",
     caseOverviewSections: [
       {
-        sectionTitle: "Property & Transaction",
         rows: [
           { label: "Client", value: clientName },
-          { label: "Property", value: propDesc },
-          ...(txValue ? [{ label: "Estimated Value", value: txValue }] : []),
+          { label: "Nationality", value: fields.nationality || "-" },
+          { label: "Property", value: desc },
+          { label: "Transaction Value", value: txValue },
           {
-            label: "Status",
+            label: "Property Status",
             value: offPlan
-              ? `Under construction - expected completion ${year}`
-              : "Ready / Completed",
+              ? "Off-Plan / Under Construction"
+              : "Ready to Move In / Completed",
           },
+          ...(offPlan && fields.propertyCompletionYear
+            ? [
+                {
+                  label: "Expected Completion",
+                  value: fields.propertyCompletionYear,
+                },
+              ]
+            : []),
         ],
       },
     ],
-    scopeIntro: offPlan
-      ? `Comprehensive legal assistance for the purchase of ${propDesc}${txValue ? ` (estimated value: ${txValue})` : ""}. Given the off-plan nature, the engagement includes both transactional legal support and ongoing legal monitoring until final handover and ownership registration.`
-      : `Comprehensive legal assistance for the purchase of ${propDesc}${txValue ? ` (estimated value: ${txValue})` : ""}, ensuring full legal compliance, protection of the Client's interests, and proper transfer and registration of ownership.`,
+    scopeIntro:
+      "Full legal assistance for the purchase of the above property in Albania, ensuring legal compliance, protection of the client's interests as buyer, and proper transfer and registration of title, including:",
     scopeBullets: [
-      "Verification of ownership title and registration through the Albanian State Cadastre (ASHK)",
-      "Review of the construction permit and approved project documentation",
-      "Legal due diligence: encumbrances, liens, mortgages, seizures, and restrictions",
-      "Verification of the developer's legal status and right to pre-sell",
-      "Legal review and negotiation of reservation agreements and preliminary Sale & Purchase Agreements",
-      "Review of contractual clauses: deadlines, penalties, payment schedules, termination rights",
-      "Representation and coordination with the real estate agency, developer, notary, and authorities",
-      "Legal presence and assistance during notarial signing",
-      "Payment coordination and legal safeguards",
-      "Follow-up and registration of ownership with ASHK after completion",
-      ...(offPlan
-        ? [
-            "Ongoing legal monitoring throughout the construction period",
-            `Legal oversight until project completion, handover, and ownership registration (expected: ${year})`,
-          ]
-        : []),
-    ],
+      "Verification of ownership title with the Albanian State Cadastre (ASHK)",
+      "Due diligence on the property (encumbrances, mortgages, legal disputes, planning status)",
+      "Review and negotiation of the Preliminary Sale Agreement (Compromis/Antecontract)",
+      "Drafting or reviewing the Final Sale and Purchase Agreement",
+      "Notary appointment coordination and attendance",
+      "Title transfer and property registration at the State Cadastre (ASHK)",
+      "Tax and duty advice (property transfer tax, VAT if applicable)",
+      "Coordination with the seller's legal representative",
+      "Post-completion registration follow-up",
+      offPlan
+        ? "Long-term monitoring of the developer's construction obligations until handover"
+        : "",
+    ].filter(Boolean),
     processSteps: [
       {
-        stepTitle: "Legal Due Diligence & Project Verification",
+        stepTitle: "Legal Due Diligence",
         bullets: [
-          "Verification of ownership title through ASHK",
-          "Review of construction permit and approved project documentation",
-          "Examination of the developer's legal status and authority to pre-sell",
-          "Check for encumbrances or restrictions affecting the land or project",
-          "Consistency check between contractual documentation and factual project status",
-          "Legal risk assessment related to construction timelines and buyer safeguards",
+          "Title and encumbrance check at ASHK",
+          "Review of planning permissions and building permits",
+          "Verification of seller's legal ownership and capacity",
+          "Assessment of any outstanding taxes or charges",
+          "Reporting findings to the client before proceeding",
         ],
       },
       {
-        stepTitle: "Contractual Documentation & Notarial Assistance",
+        stepTitle: "Transaction Execution",
         bullets: [
-          "Legal review and/or drafting of reservation agreements and preliminary Sale & Purchase Agreements",
-          "Detailed review of clauses: construction deadlines, payment schedules, penalties, termination rights",
-          "Legal coordination and negotiation with the developer, real estate agency, and notary",
-          "Legal review of notarial deeds prior to execution and legal presence during signing",
-          "Payment coordination and guidance on legally compliant payment methods",
+          "Review / drafting of the Preliminary Sale Agreement",
+          "Coordination with notary for the Final Sale and Purchase Agreement",
+          "Attendance at notary signing",
+          "Property transfer tax calculation and payment advice",
+          "Title registration at ASHK and receipt of new title certificate",
         ],
       },
       ...(offPlan
         ? [
             {
-              stepTitle: `Long-Term Legal Monitoring Until Completion (${year})`,
+              stepTitle: "Construction Monitoring & Handover (Off-Plan)",
               bullets: [
-                "Ongoing legal availability for advisory support related to the contractual relationship",
-                "Review of communications, notices, or updates issued by the developer",
-                "Legal advice and intervention in cases of construction delays or non-compliance",
-                `Coordination until final handover, delivery of keys, and ownership registration (expected: ${year})`,
+                "Periodic review of construction progress against contractual milestones",
+                "Legal review of stage payment invoices before payment",
+                "Communication with developer on behalf of the client",
+                "Legal review of snagging / defect notices",
+                "Attendance at property handover and key inspection",
+                "Final title registration upon completion",
               ],
             },
           ]
@@ -562,62 +522,53 @@ function buildRealEstate(
     ],
     docSections: [
       {
-        heading: "Required Documentation from the Client",
         items: [
-          "Valid identification document (ID / Passport)",
-          "Available project-related documentation if any (reservation or preliminary contracts)",
-          "Payment method details",
-          "Power of Attorney (if representation is required)",
-        ],
+          "Valid passport or national ID — provided by client",
+          "Power of Attorney (if signing through a representative) — we draft and notarize",
+          "Preliminary Sale Agreement (we review or draft)",
+          "Final Sale and Purchase Agreement (we draft or review)",
+          "Proof of payment / bank transfer records — provided by client",
+          "Property due diligence extract from ASHK — we obtain",
+          "Cadastral certificate and building permit copies — we obtain",
+          offPlan ? "Developer construction contract and stage payment schedule — we review" : "",
+        ].filter(Boolean),
       },
     ],
     timeline: [
-      "Legal due diligence & document verification: approx. 5-10 business days",
-      "Contract review & coordination: approx. 5-10 business days",
-      "Notarial execution: subject to parties' availability",
-      ...(offPlan
-        ? [
-            `Construction completion & handover: expected in ${year}`,
-            "Ownership registration after completion: approx. 15-30 business days",
-          ]
-        : ["Ownership registration: approx. 15-30 business days"]),
-    ],
+      "Legal due diligence: 3–7 business days",
+      "Preliminary Agreement signing: as agreed between parties",
+      "Final notary signing: subject to bank and notary availability",
+      "ASHK title registration: 5–15 business days after notary",
+      offPlan
+        ? "Construction monitoring: ongoing until handover (estimated " +
+          (fields.propertyCompletionYear || "TBC") +
+          ")"
+        : "",
+    ].filter(Boolean),
     paymentTerms: [
-      "50% payable upon signing of the engagement agreement.",
-      "50% payable prior to notarial execution of the contractual documentation.",
-      "Third-party and government costs are payable separately and in advance.",
-      "Legal fees are non-refundable once services have commenced.",
-      "Payments accepted via bank transfer, cash, card, PayPal, or other agreed methods.",
-      ...(offPlan
-        ? [
-            `Phase 2 Monitoring Retainer: EUR 50 per month, payable monthly or quarterly in advance, from contract execution until project completion and registration in ${year}.`,
-          ]
-        : []),
-    ],
-    disclaimerIntro: "Important notes for the Real Estate transaction:",
+      "50% of the legal service fee is payable upon engagement / contract signing.",
+      "50% is payable upon completion of the title transfer and ASHK registration.",
+      offPlan
+        ? "Monthly retainer of EUR 50 applies from handover date, for ongoing construction monitoring."
+        : "",
+      "Government fees, notary fees, and transfer taxes are payable when due (not included in the service fee).",
+      "All service fees are non-refundable once due diligence has commenced.",
+    ].filter(Boolean),
+    disclaimerIntro: "Please note the following regarding the real estate transaction:",
     disclaimers: [
-      "Services are based on documentation provided by the Client and third parties.",
-      ...(offPlan
-        ? ["The Firm does not guarantee construction timelines or third-party performance."]
-        : []),
-      "Public authorities may request additional documentation at any stage.",
-      "Legal fees exclude government, notary, and third-party costs unless explicitly stated.",
-      ...(offPlan
-        ? ["Hourly rate for out-of-scope services (disputes, litigation): EUR 100 / hour."]
-        : []),
-    ],
+      "Title registration is managed by ASHK; our office cannot influence processing times.",
+      "Transfer taxes and notary fees are set by law and are in addition to our legal fee.",
+      offPlan
+        ? "Developer obligations are enforceable under the signed contract; our office monitors and advises but cannot compel timely completion."
+        : "",
+      "Our advice is based on Albanian law as currently in force; regulatory changes may affect the transaction.",
+    ].filter(Boolean),
     nextSteps: [
-      "Execution of the legal services engagement agreement.",
-      "Payment of the initial legal fee.",
-      "Commencement of legal due diligence.",
-      "Contract review and coordination.",
-      "Notarial assistance and payment coordination.",
-      ...(offPlan
-        ? [
-            `Ongoing legal monitoring until project completion (expected: ${year}).`,
-            "Completion upon issuance of ownership documentation in the Client's name.",
-          ]
-        : ["Completion upon issuance of ownership documentation in the Client's name."]),
+      "Execution of the legal service agreement and initial payment.",
+      "Commencement of legal due diligence on the property.",
+      "Reporting due diligence results to the client.",
+      "Proceeding to Preliminary Agreement and then Final Sale Agreement.",
+      "Title transfer and ASHK registration.",
     ],
   };
 }
@@ -642,7 +593,142 @@ function buildTemplate(
   }
 }
 
-// --- Component ---
+// ---- Design tokens ----
+const NAVY = "#1b2e4b";
+const ACCENT = "#2563eb"; // blue-600
+const LIGHT_BG = "#f8fafc"; // slate-50
+const BORDER = "#e2e8f0"; // slate-200
+const TEXT_MAIN = "#0f172a"; // slate-900
+const TEXT_MUTED = "#64748b"; // slate-500
+
+// ---- Sub-components ----
+
+function SectionLabel({ number, title }: { number: string; title: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        marginBottom: "14px",
+        paddingBottom: "8px",
+        borderBottom: `2px solid ${ACCENT}`,
+      }}
+    >
+      <span
+        style={{
+          background: ACCENT,
+          color: "#fff",
+          fontSize: "10px",
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          padding: "2px 8px",
+          borderRadius: "3px",
+          flexShrink: 0,
+        }}
+      >
+        {number}
+      </span>
+      <span
+        style={{
+          fontSize: "11px",
+          fontWeight: 700,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          color: NAVY,
+        }}
+      >
+        {title}
+      </span>
+    </div>
+  );
+}
+
+function BulletItem({ text }: { text: string }) {
+  return (
+    <div style={{ display: "flex", gap: "10px", marginBottom: "5px" }}>
+      <span style={{ color: ACCENT, fontWeight: 700, flexShrink: 0, marginTop: "1px" }}>
+        &#8594;
+      </span>
+      <span style={{ fontSize: "13px", color: TEXT_MAIN, lineHeight: "1.5" }}>{text}</span>
+    </div>
+  );
+}
+
+function StepBlock({
+  stepNumber,
+  title,
+  bullets,
+}: {
+  stepNumber: number;
+  title: string;
+  bullets: string[];
+}) {
+  return (
+    <div style={{ marginBottom: "18px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "10px" }}>
+        <div
+          style={{
+            background: NAVY,
+            color: "#fff",
+            borderRadius: "50%",
+            width: "26px",
+            height: "26px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "11px",
+            fontWeight: 700,
+            flexShrink: 0,
+            marginTop: "1px",
+          }}
+        >
+          {stepNumber}
+        </div>
+        <span
+          style={{
+            fontSize: "13px",
+            fontWeight: 700,
+            color: NAVY,
+            lineHeight: "1.4",
+            paddingTop: "4px",
+          }}
+        >
+          {title}
+        </span>
+      </div>
+      <div style={{ paddingLeft: "38px" }}>
+        {bullets.map((b, i) => (
+          <BulletItem key={i} text={b} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DocItem({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "8px",
+        padding: "6px 10px",
+        background: LIGHT_BG,
+        borderLeft: `3px solid ${ACCENT}`,
+        borderRadius: "0 4px 4px 0",
+        marginBottom: "6px",
+      }}
+    >
+      <span style={{ color: ACCENT, fontSize: "12px", flexShrink: 0, marginTop: "1px" }}>
+        &#x2713;
+      </span>
+      <span style={{ fontSize: "12px", color: TEXT_MAIN, lineHeight: "1.45" }}>{text}</span>
+    </div>
+  );
+}
+
+// ---- Props ----
 
 interface ProposalRendererProps {
   clientName: string;
@@ -651,6 +737,8 @@ interface ProposalRendererProps {
   fields: Partial<ProposalFields>;
   innerRef?: React.RefObject<HTMLDivElement>;
 }
+
+// ---- Main component ----
 
 export default function ProposalRenderer({
   clientName,
@@ -683,22 +771,34 @@ export default function ProposalRenderer({
     ? new Date(fields.proposalDate)
         .toLocaleDateString("en-GB", {
           day: "2-digit",
-          month: "2-digit",
+          month: "long",
           year: "numeric",
         })
-        .replace(/\//g, ".")
-    : new Date().toLocaleDateString("en-GB").replace(/\//g, ".");
+    : new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
 
-  const allNextSteps = Array.from(
-    new Set(templates.flatMap((t) => t.nextSteps))
-  );
-
+  const allNextSteps = Array.from(new Set(templates.flatMap((t) => t.nextSteps)));
+  const allPaymentTerms = templates.flatMap((t) => t.paymentTerms);
   const usesRelocate = templates.some((t) => t.contactBar === "relocate");
 
   if (templates.length === 0) {
     return (
-      <div className="bg-white rounded-lg border p-10 text-center text-sm text-gray-400">
-        No services selected. Please select at least one service for this customer.
+      <div
+        style={{
+          background: "#fff",
+          border: `1px solid ${BORDER}`,
+          borderRadius: "8px",
+          padding: "48px",
+          textAlign: "center",
+          color: TEXT_MUTED,
+          fontSize: "14px",
+        }}
+      >
+        No proposal content available for the selected service(s). Please ensure the customer
+        has at least one of the supported services selected.
       </div>
     );
   }
@@ -708,351 +808,631 @@ export default function ProposalRenderer({
   return (
     <div
       ref={innerRef}
-      style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-      className="bg-white text-gray-900 text-[13px] leading-relaxed"
+      style={{
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+        background: "#ffffff",
+        color: TEXT_MAIN,
+        fontSize: "13px",
+        lineHeight: "1.6",
+        maxWidth: "800px",
+        margin: "0 auto",
+      }}
     >
-      {/* ===== COVER ===== */}
-      <div className="px-12 pt-10 pb-8 border-b">
-        <div className="text-center mb-6">
-          <p className="text-xs uppercase tracking-[0.25em] text-gray-400 mb-1">
-            {usesRelocate ? "Relocate Albania" : "DAFKU Law Firm"}
-          </p>
-          <h1 className="text-[22px] font-bold uppercase tracking-widest text-gray-800 mb-1">
-            Service Proposal
-          </h1>
-          <p className="text-sm text-gray-500">
-            Presented to: <span className="font-semibold text-gray-700">{clientName}</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">Ref: {clientId}</p>
+      {/* ===== HEADER BAND ===== */}
+      <div
+        style={{
+          background: NAVY,
+          color: "#fff",
+          padding: "28px 40px 24px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div
+              style={{
+                fontSize: "10px",
+                letterSpacing: "0.25em",
+                textTransform: "uppercase",
+                opacity: 0.7,
+                marginBottom: "4px",
+              }}
+            >
+              {usesRelocate ? "Relocate Albania" : "DAFKU Law Firm"}
+            </div>
+            <div
+              style={{
+                fontSize: "22px",
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                marginBottom: "2px",
+              }}
+            >
+              Service Proposal
+            </div>
+            <div style={{ fontSize: "12px", opacity: 0.75 }}>
+              {usesRelocate ? "info@relocateto.al" : "info@dafkulawfirm.al"}
+            </div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: "12px", opacity: 0.8 }}>
+            <div style={{ marginBottom: "3px" }}>
+              <span style={{ opacity: 0.6 }}>Date: </span>
+              {displayDate}
+            </div>
+            <div>
+              <span style={{ opacity: 0.6 }}>Ref: </span>
+              {clientId}
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Services box */}
-        <div className="border border-gray-200 rounded p-4 mb-4 bg-gray-50">
-          <p className="text-[11px] uppercase tracking-widest text-gray-400 mb-2">
+      {/* ===== CLIENT INTRO BAND ===== */}
+      <div
+        style={{
+          background: LIGHT_BG,
+          padding: "18px 40px",
+          borderBottom: `1px solid ${BORDER}`,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: TEXT_MUTED, marginBottom: "3px" }}>
+            Prepared for
+          </div>
+          <div style={{ fontSize: "17px", fontWeight: 700, color: NAVY }}>{clientName}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: TEXT_MUTED, marginBottom: "4px" }}>
             Services Covered
-          </p>
-          {templates.map((t, i) => (
-            <p key={i} className="text-sm font-medium text-gray-800 leading-snug mb-1">
-              {templates.length > 1 ? `${i + 1}. ` : ""}{t.serviceTitle}
-            </p>
-          ))}
-        </div>
-
-        {/* Date & contact */}
-        <div className="flex items-center justify-between text-xs text-gray-400 mt-4">
-          <span>Date: {displayDate}</span>
-          {usesRelocate ? (
-            <span>info@relocateto.al &bull; www.relocateto.al</span>
-          ) : (
-            <span>info@dafkulawfirm.al &bull; www.dafkulawfirm.al</span>
-          )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+            {templates.map((t, i) => (
+              <span
+                key={i}
+                style={{
+                  background: NAVY,
+                  color: "#fff",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  padding: "3px 10px",
+                  borderRadius: "20px",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {t.serviceTitle}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* ===== PER-SERVICE SECTIONS ===== */}
-      {templates.map((tpl, ti) => {
-        const prefix = templates.length > 1 ? `Part ${ti + 1} \u2013 ` : "";
-        return (
-          <React.Fragment key={tpl.svcKey}>
-            <div className="px-12 py-8 border-b">
+      {templates.map((tpl, ti) => (
+        <div key={tpl.svcKey}>
+          {/* Service separator when multiple services */}
+          {templates.length > 1 && (
+            <div
+              style={{
+                background: NAVY,
+                color: "#fff",
+                padding: "10px 40px",
+                fontSize: "11px",
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              Part {ti + 1} &#8212; {tpl.serviceTitle}
+            </div>
+          )}
 
-              {/* Service heading (only when multiple services) */}
-              {templates.length > 1 && (
-                <h2 className="text-base font-bold uppercase tracking-wide text-gray-700 border-b border-gray-200 pb-2 mb-6">
-                  {prefix}{tpl.serviceTitle}
-                </h2>
+          <div style={{ padding: "32px 40px", borderBottom: `1px solid ${BORDER}` }}>
+            {/* 1. Case Overview */}
+            <section style={{ marginBottom: "28px" }}>
+              <SectionLabel number="1" title="Case Overview" />
+              {tpl.caseOverviewSections.map((sec, si) => (
+                <div key={si} style={{ marginBottom: si < tpl.caseOverviewSections.length - 1 ? "16px" : 0 }}>
+                  {sec.sectionTitle && (
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: NAVY,
+                        marginBottom: "8px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                      }}
+                    >
+                      {sec.sectionTitle}
+                    </div>
+                  )}
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      fontSize: "13px",
+                    }}
+                  >
+                    <tbody>
+                      {sec.rows.map((r, ri) => (
+                        <tr
+                          key={ri}
+                          style={{
+                            background: ri % 2 === 0 ? "#fff" : LIGHT_BG,
+                          }}
+                        >
+                          <td
+                            style={{
+                              padding: "7px 12px 7px 0",
+                              color: TEXT_MUTED,
+                              fontSize: "11px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                              width: "180px",
+                              verticalAlign: "top",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {r.label}
+                          </td>
+                          <td
+                            style={{
+                              padding: "7px 12px",
+                              color: TEXT_MAIN,
+                              fontWeight: 500,
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {r.value}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </section>
+
+            {/* 2. Scope of Work */}
+            <section style={{ marginBottom: "28px" }}>
+              <SectionLabel number="2" title="Scope of Work" />
+              {tpl.scopeIntro && (
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: TEXT_MAIN,
+                    marginBottom: "12px",
+                    lineHeight: "1.6",
+                  }}
+                >
+                  {tpl.scopeIntro}
+                </p>
               )}
+              <div>
+                {tpl.scopeBullets.map((b, bi) => (
+                  <BulletItem key={bi} text={b} />
+                ))}
+              </div>
+            </section>
 
-              {/* 1. Case Overview */}
-              <section className="mb-7">
-                <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                  1. Case Overview
-                </h3>
-                {tpl.caseOverviewSections.map((sec, si) => (
-                  <div key={si} className={si > 0 ? "mt-4" : ""}>
-                    {sec.sectionTitle && (
-                      <p className="text-xs font-semibold text-gray-600 mb-1.5">
-                        {sec.sectionTitle}
-                      </p>
+            {/* 3. Process */}
+            {tpl.processSteps.length > 0 && (
+              <section style={{ marginBottom: "28px" }}>
+                <SectionLabel number="3" title="Process Overview" />
+                {tpl.processSteps.map((step) => {
+                  globalStep += 1;
+                  const sn = globalStep;
+                  return (
+                    <StepBlock
+                      key={step.stepTitle}
+                      stepNumber={sn}
+                      title={step.stepTitle}
+                      bullets={step.bullets}
+                    />
+                  );
+                })}
+              </section>
+            )}
+
+            {/* 4. Required Documents */}
+            {tpl.docSections.length > 0 && (
+              <section style={{ marginBottom: "28px" }}>
+                <SectionLabel number="4" title="Required Documents" />
+                {tpl.docSections.map((sec, si) => (
+                  <div key={si} style={{ marginBottom: si < tpl.docSections.length - 1 ? "16px" : 0 }}>
+                    {sec.heading && (
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: NAVY,
+                          marginBottom: "8px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {sec.heading}
+                      </div>
                     )}
-                    <table className="w-full text-sm border-collapse">
-                      <tbody>
-                        {sec.rows.map((r, ri) => (
-                          <tr key={ri} className="border-b border-gray-100 last:border-0">
-                            <td className="py-1.5 pr-6 text-gray-400 w-40 align-top text-xs uppercase tracking-wide">
-                              {r.label}
-                            </td>
-                            <td className="py-1.5 text-gray-800">{r.value}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    {sec.items.map((item, ii) => (
+                      <DocItem key={ii} text={item} />
+                    ))}
                   </div>
                 ))}
               </section>
+            )}
 
-              {/* 2. Scope of Work */}
-              <section className="mb-7">
-                <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                  2. Scope of Work
-                </h3>
-                {tpl.scopeIntro && (
-                  <p className="text-sm text-gray-700 mb-3 leading-relaxed">{tpl.scopeIntro}</p>
-                )}
-                <ul className="space-y-1">
-                  {tpl.scopeBullets.map((b, bi) => {
-                    const isHeading =
-                      b === b.toUpperCase() && b.length > 3 && !b.startsWith("-");
-                    return isHeading ? (
-                      <li key={bi} className="pt-3 pb-0.5 text-xs font-bold uppercase tracking-wider text-gray-500 list-none">
-                        {b}
-                      </li>
-                    ) : (
-                      <li key={bi} className="flex gap-2 text-sm text-gray-700">
-                        <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                        <span>{b}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-
-              {/* 3. Process */}
-              {tpl.processSteps.length > 0 && (
-                <section className="mb-7">
-                  <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                    3. Process
-                  </h3>
-                  {tpl.processSteps.map((step, si) => {
-                    globalStep += 1;
+            {/* 5. Timeline */}
+            {tpl.timeline.length > 0 && (
+              <section style={{ marginBottom: "28px" }}>
+                <SectionLabel number="5" title="Estimated Timeline" />
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                  }}
+                >
+                  {tpl.timeline.map((item, i) => {
+                    const [phaseRaw, timeRaw] = item.split(/:\s(.+)/);
+                    const phase = phaseRaw.trim();
+                    const time = timeRaw?.trim() || "";
                     return (
-                      <div key={si} className="mb-5">
-                        <p className="text-sm font-semibold text-gray-800 mb-2">
-                          <span className="inline-block bg-gray-800 text-white text-[10px] uppercase tracking-wider px-2 py-0.5 rounded mr-2">
-                            Step {globalStep}
-                          </span>
-                          {step.stepTitle}
-                        </p>
-                        <ul className="space-y-1 pl-2">
-                          {step.bullets.map((b, bi) => (
-                            <li key={bi} className="flex gap-2 text-sm text-gray-700">
-                              <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                              <span>{b}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      <div
+                        key={i}
+                        style={{
+                          background: LIGHT_BG,
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: "6px",
+                          padding: "10px 14px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            color: NAVY,
+                            marginBottom: "3px",
+                          }}
+                        >
+                          {phase}
+                        </div>
+                        {time && (
+                          <div style={{ fontSize: "12px", color: TEXT_MUTED }}>
+                            {time}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                </section>
-              )}
+                </div>
+              </section>
+            )}
 
-              {/* 4. Required Documents */}
-              {tpl.docSections.length > 0 && (
-                <section className="mb-7">
-                  <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                    4. Required Documents
-                  </h3>
-                  {tpl.docSections.map((sec, si) => (
-                    <div key={si} className={si > 0 ? "mt-4" : ""}>
-                      {sec.heading && (
-                        <p className="text-xs font-semibold text-gray-600 mb-1.5">
-                          {sec.heading}
-                        </p>
-                      )}
-                      <ul className="space-y-1">
-                        {sec.items.map((item, ii) => (
-                          <li key={ii} className="flex gap-2 text-sm text-gray-700">
-                            <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
+            {/* 6. Important Notes */}
+            {tpl.disclaimers.length > 0 && (
+              <section>
+                <SectionLabel number="6" title="Important Notes" />
+                {tpl.disclaimerIntro && (
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      color: TEXT_MUTED,
+                      fontStyle: "italic",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    {tpl.disclaimerIntro}
+                  </p>
+                )}
+                <div
+                  style={{
+                    background: "#fef9ec",
+                    border: "1px solid #f5e07a",
+                    borderRadius: "6px",
+                    padding: "14px 16px",
+                  }}
+                >
+                  {tpl.disclaimers.map((d, di) => (
+                    <div
+                      key={di}
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        marginBottom: di < tpl.disclaimers.length - 1 ? "7px" : 0,
+                      }}
+                    >
+                      <span style={{ color: "#b45309", flexShrink: 0 }}>&#x26A0;</span>
+                      <span style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.5" }}>
+                        {d}
+                      </span>
                     </div>
                   ))}
-                </section>
-              )}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      ))}
 
-              {/* 5. Timeline */}
-              {tpl.timeline.length > 0 && (
-                <section className="mb-7">
-                  <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                    5. Timeline Overview
-                  </h3>
-                  <ul className="space-y-1">
-                    {tpl.timeline.map((item, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-gray-700">
-                        <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* 6. Important Notes / Disclaimers */}
-              {tpl.disclaimers.length > 0 && (
-                <section>
-                  <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                    6. Important Notes
-                  </h3>
-                  {tpl.disclaimerIntro && (
-                    <p className="text-xs text-gray-500 italic mb-2">{tpl.disclaimerIntro}</p>
-                  )}
-                  <ul className="space-y-1">
-                    {tpl.disclaimers.map((d, di) => (
-                      <li key={di} className="flex gap-2 text-sm text-gray-700">
-                        <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                        <span>{d}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </div>
-          </React.Fragment>
-        );
-      })}
-
-      {/* ===== FEES ===== */}
-      <div className="px-12 py-8 border-b">
-        <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-4">
-          Professional Fees
-        </h3>
-        <table className="w-full text-sm border-collapse mb-3">
+      {/* ===== PROFESSIONAL FEES ===== */}
+      <div style={{ padding: "32px 40px", borderBottom: `1px solid ${BORDER}` }}>
+        <SectionLabel number={String(templates.length > 1 ? "A" : "7")} title="Professional Fees" />
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "13px",
+            marginBottom: "12px",
+          }}
+        >
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-2 text-gray-500 font-normal text-xs uppercase tracking-wide">
+            <tr style={{ background: NAVY, color: "#fff" }}>
+              <th style={{ padding: "10px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 Description
               </th>
-              <th className="text-right py-2 text-gray-500 font-normal text-xs uppercase tracking-wide">
+              <th style={{ padding: "10px 14px", textAlign: "right", fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 ALL
               </th>
-              <th className="text-right py-2 text-gray-500 font-normal text-xs uppercase tracking-wide">
-                EUR
+              <th style={{ padding: "10px 14px", textAlign: "right", fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                EUR (approx.)
               </th>
             </tr>
           </thead>
           <tbody>
             {consultationFee > 0 && (
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Consultation Fee</td>
-                <td className="text-right py-2 font-mono">{consultationFee.toLocaleString()}</td>
-                <td className="text-right py-2 font-mono">{fmt(consultationFee * EUR_RATE)}</td>
+              <tr style={{ background: LIGHT_BG }}>
+                <td style={{ padding: "9px 14px", borderBottom: `1px solid ${BORDER}` }}>
+                  Consultation Fee
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {consultationFee.toLocaleString()}
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {fmt(consultationFee * EUR_RATE)}
+                </td>
               </tr>
             )}
             {serviceFee > 0 && (
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Service Fee</td>
-                <td className="text-right py-2 font-mono">{serviceFee.toLocaleString()}</td>
-                <td className="text-right py-2 font-mono">{fmt(serviceFee * EUR_RATE)}</td>
-              </tr>
-            )}
-            {serviceFeeSubtotal > 0 && (
-              <tr className="border-b border-gray-200">
-                <td className="py-2 text-gray-500 text-xs">Service Subtotal</td>
-                <td className="text-right py-2 font-mono text-gray-500 text-xs">
-                  {serviceFeeSubtotal.toLocaleString()}
+              <tr>
+                <td style={{ padding: "9px 14px", borderBottom: `1px solid ${BORDER}` }}>
+                  Service Fee
                 </td>
-                <td className="text-right py-2 font-mono text-gray-500 text-xs">
-                  {fmt(serviceFeeSubtotal * EUR_RATE)}
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {serviceFee.toLocaleString()}
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {fmt(serviceFee * EUR_RATE)}
                 </td>
               </tr>
             )}
             {poaFee > 0 && (
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Power of Attorney</td>
-                <td className="text-right py-2 font-mono">{poaFee.toLocaleString()}</td>
-                <td className="text-right py-2 font-mono">{fmt(poaFee * EUR_RATE)}</td>
+              <tr style={{ background: LIGHT_BG }}>
+                <td style={{ padding: "9px 14px", borderBottom: `1px solid ${BORDER}` }}>
+                  Power of Attorney
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {poaFee.toLocaleString()}
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {fmt(poaFee * EUR_RATE)}
+                </td>
               </tr>
             )}
             {translationFee > 0 && (
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Translation</td>
-                <td className="text-right py-2 font-mono">{translationFee.toLocaleString()}</td>
-                <td className="text-right py-2 font-mono">{fmt(translationFee * EUR_RATE)}</td>
+              <tr>
+                <td style={{ padding: "9px 14px", borderBottom: `1px solid ${BORDER}` }}>
+                  Translation &amp; Notarization
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {translationFee.toLocaleString()}
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {fmt(translationFee * EUR_RATE)}
+                </td>
               </tr>
             )}
             {otherFees > 0 && (
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Other Fees</td>
-                <td className="text-right py-2 font-mono">{otherFees.toLocaleString()}</td>
-                <td className="text-right py-2 font-mono">{fmt(otherFees * EUR_RATE)}</td>
-              </tr>
-            )}
-            {totalALL > 0 && (
-              <tr className="border-t-2 border-gray-800">
-                <td className="py-2.5 font-bold">Total</td>
-                <td className="text-right py-2.5 font-bold font-mono">
-                  {totalALL.toLocaleString()} ALL
+              <tr style={{ background: LIGHT_BG }}>
+                <td style={{ padding: "9px 14px", borderBottom: `1px solid ${BORDER}` }}>
+                  Other Fees
                 </td>
-                <td className="text-right py-2.5 font-bold font-mono">{fmt(totalEUR)} EUR</td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {otherFees.toLocaleString()}
+                </td>
+                <td style={{ padding: "9px 14px", textAlign: "right", fontFamily: "monospace", borderBottom: `1px solid ${BORDER}` }}>
+                  {fmt(otherFees * EUR_RATE)}
+                </td>
               </tr>
             )}
+            {/* Total row */}
+            <tr style={{ background: NAVY, color: "#fff" }}>
+              <td style={{ padding: "12px 14px", fontWeight: 700, fontSize: "14px" }}>
+                Total
+              </td>
+              <td style={{ padding: "12px 14px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, fontSize: "14px" }}>
+                {totalALL.toLocaleString()} ALL
+              </td>
+              <td style={{ padding: "12px 14px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, fontSize: "14px" }}>
+                {fmt(totalEUR)} EUR
+              </td>
+            </tr>
           </tbody>
         </table>
         {totalALL > 0 && (
-          <p className="text-xs text-gray-400">
-            Also approximately USD {fmt(totalUSD)} &bull; GBP {fmt(totalGBP)} at indicative rates.
-          </p>
+          <div
+            style={{
+              fontSize: "11px",
+              color: TEXT_MUTED,
+              background: LIGHT_BG,
+              border: `1px solid ${BORDER}`,
+              borderRadius: "4px",
+              padding: "8px 12px",
+            }}
+          >
+            Indicative equivalents: USD {fmt(totalUSD)} &#8226; GBP {fmt(totalGBP)} &#8226; exchange rates are approximate and for reference only.
+          </div>
         )}
         {fields.additionalCostsNote && (
-          <p className="text-sm text-gray-600 italic mt-2">{fields.additionalCostsNote}</p>
+          <p
+            style={{
+              fontSize: "12px",
+              color: TEXT_MUTED,
+              fontStyle: "italic",
+              marginTop: "10px",
+            }}
+          >
+            {fields.additionalCostsNote}
+          </p>
         )}
       </div>
 
       {/* ===== PAYMENT TERMS ===== */}
-      <div className="px-12 py-8 border-b">
-        <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-4">
-          Payment Terms
-        </h3>
+      <div style={{ padding: "32px 40px", borderBottom: `1px solid ${BORDER}` }}>
+        <SectionLabel number={String(templates.length > 1 ? "B" : "8")} title="Payment Terms" />
         {templates.map((tpl, ti) => (
-          <div key={tpl.svcKey} className={ti > 0 ? "mt-5" : ""}>
+          <div
+            key={tpl.svcKey}
+            style={{ marginBottom: ti < templates.length - 1 ? "18px" : 0 }}
+          >
             {templates.length > 1 && (
-              <p className="text-xs font-semibold text-gray-600 mb-2">{tpl.serviceTitle}</p>
+              <div
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: NAVY,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: "8px",
+                }}
+              >
+                {tpl.serviceTitle}
+              </div>
             )}
-            <ul className="space-y-1">
-              {tpl.paymentTerms.map((pt, i) => (
-                <li key={i} className="flex gap-2 text-sm text-gray-700">
-                  <span className="text-gray-300 mt-0.5 shrink-0">&#8211;</span>
-                  <span>{pt}</span>
-                </li>
-              ))}
-            </ul>
+            {tpl.paymentTerms.map((pt, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  marginBottom: "6px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <span
+                  style={{
+                    background: ACCENT,
+                    color: "#fff",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    marginTop: "2px",
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: "13px", color: TEXT_MAIN, lineHeight: "1.5" }}>
+                  {pt}
+                </span>
+              </div>
+            ))}
           </div>
         ))}
         {fields.paymentTermsNote && (
-          <p className="text-sm text-gray-600 italic mt-3">{fields.paymentTermsNote}</p>
+          <p
+            style={{
+              fontSize: "12px",
+              color: TEXT_MUTED,
+              fontStyle: "italic",
+              marginTop: "10px",
+              borderTop: `1px solid ${BORDER}`,
+              paddingTop: "10px",
+            }}
+          >
+            {fields.paymentTermsNote}
+          </p>
         )}
       </div>
 
       {/* ===== NEXT STEPS ===== */}
-      <div className="px-12 py-8 border-b">
-        <h3 className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-4">
-          Next Steps
-        </h3>
-        <ul className="space-y-1">
+      <div style={{ padding: "32px 40px", borderBottom: `1px solid ${BORDER}` }}>
+        <SectionLabel number={String(templates.length > 1 ? "C" : "9")} title="Next Steps" />
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {allNextSteps.map((s, i) => (
-            <li key={i} className="flex gap-2 text-sm text-gray-700">
-              <span className="text-gray-400 font-mono text-xs mt-0.5 w-4 shrink-0">
-                {i + 1}.
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                gap: "12px",
+                alignItems: "flex-start",
+                background: LIGHT_BG,
+                border: `1px solid ${BORDER}`,
+                borderRadius: "6px",
+                padding: "10px 14px",
+              }}
+            >
+              <span
+                style={{
+                  background: ACCENT,
+                  color: "#fff",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  marginTop: "1px",
+                }}
+              >
+                {i + 1}
               </span>
-              <span>{s}</span>
-            </li>
+              <span style={{ fontSize: "13px", color: TEXT_MAIN, lineHeight: "1.5" }}>{s}</span>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
 
       {/* ===== FOOTER ===== */}
-      <div className="px-12 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p className="font-medium text-gray-500">
-          DAFKU Law Firm &bull; Relocate Albania
-        </p>
-        <p>Tirana &bull; Durres, Albania</p>
-        <p>info@dafkulawfirm.al &bull; info@relocateto.al</p>
-        <p className="pt-1 italic">
-          This proposal is confidential and valid for 30 days from the date of issue.
-        </p>
+      <div
+        style={{
+          background: NAVY,
+          color: "rgba(255,255,255,0.7)",
+          padding: "20px 40px",
+          fontSize: "11px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "8px",
+        }}
+      >
+        <div>
+          <span style={{ color: "#fff", fontWeight: 600 }}>
+            DAFKU Law Firm &#8226; Relocate Albania
+          </span>
+          <br />
+          Tirana &#8226; Durres, Albania
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div>info@dafkulawfirm.al &#8226; info@relocateto.al</div>
+          <div style={{ marginTop: "4px", fontStyle: "italic", opacity: 0.7 }}>
+            This proposal is confidential and valid for 30 days from the date of issue.
+          </div>
+        </div>
       </div>
     </div>
   );

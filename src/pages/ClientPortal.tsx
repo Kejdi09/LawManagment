@@ -10,7 +10,6 @@ import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import ClientIntakeForm from "@/components/ClientIntakeForm";
 import FaqBot from "@/components/FaqBot";
-import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
 import ProposalRenderer from "@/components/ProposalRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -299,23 +298,7 @@ export default function ClientPortalPage() {
   // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
   const hasNewMessages = unreadFromLawyer;
 
-  // Proposal computed values (only used when showProposalTab)
   const snap = data.proposalSnapshot;
-  const pConsultation = snap?.consultationFeeALL ?? 0;
-  const pServiceFee = snap?.serviceFeeALL ?? 0;
-  const pPoa = snap?.poaFeeALL ?? 0;
-  const pTranslation = snap?.translationFeeALL ?? 0;
-  const pOther = snap?.otherFeesALL ?? 0;
-  const pServiceSubtotal = pConsultation + pServiceFee;
-  const pAdditionalSubtotal = pPoa + pTranslation + pOther;
-  const pTotal = pServiceSubtotal + pAdditionalSubtotal;
-  const pTotalEUR = pTotal * EUR_RATE;
-  const pTotalUSD = pTotal * USD_RATE;
-  const pTotalGBP = pTotal * GBP_RATE;
-  const pServiceContent = showProposalTab ? getServiceContent(data.client.services || [], snap ?? {}) : null;
-  const pDisplayDate = snap?.proposalDate
-    ? new Date(snap.proposalDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
-    : "";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
