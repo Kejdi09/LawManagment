@@ -8,12 +8,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
-import { IntakeBotSection } from "@/components/IntakeBotPanel";
+import ClientIntakeForm from "@/components/ClientIntakeForm";
+import FaqBot from "@/components/FaqBot";
 import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -253,7 +254,7 @@ export default function ClientPortalPage() {
 
   const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
-  const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
+  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
   const defaultTab = showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
   const hasNewMessages = unreadFromLawyer;
@@ -330,6 +331,9 @@ export default function ClientPortalPage() {
                 <FileText className="h-3.5 w-3.5" /> Proposal
               </TabsTrigger>
             )}
+            <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
+              <Bot className="h-3.5 w-3.5" /> FAQ
+            </TabsTrigger>
             <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs relative">
               <MessageSquare className="h-3.5 w-3.5" /> Messages
               {hasNewMessages && (
@@ -399,18 +403,10 @@ export default function ClientPortalPage() {
                   <span>Use the <strong>Messages</strong> tab to chat with us directly before filling in the form — we're happy to clarify anything.</span>
                 </div>
               </div>
-              <IntakeBotSection
+              <ClientIntakeForm
                 services={data.client.services || []}
                 clientName={data.client.name}
-                storageKey={token}
-                forceReset={!!data.intakeBotReset}
-                onSendSummaryMessage={async (text) => {
-                  if (!token) return;
-                  try {
-                    const msg = await sendPortalMessage(token, text);
-                    setChatMessages((prev) => [...prev, msg]);
-                  } catch { /* non-blocking */ }
-                }}
+                savedFields={data.client.proposalFields}
                 onComplete={async (fields) => {
                   if (!token) return;
                   try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
@@ -656,6 +652,19 @@ export default function ClientPortalPage() {
                 </div>
               )}            </TabsContent>
           )}
+
+          {/* ── FAQ TAB ── */}
+          <TabsContent value="faq" className="mt-0 space-y-3">
+            <div className="rounded-md border bg-primary/5 px-4 py-3 text-sm space-y-0.5">
+              <p className="font-semibold">Frequently Asked Questions</p>
+              <p className="text-xs text-muted-foreground">Ask anything about our services, timelines, fees, or process — our assistant will find the answer instantly.</p>
+            </div>
+            <FaqBot />
+            <p className="text-xs text-muted-foreground text-center">
+              Didn&apos;t find your answer?{" "}
+              <span className="font-medium">Switch to the Messages tab</span> to chat with your lawyer directly.
+            </p>
+          </TabsContent>
 
           {/* ── MESSAGES TAB ── */}
           <TabsContent value="messages" className="mt-0 space-y-3">
