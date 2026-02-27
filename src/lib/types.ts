@@ -142,6 +142,16 @@ export interface Customer {
   country?: string;
   /** When true, the portal intake bot is forced to restart (staff-triggered reset) */
   intakeBotReset?: boolean;
+  /** ISO timestamp of when the client accepted the proposal */
+  proposalAcceptedAt?: string;
+  /** ISO timestamp of when the contract was formally sent to the client */
+  contractSentAt?: string;
+  /** Snapshot of the contract fields at the time it was sent */
+  contractSnapshot?: ProposalFields;
+  /** ISO timestamp of when the client first viewed the contract in the portal */
+  contractViewedAt?: string;
+  /** ISO timestamp of when the client accepted the contract */
+  contractAcceptedAt?: string;
 }
 
 export interface HistoryRecord {
@@ -477,4 +487,7 @@ export interface PortalData {
   proposalViewedAt?: string | null;
   proposalExpiresAt?: string | null;
   intakeBotReset?: boolean;
+  contractSentAt?: string | null;
+  contractSnapshot?: ProposalFields | null;
+  contractViewedAt?: string | null;
 }

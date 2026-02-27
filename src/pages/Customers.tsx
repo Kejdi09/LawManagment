@@ -55,6 +55,7 @@ import MainLayout from "@/components/MainLayout";
 import CaseAlerts from "@/components/CaseAlerts";
 import { useToast } from "@/hooks/use-toast";
 import ProposalModal from "@/components/ProposalModal";
+import ContractModal from "@/components/ContractModal";
 import IntakeBotPanel from "@/components/IntakeBotPanel";
 
 // Reusable safe date formatter
@@ -151,6 +152,7 @@ const Customers = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [showContractModal, setShowContractModal] = useState(false);
   const [showIntakeSheet, setShowIntakeSheet] = useState(false);
   const [resetBotLoading, setResetBotLoading] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
@@ -1415,6 +1417,20 @@ const Customers = () => {
                           </span>
                           <Badge variant="outline" className="text-xs">{CONTACT_CHANNEL_LABELS[selectedCustomer.contactChannel]}</Badge>
                         </div>
+                        {/* Contract button – shown when client accepted proposal and contract not yet sent */}
+                        {(selectedCustomer.status === "SEND_CONTRACT" && !selectedCustomer.contractSentAt) && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 text-xs gap-1 bg-violet-600 hover:bg-violet-700"
+                              onClick={() => setShowContractModal(true)}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              Generate Contract
+                            </Button>
+                          </div>
+                        )}
                         {/* Proposal button – only shown when status is SEND_PROPOSAL and no proposal sent yet */}
                         {(selectedCustomer.status === "SEND_PROPOSAL" && !selectedCustomer.proposalSentAt) && (
                           <div className="flex flex-wrap gap-2 pt-1">
@@ -1671,6 +1687,24 @@ const Customers = () => {
             setSelectedCustomer(updated);
             setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
             setShowProposalModal(false);
+          }}
+        />
+      )}
+
+      {/* Contract generator modal */}
+      {selectedCustomer && showContractModal && (
+        <ContractModal
+          customer={selectedCustomer}
+          open={showContractModal}
+          onOpenChange={setShowContractModal}
+          onSaved={(updated) => {
+            setSelectedCustomer(updated);
+            setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+          }}
+          onSent={(updated) => {
+            setSelectedCustomer(updated);
+            setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+            setShowContractModal(false);
           }}
         />
       )}

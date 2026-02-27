@@ -20,8 +20,10 @@ export interface Conditions {
 }
 
 export function evaluateConditions(fields: Partial<ProposalFields>): Conditions {
+  const depRaw = (fields.dependentName ?? '').trim();
+  const hasRealDependent = depRaw.length > 0 && !/^(none|skip|n\/a|no|-)$/i.test(depRaw);
   return {
-    has_spouse: !!fields.dependentName?.trim(),
+    has_spouse: hasRealDependent,
     is_off_plan: !!fields.isOffPlan,
   };
 }

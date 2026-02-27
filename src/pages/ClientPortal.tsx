@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal } from "@/lib/case-store";
+import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract } from "@/lib/case-store";
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -138,6 +138,11 @@ export default function ClientPortalPage() {
   // Proposal response state
   const [proposalResponding, setProposalResponding] = useState(false);
   const [proposalRespondDone, setProposalRespondDone] = useState<"accepted" | null>(null);
+  // Contract response state
+  const [contractResponding, setContractResponding] = useState(false);
+  const [contractRespondDone, setContractRespondDone] = useState<"accepted" | null>(null);
+  const contractPrintRef = useRef<HTMLDivElement>(null);
+  const [contractPdfGenerating, setContractPdfGenerating] = useState(false);
   // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
   const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -293,8 +298,9 @@ export default function ClientPortalPage() {
 
   const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
-  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0);
-  const defaultTab = showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
+  const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
+  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0);
+  const defaultTab = showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
   const hasNewMessages = unreadFromLawyer;
 
@@ -352,6 +358,11 @@ export default function ClientPortalPage() {
             {showProposalTab && (
               <TabsTrigger value="proposal" className="flex items-center gap-1.5 text-xs">
                 <FileText className="h-3.5 w-3.5" /> Proposal
+              </TabsTrigger>
+            )}
+            {showContractTab && (
+              <TabsTrigger value="contract" className="flex items-center gap-1.5 text-xs">
+                <PenLine className="h-3.5 w-3.5" /> Contract
               </TabsTrigger>
             )}
             <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
@@ -530,6 +541,100 @@ export default function ClientPortalPage() {
                   )}
                 </div>
               )}            </TabsContent>
+          )}
+
+          {/* ── CONTRACT TAB ── */}
+          {showContractTab && data.contractSnapshot && (
+            <TabsContent value="contract" className="mt-0 space-y-3">
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" disabled={contractPdfGenerating} className="gap-1.5"
+                  onClick={async () => {
+                    const content = contractPrintRef.current;
+                    if (!content || contractPdfGenerating) return;
+                    setContractPdfGenerating(true);
+                    try {
+                      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+                        import('html2canvas'),
+                        import('jspdf'),
+                      ]);
+                      const canvas = await html2canvas(content, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+                      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                      const pageW = pdf.internal.pageSize.getWidth();
+                      const pageH = pdf.internal.pageSize.getHeight();
+                      const imgData = canvas.toDataURL('image/png');
+                      const imgW = pageW;
+                      const imgH = (canvas.height * imgW) / canvas.width;
+                      let posY = 0; let remaining = imgH;
+                      pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
+                      remaining -= pageH;
+                      while (remaining > 0) { posY -= pageH; pdf.addPage(); pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH); remaining -= pageH; }
+                      pdf.save(`Contract - ${data?.client?.name ?? 'Client'}.pdf`);
+                    } catch { /* silent fail */ } finally { setContractPdfGenerating(false); }
+                  }}>
+                  <FileDown className="h-4 w-4" />
+                  {contractPdfGenerating ? "Generating…" : "Save as PDF"}
+                </Button>
+              </div>
+              <ProposalRenderer
+                innerRef={contractPrintRef}
+                clientName={data.client.name}
+                clientId={data.client.customerId}
+                services={(data.client.services || []) as import("@/lib/types").ServiceType[]}
+                fields={data.contractSnapshot}
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                Questions about this contract?{" "}
+                <a href="https://wa.me/355696952989" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-foreground">
+                  Contact us on WhatsApp
+                </a>
+                {" "}(+355 69 69 52 989)
+              </p>
+              {/* ── Contract Accept ── */}
+              {(data.client.status === "WAITING_ACCEPTANCE" || data.client.status === "SEND_CONTRACT") && (
+                <div className="mt-6 border-t pt-5">
+                  {contractRespondDone === "accepted" && (
+                    <div className="flex items-center gap-2 justify-center text-green-700 dark:text-green-400 font-medium text-sm">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Contract accepted — congratulations, you're now a confirmed DAFKU client!
+                    </div>
+                  )}
+                  {!contractRespondDone && (
+                    <>
+                      <p className="text-sm font-medium text-center mb-4">Ready to confirm?</p>
+                      <div className="flex flex-col items-center gap-4">
+                        <Button
+                          className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                          disabled={contractResponding}
+                          onClick={async () => {
+                            if (!token) return;
+                            setContractResponding(true);
+                            try {
+                              await respondToContract(token);
+                              setContractRespondDone("accepted");
+                            } finally {
+                              setContractResponding(false);
+                            }
+                          }}
+                        >
+                          <ThumbsUp className="w-4 h-4" />
+                          Accept Contract
+                        </Button>
+                        <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm text-center max-w-sm">
+                          <p className="font-medium mb-1">Have questions about this contract?</p>
+                          <p className="text-xs text-muted-foreground">
+                            Contact us via{" "}
+                            <a href="https://wa.me/355696952989" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-foreground font-medium">
+                              WhatsApp (+355 69 69 52 989)
+                            </a>
+                            {" "}or use the <strong>Messages</strong> tab — we&apos;re happy to clarify.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </TabsContent>
           )}
 
           {/* ── FAQ TAB ── */}

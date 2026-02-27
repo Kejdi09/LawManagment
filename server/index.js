@@ -2323,6 +2323,9 @@ app.get('/api/portal/:token', async (req, res) => {
     proposalSnapshot: client.proposalSnapshot || null,
     proposalViewedAt: client.proposalViewedAt || null,
     intakeBotReset: !!client.intakeBotReset,
+    contractSentAt: client.contractSentAt || null,
+    contractSnapshot: client.contractSnapshot || null,
+    contractViewedAt: client.contractViewedAt || null,
   });
 });
 
@@ -2553,6 +2556,83 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
     });
     return res.json({ ok: true, status: 'DISCUSSING_Q' });
   }
+});
+
+// Client responds to contract: accept → status CLIENT (auto-assigned to Kejdi or Albert)
+app.post('/api/portal/:token/respond-contract', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+
+  const customer = await customersCol.findOne({ customerId: tokenDoc.customerId });
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+  if (!['WAITING_ACCEPTANCE', 'SEND_CONTRACT'].includes(customer.status)) {
+    return res.status(400).json({ error: 'Contract is not awaiting acceptance' });
+  }
+
+  const now = new Date().toISOString();
+
+  // Auto-assign to Kejdi or Albert — whoever has fewer confirmed clients; tie → Albert
+  const [kejdiCount, albertCount] = await Promise.all([
+    confirmedClientsCol.countDocuments({ assignedTo: 'Kejdi' }),
+    confirmedClientsCol.countDocuments({ assignedTo: 'Albert' }),
+  ]);
+  const assignedTo = kejdiCount < albertCount ? 'Kejdi' : 'Albert';
+
+  // Build the confirmed-client payload
+  const confirmedPayload = {
+    ...customer,
+    status: 'CLIENT',
+    assignedTo,
+    contractAcceptedAt: now,
+    confirmedAt: now,
+    sourceCustomerId: customer.customerId,
+    version: (customer.version || 0) + 1,
+  };
+
+  // Upsert into confirmedClients
+  await confirmedClientsCol.updateOne(
+    { customerId: customer.customerId },
+    { $set: confirmedPayload },
+    { upsert: true }
+  );
+
+  // Update the customer record to CLIENT so admin sees the transition
+  await customersCol.updateOne(
+    { customerId: customer.customerId },
+    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now } }
+  );
+
+  await customerHistoryCol.insertOne({
+    historyId: genShortId('CH'),
+    customerId: customer.customerId,
+    statusFrom: customer.status,
+    statusTo: 'CLIENT',
+    date: now,
+    changedBy: 'portal-client',
+    changedByRole: 'client',
+    changedByConsultant: null,
+    changedByLawyer: assignedTo,
+  });
+
+  // Post acceptance note to portal chat
+  await portalMessagesCol.insertOne({
+    messageId: genShortId('MSG'),
+    customerId: customer.customerId,
+    text: '[Contract Accepted] The client has accepted the contract and is now a confirmed client.',
+    senderType: 'client',
+    readByStaff: false,
+    readByClient: true,
+    timestamp: now,
+  });
+
+  sendEmail({
+    to: process.env.ADMIN_EMAIL,
+    subject: `Contract accepted — ${customer.name}`,
+    text: `${customer.name} has accepted the contract via the client portal.\n\nThey have been confirmed as a client and auto-assigned to ${assignedTo}.`,
+  });
+
+  return res.json({ ok: true, status: 'CLIENT', assignedTo });
 });
 
 // ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────
