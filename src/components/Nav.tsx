@@ -32,7 +32,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
       } catch { /* ignore */ }
     };
     fetchUnread();
-    const id = setInterval(fetchUnread, 15_000);
+    const id = setInterval(fetchUnread, 8_000);
     return () => clearInterval(id);
   }, [user]);
 

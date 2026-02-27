@@ -1404,6 +1404,9 @@ const Customers = () => {
                         <div className="flex items-center gap-2"><Phone className="h-3 w-3 text-muted-foreground" />{selectedCustomer.phone}</div>
                         <div className="flex items-center gap-2"><Mail className="h-3 w-3 text-muted-foreground" />{selectedCustomer.email}</div>
                         <div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-muted-foreground" />{selectedCustomer.address}</div>
+                        {selectedCustomer.portalLastViewedAt && (
+                          <div className="text-xs text-muted-foreground pl-5">Portal last viewed: {safeFormatDate(selectedCustomer.portalLastViewedAt)}</div>
+                        )}
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[selectedCustomer.status]}`}>
                             {LEAD_STATUS_LABELS[selectedCustomer.status]}

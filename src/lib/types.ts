@@ -125,6 +125,8 @@ export interface Customer {
   proposalSnapshot?: ProposalFields;
   /** ISO timestamp of when the client first viewed the proposal in the portal */
   proposalViewedAt?: string;
+  /** ISO timestamp of when the client last loaded the portal (any visit) */
+  portalLastViewedAt?: string;
   /** ISO timestamp of when the proposal expires (default: 14 days after sent) */
   proposalExpiresAt?: string;
   /** ISO timestamp of when the client last submitted the intake form via the portal */

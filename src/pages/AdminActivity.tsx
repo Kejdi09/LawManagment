@@ -24,7 +24,7 @@ const AdminActivity = () => {
   const [toDate, setToDate] = useState("");
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
   const [teamSummary, setTeamSummary] = useState<TeamSummary[]>([]);
-  const [activeTab, setActiveTab] = useState<"logs" | "team" | "deleted_chats">("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "team" | "deleted_chats" | "staff_sessions">("logs");
   const [deletedChats, setDeletedChats] = useState<DeletedChatRecord[]>([]);
   const [chatSearch, setChatSearch] = useState("");
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -152,6 +152,15 @@ const AdminActivity = () => {
           </button>
           <button
             type="button"
+            onClick={() => setActiveTab("staff_sessions")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "staff_sessions" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Staff Sessions
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setActiveTab("deleted_chats");
               if (deletedChats.length === 0) {
@@ -166,6 +175,50 @@ const AdminActivity = () => {
             Deleted Chats
           </button>
         </div>
+
+        {activeTab === "staff_sessions" && (
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Staff Member</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Event</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs
+                    .filter((l) => l.resource === 'session')
+                    .map((log, idx) => (
+                      <TableRow key={`${log.at}-${idx}`}>
+                        <TableCell className="text-xs text-muted-foreground">{formatDate(log.at, true)}</TableCell>
+                        <TableCell className="text-sm">{actorDisplayName(log)}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-xs capitalize">{log.role || "unknown"}</Badge></TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            log.action === 'login'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                          }`}>
+                            {log.action === 'login' ? '→ Logged in' : '← Logged out'}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {logs.filter((l) => l.resource === 'session').length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                        No session events yet. They appear after staff log in or out.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
 
         {activeTab === "deleted_chats" && (
           <div className="space-y-3">

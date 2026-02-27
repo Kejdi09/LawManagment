@@ -765,6 +765,14 @@ function extractAuthToken(req) {
 }
 
 app.post("/api/logout", (req, res) => {
+  // Log logout before clearing the cookie
+  try {
+    const token = extractAuthToken(req);
+    if (token && JWT_SECRET) {
+      const payload = jwt.verify(token, JWT_SECRET);
+      logAudit({ username: payload?.username, role: payload?.role, consultantName: payload?.consultantName || null, action: 'logout', resource: 'session', resourceId: payload?.username || null, details: { ip: req.ip } }).catch(() => {});
+    }
+  } catch { /* ignore jwt decode errors */ }
   // Clear cookie using the same options to ensure browser removes it in cross-site scenarios
   res.clearCookie("token", getCookieOptions(req));
   res.json({ ok: true });
@@ -852,6 +860,8 @@ app.post("/api/login", async (req, res) => {
       : (user.consultantName || user.lawyerName || CONSULTANT_BY_USERNAME[user.username] || null);
     const token = jwt.sign({ username: user.username, role, consultantName, lawyerName: consultantName }, JWT_SECRET, { expiresIn: "7d" });
     createAuthCookie(req, res, token);
+    // Log successful login for admin visibility
+    logAudit({ username: user.username, role, consultantName: consultantName || null, action: 'login', resource: 'session', resourceId: user.username, details: { ip: req.ip } }).catch(() => {});
     return res.json({ success: true, username: user.username, role, consultantName, lawyerName: consultantName, token });
   } catch (err) {
     console.error("/api/login error:", err);
@@ -1737,6 +1747,11 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   const scopedTasks = caseIds.length ? await tasksCol.find({ caseId: { $in: caseIds } }).toArray() : [];
 
   const overdue = scopedCases.filter((c) => c.deadline && new Date(c.deadline).getTime() < now).length;
+  const deadlinesSoon = scopedCases.filter((c) => {
+    if (!c.deadline) return false;
+    const dl = new Date(c.deadline).getTime();
+    return dl >= now && dl <= now + 7 * 24 * 60 * 60 * 1000;
+  }).length;
   const missingDocs = scopedCases.filter((c) => c.documentState === "missing").length;
   const urgentCases = scopedCases.filter((c) => c.priority === "urgent" || c.priority === "high").length;
   const pendingTasks = scopedTasks.filter((t) => !t.done).length;
@@ -1748,6 +1763,7 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   res.json({
     totalCases: scopedCases.length,
     overdue,
+    deadlinesSoon,
     missingDocs,
     urgentCases,
     pendingTasks,
@@ -2270,6 +2286,11 @@ app.get('/api/portal/:token', async (req, res) => {
   const isConfirmedClient = !!client;
   if (!client) client = await customersCol.findOne({ customerId: tokenDoc.customerId });
   if (!client) return res.status(404).json({ error: 'Client not found' });
+  // Stamp portal last viewed time on the customer record (fire-and-forget)
+  const viewedAt = new Date().toISOString();
+  (isConfirmedClient ? confirmedClientsCol : customersCol)
+    .updateOne({ customerId: tokenDoc.customerId }, { $set: { portalLastViewedAt: viewedAt } })
+    .catch(() => {});
   // Show matching case type: client cases for confirmed clients, customer cases for leads
   const caseTypeFilter = isConfirmedClient ? 'client' : 'customer';
   const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: caseTypeFilter }).sort({ lastStateChange: -1 }).toArray();
