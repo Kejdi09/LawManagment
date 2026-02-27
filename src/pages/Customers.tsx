@@ -1420,7 +1420,8 @@ const Customers = () => {
                             </Button>
                           </div>
                         )}
-                        {/* Staff intake bot – fill intake form on behalf of client */}
+                        {/* Staff intake bot – fill intake form on behalf of client (only for INTAKE / SEND_PROPOSAL stages) */}
+                        {(selectedCustomer.status === 'SEND_PROPOSAL' || selectedCustomer.status === 'INTAKE') && (
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1437,7 +1438,9 @@ const Customers = () => {
                             <TooltipContent>Run the intake chatbot on behalf of this client to populate proposal fields</TooltipContent>
                           </Tooltip>
                         </div>
-                        {/* Reset intake bot button */}
+                        )}
+                        {/* Reset intake bot button – only for INTAKE / SEND_PROPOSAL stages */}
+                        {(selectedCustomer.status === 'SEND_PROPOSAL' || selectedCustomer.status === 'INTAKE') && (
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1480,6 +1483,7 @@ const Customers = () => {
                             </TooltipContent>
                           </Tooltip>
                         </div>
+                        )}
                         </CardContent>
                     </Card>
 

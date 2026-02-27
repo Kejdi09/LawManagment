@@ -2443,6 +2443,27 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
       subject: `Proposal accepted — ${customer.name}`,
       text: `${customer.name} has accepted the proposal via the client portal.\n\nStatus advanced to "Send Contract". Please prepare and send the contract.`,
     });
+    // Auto-draft invoice from proposal fee snapshot
+    const snap = customer.proposalSnapshot || customer.proposalFields || {};
+    const invAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
+    if (invAmt > 0) {
+      const SVC_LABELS = { visa_c: 'Visa C', visa_d: 'Visa D', residency_permit: 'Residency Permit', residency_pensioner: 'Residency Permit (Pensioner)', company_formation: 'Company Formation', real_estate: 'Real Estate', tax_consulting: 'Tax Consulting', compliance: 'Compliance' };
+      const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
+      await invoicesCol.insertOne({
+        invoiceId: genShortId('INV'),
+        customerId: customer.customerId,
+        caseId: null,
+        description: `Legal Services${svcNames ? ` — ${svcNames}` : ''} — ${customer.name}`,
+        amount: invAmt,
+        currency: 'ALL',
+        status: 'pending',
+        dueDate: null,
+        createdAt: now,
+        createdBy: 'portal-client',
+        assignedTo: customer.assignedTo || null,
+        autoDrafted: true,
+      });
+    }
     return res.json({ ok: true, status: 'SEND_CONTRACT' });
   }
 
@@ -2460,7 +2481,28 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
       readByClient: true,
       timestamp: now,
     });
-    return res.json({ ok: true });
+    // Change status to Under Discussion so staff can see the request clearly
+    await customersCol.updateOne(
+      { customerId: customer.customerId },
+      { $set: { status: 'DISCUSSING_Q' } }
+    );
+    await customerHistoryCol.insertOne({
+      historyId: genShortId('CH'),
+      customerId: customer.customerId,
+      statusFrom: customer.status,
+      statusTo: 'DISCUSSING_Q',
+      date: now,
+      changedBy: 'portal-client',
+      changedByRole: 'client',
+      changedByConsultant: null,
+      changedByLawyer: null,
+    });
+    sendEmail({
+      to: process.env.ADMIN_EMAIL,
+      subject: `Proposal revision requested — ${customer.name}`,
+      text: `${customer.name} has requested revisions to the proposal via the client portal.\n\nStatus changed to "Under Discussion".\n\nClient message:\n${note?.trim() || '(no message provided)'}\n\nPlease review the request in the Messages tab.`,
+    });
+    return res.json({ ok: true, status: 'DISCUSSING_Q' });
   }
 });
 
