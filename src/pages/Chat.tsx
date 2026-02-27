@@ -116,6 +116,12 @@ const Chat = () => {
     loadPeople();
   }, [loadPeople]);
 
+  // Auto-refresh people list every 30s so new contacts appear without manual refresh
+  useEffect(() => {
+    const id = setInterval(() => loadPeople().catch(() => {}), 30_000);
+    return () => clearInterval(id);
+  }, [loadPeople]);
+
   // ── Select a person ─────────────────────────────────────────────────────────
   const selectPerson = useCallback(async (customerId: string) => {
     setSelectedId(customerId);
@@ -333,40 +339,13 @@ const Chat = () => {
                   </span>
                 )}
                 <div className="ml-auto flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
-                    disabled={deletingChat || deletingContact}
-                    onClick={async () => {
-                      if (!selectedId) return;
-                      if (!window.confirm(`Delete the entire chat with ${selectedPerson?.name}? This will archive all messages and remove them from the list. This cannot be undone.`)) return;
-                      setDeletingChat(true);
-                      try {
-                        await deletePortalChat(selectedId);
-                        const deletedId = selectedId;
-                        setChatMessages([]);
-                        setChatUnreadCounts((prev) => { const next = { ...prev }; delete next[deletedId]; return next; });
-                        setPeople((prev) => prev.filter((p) => p.customerId !== deletedId));
-                        setSelectedId(null);
-                        setMobileShowChat(false);
-                        toast({ title: "Chat deleted", description: "Archived and removed from the list." });
-                      } catch (err) {
-                        toast({ title: "Error", description: String(err), variant: "destructive" });
-                      } finally {
-                        setDeletingChat(false);
-                      }
-                    }}
-                  >
-                    {deletingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    Delete Chat
-                  </Button>
-                  {isAdmin && (
+                  {isAdmin ? (
+                    // Admins: Delete Contact removes everything (record + chat)
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
-                      disabled={deletingContact || deletingChat}
+                      disabled={deletingContact}
                       onClick={async () => {
                         if (!selectedId) return;
                         if (!window.confirm(`Permanently delete contact "${selectedPerson?.name}"?\n\nThis will delete the customer record and ALL associated data (chat history, portal link, documents, etc.).\n\nThis action CANNOT be undone.`)) return;
@@ -389,6 +368,36 @@ const Chat = () => {
                     >
                       {deletingContact ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserX className="h-3.5 w-3.5" />}
                       Delete Contact
+                    </Button>
+                  ) : (
+                    // Non-admins: Delete Chat clears messages only
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+                      disabled={deletingChat}
+                      onClick={async () => {
+                        if (!selectedId) return;
+                        if (!window.confirm(`Delete the entire chat with ${selectedPerson?.name}? This will archive all messages and remove them from the list. This cannot be undone.`)) return;
+                        setDeletingChat(true);
+                        try {
+                          await deletePortalChat(selectedId);
+                          const deletedId = selectedId;
+                          setChatMessages([]);
+                          setChatUnreadCounts((prev) => { const next = { ...prev }; delete next[deletedId]; return next; });
+                          setPeople((prev) => prev.filter((p) => p.customerId !== deletedId));
+                          setSelectedId(null);
+                          setMobileShowChat(false);
+                          toast({ title: "Chat deleted", description: "Archived and removed from the list." });
+                        } catch (err) {
+                          toast({ title: "Error", description: String(err), variant: "destructive" });
+                        } finally {
+                          setDeletingChat(false);
+                        }
+                      }}
+                    >
+                      {deletingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete Chat
                     </Button>
                   )}
                 </div>
