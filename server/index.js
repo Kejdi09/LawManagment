@@ -2535,3 +2535,11 @@ app.delete('/api/portal-chat/:customerId/:messageId', verifyAuth, async (req, re
   await portalMessagesCol.deleteOne({ customerId, messageId: String(req.params.messageId) });
   res.json({ ok: true });
 });
+
+// Delete entire chat history for a customer
+app.delete('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
+  const customerId = String(req.params.customerId).trim();
+  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
+  await portalMessagesCol.deleteMany({ customerId });
+  res.json({ ok: true });
+});

@@ -11,6 +11,7 @@ import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPan
 import ClientIntakeForm from "@/components/ClientIntakeForm";
 import FaqBot from "@/components/FaqBot";
 import { getServiceContent, fmt, EUR_RATE, USD_RATE, GBP_RATE } from "@/components/ProposalModal";
+import ProposalRenderer from "@/components/ProposalRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
@@ -146,39 +147,45 @@ export default function ClientPortalPage() {
   const prevMsgCountRef = useRef(0);
   const proposalViewedRef = useRef(false);
   const portalPrintRef = useRef<HTMLDivElement>(null);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
-  function handlePortalPrint() {
+  async function handlePortalPrint() {
     const content = portalPrintRef.current;
-    if (!content) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const clientName = data?.client?.name ?? "Client";
-    win.document.write(`<!DOCTYPE html><html><head>
-      <title>Service Proposal — ${clientName}</title>
-      <meta charset="utf-8"/>
-      <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
-        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
-        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
-        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
-        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
-        .cover-block p { margin: 3px 0; font-size: 13px; }
-        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
-        p, li { font-size: 13px; line-height: 1.7; margin: 4px 0; }
-        ul { padding-left: 20px; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
-        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border: 1px solid #ccc; }
-        td { padding: 6px 10px; border: 1px solid #ddd; }
-        .total-row td { font-weight: bold; background: #f8f8f8; }
-        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 12px; font-size: 11px; color: #777; text-align: center; }
-        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
-      </style>
-    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 500);
+    if (!content || pdfGenerating) return;
+    setPdfGenerating(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+      const canvas = await html2canvas(content, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgData = canvas.toDataURL('image/png');
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      let posY = 0;
+      let remaining = imgH;
+      pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
+      remaining -= pageH;
+      while (remaining > 0) {
+        posY -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
+        remaining -= pageH;
+      }
+      pdf.save(`Proposal - ${data?.client?.name ?? 'Client'}.pdf`);
+    } catch {
+      // silent fail
+    } finally {
+      setPdfGenerating(false);
+    }
   }
 
   // Load portal data
@@ -463,7 +470,7 @@ export default function ClientPortalPage() {
           )}
 
           {/* ── PROPOSAL TAB ── */}
-          {showProposalTab && snap && pServiceContent && (
+          {showProposalTab && snap && (
             <TabsContent value="proposal" className="mt-0 space-y-3">
               {data.proposalExpiresAt && new Date(data.proposalExpiresAt) < new Date() && (
                 <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -472,136 +479,18 @@ export default function ClientPortalPage() {
                 </div>
               )}
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={handlePortalPrint} className="gap-1.5">
+                <Button variant="outline" size="sm" onClick={handlePortalPrint} disabled={pdfGenerating} className="gap-1.5">
                   <FileDown className="h-4 w-4" />
-                  Save as PDF
+                  {pdfGenerating ? "Generating…" : "Save as PDF"}
                 </Button>
               </div>
-              <div
-                ref={portalPrintRef}
-                className="bg-white text-gray-900 rounded-lg border shadow-sm p-8 font-serif text-[13px] leading-relaxed"
-                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-              >
-                {/* Cover */}
-                <h1 className="text-2xl font-bold text-center uppercase tracking-widest mb-1">Service Proposal</h1>
-                <p className="text-center text-sm text-gray-500 mb-6">Presented to: <strong>{data.client.name}</strong></p>
-
-                <div className="border rounded p-4 mb-2 bg-gray-50">
-                  <p className="text-sm font-semibold mb-1">Services Provided:</p>
-                  <p className="text-sm">{snap.proposalTitle}</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2 border rounded p-4 bg-gray-50">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Tirana</p>
-                    <p className="text-xs text-gray-700">Gjergj Fishta Blvd, F.G.P Bld. Ent. nr. 2, Office 5, 1001, Tirana, Albania.</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Office in Durrës</p>
-                    <p className="text-xs text-gray-700">Rruga Aleksandër Goga, Lagja 11, 2001, Durrës, Albania.</p>
-                  </div>
-                </div>
-
-                <div className="border rounded p-4 mb-8 bg-gray-50 text-xs text-gray-700 flex flex-wrap gap-4">
-                  <span>☎ +355 69 69 52 989</span>
-                  <span>✉ info@dafkulawfirm.al</span>
-                  <span>🌐 www.dafkulawfirm.al</span>
-                  <span className="ml-auto font-semibold">Date: {pDisplayDate}</span>
-                </div>
-
-                {/* Section 1 */}
-                <div className="mb-1">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">1 — Scope of the Proposal</p>
-                  <p className="text-sm">{pServiceContent.scopeParagraph}</p>
-                  {snap.transactionValueEUR && (
-                    <p className="text-sm mt-1">Total estimated transaction value: <strong>EUR {fmt(snap.transactionValueEUR, 0)}</strong>.</p>
-                  )}
-                </div>
-
-                {/* Section 2 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">2 — Scope of Services Provided</p>
-                  {pServiceContent.servicesSections.map((sec) => (
-                    <div key={sec.heading} className="mt-3">
-                      <p className="text-sm font-semibold mb-1">{sec.heading}</p>
-                      <ul className="list-disc pl-5 space-y-0.5">
-                        {sec.bullets.map((b, i) => <li key={i} className="text-sm">{b}</li>)}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Section 3 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">3 — Required Documents</p>
-                  <ul className="list-disc pl-5 space-y-0.5">
-                    {pServiceContent.requiredDocs.map((d, i) => <li key={i} className="text-sm">{d}</li>)}
-                  </ul>
-                </div>
-
-                {/* Section 4 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">4 — Fees &amp; Costs</p>
-                  <p className="text-sm font-semibold mb-1">4.2 Fees Applied to This Engagement</p>
-                  <table className="w-full border-collapse text-sm mb-4">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border px-3 py-1.5 text-left">Description</th>
-                        <th className="border px-3 py-1.5 text-right">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr><td className="border px-3 py-1.5">Consultation fee</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pConsultation, 0)} ALL</td></tr>
-                      <tr>
-                        <td className="border px-3 py-1.5">Service fee{snap.propertyDescription ? ` — ${snap.propertyDescription}` : ""}</td>
-                        <td className="border px-3 py-1.5 text-right font-mono">{fmt(pServiceFee, 0)} ALL</td>
-                      </tr>
-                      <tr className="bg-gray-50 font-semibold"><td className="border px-3 py-1.5">Service Fees Subtotal</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pServiceSubtotal, 0)} ALL</td></tr>
-                      <tr><td className="border px-3 py-1.5">Power of Attorney</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pPoa, 0)} ALL</td></tr>
-                      <tr><td className="border px-3 py-1.5">Translation &amp; Notary{snap.additionalCostsNote ? ` (${snap.additionalCostsNote})` : ""}</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pTranslation, 0)} ALL</td></tr>
-                      <tr><td className="border px-3 py-1.5">Other fees</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pOther, 0)} ALL</td></tr>
-                      <tr className="bg-gray-50 font-semibold"><td className="border px-3 py-1.5">Additional Costs Subtotal</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pAdditionalSubtotal, 0)} ALL</td></tr>
-                      <tr className="bg-gray-100 font-bold"><td className="border px-3 py-1.5">TOTAL</td><td className="border px-3 py-1.5 text-right font-mono">{fmt(pTotal, 0)} ALL ≈ {fmt(pTotalEUR)} EUR ≈ {fmt(pTotalUSD)} USD ≈ {fmt(pTotalGBP)} GBP</td></tr>
-                    </tbody>
-                  </table>
-                  <p className="text-xs text-gray-500 mb-4">Currency conversions are indicative only (source: xe.com)</p>
-                </div>
-
-                {/* Section 5 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">5 — Payment Terms</p>
-                  {snap.paymentTermsNote ? (
-                    <p className="text-sm">{snap.paymentTermsNote}</p>
-                  ) : (
-                    <ul className="list-disc pl-5 space-y-1 text-sm">
-                      <li>50% payable upon signing of the engagement agreement.</li>
-                      <li>50% payable prior to completion of the engagement.</li>
-                      <li>Government, notary, and third-party costs are payable separately and in advance.</li>
-                      <li>Payments may be made via bank transfer, cash, card, PayPal, or other agreed method.</li>
-                    </ul>
-                  )}
-                </div>
-
-                {/* Section 6 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">6 — Timeline Overview</p>
-                  <ul className="list-disc pl-5 space-y-0.5 text-sm">
-                    {pServiceContent.timeline.map((t, i) => <li key={i}>{t}</li>)}
-                  </ul>
-                </div>
-
-                {/* Section 7 */}
-                <div className="mt-6">
-                  <p className="text-sm font-bold border-b pb-1 mb-2">7 — Next Steps</p>
-                  <ul className="list-disc pl-5 space-y-0.5 text-sm">
-                    {pServiceContent.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
-                  </ul>
-                </div>
-
-                <div className="mt-10 border-t pt-4 text-center text-xs text-gray-400">
-                  DAFKU Law Firm · Tirana &amp; Durrës, Albania · info@dafkulawfirm.al · www.dafkulawfirm.al
-                </div>
-              </div>
+              <ProposalRenderer
+                innerRef={portalPrintRef}
+                clientName={data.client.name}
+                clientId={data.client.customerId}
+                services={(data.client.services || []) as import("@/lib/types").ServiceType[]}
+                fields={snap}
+              />
 
               <p className="text-xs text-muted-foreground text-center">
                 Questions about this proposal?{" "}

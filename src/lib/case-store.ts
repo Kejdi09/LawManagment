@@ -511,6 +511,10 @@ export async function deletePortalChatMessage(customerId: string, messageId: str
   await api(`/api/portal-chat/${customerId}/${messageId}`, { method: "DELETE" });
 }
 
+export async function deletePortalChat(customerId: string): Promise<void> {
+  await api(`/api/portal-chat/${customerId}`, { method: "DELETE" });
+}
+
 export async function getChatUnreadCounts(): Promise<Array<{ customerId: string; unreadCount: number }>> {
   return api<Array<{ customerId: string; unreadCount: number }>>(`/api/portal-chat/unread-counts`);
 }

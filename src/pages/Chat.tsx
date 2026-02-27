@@ -9,6 +9,7 @@ import {
   Loader2,
   MessageSquare,
   Search,
+  Trash2,
   Users,
   XCircle,
   ArrowLeft,
@@ -24,6 +25,7 @@ import {
   sendAdminMessage,
   markChatRead,
   deletePortalChatMessage,
+  deletePortalChat,
   getChatUnreadCounts,
 } from "@/lib/case-store";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
@@ -61,6 +63,7 @@ const Chat = () => {
   const [chatText, setChatText] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  const [deletingChat, setDeletingChat] = useState(false);
 
   // Unread counts per person
   const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
@@ -326,6 +329,32 @@ const Chat = () => {
                     {unreadCount} new
                   </span>
                 )}
+                <div className="ml-auto">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+                    disabled={deletingChat || chatMessages.length === 0}
+                    onClick={async () => {
+                      if (!selectedId) return;
+                      if (!window.confirm(`Delete the entire chat history with ${selectedPerson?.name}? This cannot be undone.`)) return;
+                      setDeletingChat(true);
+                      try {
+                        await deletePortalChat(selectedId);
+                        setChatMessages([]);
+                        setChatUnreadCounts((prev) => ({ ...prev, [selectedId]: 0 }));
+                        toast({ title: "Chat cleared", description: "All messages have been deleted." });
+                      } catch (err) {
+                        toast({ title: "Error", description: String(err), variant: "destructive" });
+                      } finally {
+                        setDeletingChat(false);
+                      }
+                    }}
+                  >
+                    {deletingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Clear Chat
+                  </Button>
+                </div>
               </div>
 
               {/* Portal link bar */}

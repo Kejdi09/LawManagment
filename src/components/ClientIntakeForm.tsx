@@ -71,6 +71,43 @@ const BUDGET_RANGES: { label: string; value: number }[] = [
   { label: "Over €250,000", value: 300000 },
 ];
 
+const PREVIOUS_REFUSALS_OPTIONS = [
+  "None — I have never been refused a visa or residence permit",
+  "Yes — I will provide details in the Messages tab",
+];
+
+const COMPANY_TYPES = [
+  "SH.P.K. (Limited Liability Company)",
+  "SH.A. (Joint Stock Company)",
+  "Branch of Foreign Company",
+  "Representative Office",
+  "Other",
+];
+
+const SHARE_CAPITAL_RANGES: { label: string; value: number }[] = [
+  { label: "Minimum required (500,000 ALL ≈ €5,000)", value: 500000 },
+  { label: "1,000,000 ALL (≈ €10,000)", value: 1000000 },
+  { label: "2,500,000 ALL (≈ €25,000)", value: 2500000 },
+  { label: "5,000,000 ALL (≈ €50,000)", value: 5000000 },
+  { label: "10,000,000 ALL (≈ €100,000)", value: 10000000 },
+  { label: "To be confirmed later", value: 500000 },
+];
+
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Argentina", "Armenia", "Australia",
+  "Austria", "Azerbaijan", "Bahrain", "Bangladesh", "Belgium", "Bosnia and Herzegovina",
+  "Brazil", "Bulgaria", "Canada", "China", "Colombia", "Croatia", "Czech Republic",
+  "Denmark", "Egypt", "Estonia", "Ethiopia", "Finland", "France", "Georgia", "Germany",
+  "Ghana", "Greece", "Hungary", "India", "Indonesia", "Iran", "Iraq", "Ireland",
+  "Israel", "Italy", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kosovo", "Kuwait",
+  "Lebanon", "Lithuania", "Malaysia", "Mexico", "Moldova", "Montenegro", "Morocco",
+  "Netherlands", "Nigeria", "Norway", "Pakistan", "Palestine", "Philippines",
+  "Poland", "Portugal", "Qatar", "Romania", "Russia", "Saudi Arabia", "Serbia",
+  "Slovakia", "Slovenia", "South Africa", "Spain", "Sri Lanka", "Sweden", "Switzerland",
+  "Syria", "Taiwan", "Tunisia", "Turkey", "UAE", "Ukraine", "United Kingdom",
+  "United States", "Uzbekistan", "Venezuela", "Vietnam", "Other",
+];
+
 // ── helpers ───────────────────────────────────────────────────────────────
 function Select({
   id, label, value, onChange, options, placeholder,
@@ -129,41 +166,57 @@ function Field({
 
 // ── types ─────────────────────────────────────────────────────────────────
 type IntakeFormData = {
+  // ─ Personal / shared ─
   nationality: string;
+  country: string;              // country of current residence
+  idPassportNumber: string;     // optional: passport / ID number
   occupation: string;
   occupationOther: string;
   relocationMotive: string;
-  // Dependent (pensioner)
+  previousRefusals: string;     // pensioner + visa_d
+  // ─ Dependent (pensioner) ─
   hasDependent: boolean;
   dependentName: string;
   dependentNationality: string;
   dependentOccupation: string;
   dependentOccupationOther: string;
-  // Real estate
+  // ─ Employment (visa_d) ─
+  employerName: string;
+  // ─ Real estate ─
   propertyType: string;
   propertyLocation: string;
   budgetRange: number | "";
-  // Company formation (extra)
+  // ─ Company formation ─
   companyActivityDescription: string;
   companyNameIdeas: string;
+  companyType: string;                // SH.P.K. / SH.A. / etc.
+  numberOfShareholders: number | "";  // how many shareholders
+  shareCapitalALL: number | "";       // registered capital in ALL
 };
 
 function emptyForm(): IntakeFormData {
   return {
     nationality: "",
+    country: "",
+    idPassportNumber: "",
     occupation: "",
     occupationOther: "",
     relocationMotive: "",
+    previousRefusals: "",
     hasDependent: false,
     dependentName: "",
     dependentNationality: "",
     dependentOccupation: "",
     dependentOccupationOther: "",
+    employerName: "",
     propertyType: "",
     propertyLocation: "",
     budgetRange: "",
     companyActivityDescription: "",
     companyNameIdeas: "",
+    companyType: "",
+    numberOfShareholders: "",
+    shareCapitalALL: "",
   };
 }
 
@@ -176,22 +229,26 @@ function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<Pr
   const nationality = form.nationality;
   const occupation = form.occupation === "Other" ? form.occupationOther : form.occupation;
 
+  const shared: Partial<ProposalFields> = {
+    nationality,
+    employmentType: occupation,
+    country: form.country || undefined,
+    idPassportNumber: form.idPassportNumber || undefined,
+  };
+
   if (isRealEstate) {
     const desc = [form.propertyType, form.propertyLocation].filter(Boolean).join(", ");
     return {
-      nationality,
-      employmentType: occupation,
+      ...shared,
       propertyDescription: desc,
       transactionValueEUR: form.budgetRange !== "" ? Number(form.budgetRange) : undefined,
     };
   }
 
-  const base: Partial<ProposalFields> = {
-    nationality,
-    employmentType: occupation,
-  };
+  const base: Partial<ProposalFields> = { ...shared };
 
   if (isPensioner) {
+    base.previousRefusals = form.previousRefusals || undefined;
     Object.assign(base, {
       dependentName: form.hasDependent ? form.dependentName : "",
       dependentNationality: form.hasDependent ? form.dependentNationality : "",
@@ -201,13 +258,17 @@ function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<Pr
     });
   }
 
+  if (isEmployment) {
+    base.previousRefusals = form.previousRefusals || undefined;
+    if (form.employerName) base.purposeOfStay = "Employment";
+  }
+
   if (isCompany) {
     base.purposeOfStay = form.relocationMotive || "Self-Employment/Company Registration";
     base.businessActivity = form.companyActivityDescription;
-  }
-
-  if (isEmployment) {
-    // relocation motive is static "Employment" — no need to store
+    base.companyType = form.companyType || undefined;
+    base.numberOfShareholders = form.numberOfShareholders !== "" ? Number(form.numberOfShareholders) : undefined;
+    base.shareCapitalALL = form.shareCapitalALL !== "" ? Number(form.shareCapitalALL) : undefined;
   }
 
   return base;
@@ -239,13 +300,19 @@ export default function ClientIntakeForm({
     const f = emptyForm();
     if (savedFields) {
       f.nationality = savedFields.nationality || "";
+      f.country = savedFields.country || "";
+      f.idPassportNumber = savedFields.idPassportNumber || "";
       f.occupation = savedFields.employmentType || "";
       f.relocationMotive = savedFields.purposeOfStay || "";
+      f.previousRefusals = savedFields.previousRefusals || "";
       f.dependentName = savedFields.dependentName || "";
       f.dependentNationality = savedFields.dependentNationality || "";
       f.dependentOccupation = savedFields.dependentOccupation || "";
       f.hasDependent = !!(savedFields.dependentName);
       f.companyActivityDescription = savedFields.businessActivity || "";
+      f.companyType = savedFields.companyType || "";
+      f.numberOfShareholders = savedFields.numberOfShareholders ?? "";
+      f.shareCapitalALL = savedFields.shareCapitalALL ?? "";
       if (savedFields.propertyDescription) f.propertyType = savedFields.propertyDescription;
       if (savedFields.transactionValueEUR) f.budgetRange = savedFields.transactionValueEUR;
     }
@@ -339,6 +406,23 @@ export default function ClientIntakeForm({
         />
 
         <Select
+          id="country"
+          label="Country of Current Residence"
+          value={form.country}
+          onChange={(v) => set("country", v)}
+          options={COUNTRIES}
+          placeholder="— Select country of residence —"
+        />
+
+        <Field
+          id="idPassportNumber"
+          label="Passport / ID Number (optional)"
+          value={form.idPassportNumber}
+          onChange={(v) => set("idPassportNumber", v)}
+          placeholder="e.g. AB123456"
+        />
+
+        <Select
           id="occupation"
           label="Occupation / Employment Type"
           value={form.occupation}
@@ -415,20 +499,41 @@ export default function ClientIntakeForm({
               )}
             </div>
           )}
+
+          <Select
+            id="previousRefusals"
+            label="Previous Visa or Residency Permit Refusals"
+            value={form.previousRefusals}
+            onChange={(v) => set("previousRefusals", v)}
+            options={PREVIOUS_REFUSALS_OPTIONS}
+            placeholder="— Select an option —"
+          />
         </div>
       )}
 
       {/* ── EMPLOYMENT VISA D ── */}
       {isEmployment && (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold border-b pb-1">Type D Visa & Residency Permit</p>
+        <div className="space-y-4">
+          <p className="text-sm font-semibold border-b pb-1">Type D Visa &amp; Residency Permit</p>
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
             <span className="text-muted-foreground">Relocation motive: </span>
             <span className="font-medium">Employment (Staff Relocation)</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            No additional selections needed for this service beyond the fields above.
-          </p>
+          <Field
+            id="employerName"
+            label="Employer / Company Name in Albania"
+            value={form.employerName}
+            onChange={(v) => set("employerName", v)}
+            placeholder="e.g. Alpine Trade Sh.P.K."
+          />
+          <Select
+            id="previousRefusalsEmployment"
+            label="Previous Visa or Residency Permit Refusals"
+            value={form.previousRefusals}
+            onChange={(v) => set("previousRefusals", v)}
+            options={PREVIOUS_REFUSALS_OPTIONS}
+            placeholder="— Select an option —"
+          />
         </div>
       )}
 
@@ -461,6 +566,46 @@ export default function ClientIntakeForm({
             onChange={(v) => set("companyNameIdeas", v)}
             placeholder="e.g. Alpine Trade Sh.P.K."
           />
+
+          <Select
+            id="companyType"
+            label="Preferred Legal Form of the Company"
+            value={form.companyType}
+            onChange={(v) => set("companyType", v)}
+            options={COMPANY_TYPES}
+            placeholder="— Select company type —"
+          />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="numberOfShareholders">Number of Shareholders</Label>
+            <Input
+              id="numberOfShareholders"
+              type="number"
+              min={1}
+              max={100}
+              value={form.numberOfShareholders === "" ? "" : String(form.numberOfShareholders)}
+              onChange={(e) => set("numberOfShareholders", e.target.value === "" ? "" : Number(e.target.value))}
+              placeholder="e.g. 1"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="shareCapitalALL">Approximate Registered Share Capital</Label>
+            <div className="relative">
+              <select
+                id="shareCapitalALL"
+                value={form.shareCapitalALL === "" ? "" : String(form.shareCapitalALL)}
+                onChange={(e) => set("shareCapitalALL", e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm appearance-none pr-8 focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">— Select capital range —</option>
+                {SHARE_CAPITAL_RANGES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
         </div>
       )}
 
