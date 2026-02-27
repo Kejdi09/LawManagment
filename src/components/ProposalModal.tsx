@@ -1593,8 +1593,9 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
 
               // ─────────────────────────────────────────────────────────────
               // TEMPLATE 2: TYPE D VISA & RESIDENCE PERMIT FOR EMPLOYMENT
+              // (pure employment only — company_formation takes priority via Template 3)
               // ─────────────────────────────────────────────────────────────
-              if (svcs.includes("visa_d")) {
+              if (svcs.includes("visa_d") && !svcs.includes("company_formation")) {
                 return (
                   <div ref={printRef} className="bg-white text-gray-900 rounded-lg border shadow-sm p-10 font-serif text-[13px] leading-relaxed" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                     <CommonCover contactLine={<RelocateContactBar />} />

@@ -537,8 +537,9 @@ const ProposalPreview = React.forwardRef<HTMLDivElement, ProposalPreviewProps>(
 
     // ─────────────────────────────────────────────────────────────────────────
     // TEMPLATE 2: TYPE D VISA & RESIDENCE PERMIT FOR EMPLOYMENT
+    // (pure employment only — company_formation takes priority via Template 3)
     // ─────────────────────────────────────────────────────────────────────────
-    if (svcs.includes("visa_d")) {
+    if (svcs.includes("visa_d") && !svcs.includes("company_formation")) {
       return (
         <div ref={ref} className={wrapperClass} style={serif}>
           <CommonCover contactLine={<RelocateContactBar />} />
