@@ -231,6 +231,7 @@ export type LeadStatus =
   | "INTAKE"
   | "SEND_PROPOSAL"
   | "WAITING_APPROVAL"
+  | "DISCUSSING_Q"
   | "SEND_CONTRACT"
   | "WAITING_ACCEPTANCE"
   | "SEND_RESPONSE"
@@ -245,6 +246,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   INTAKE: "Intake / New",
   SEND_PROPOSAL: "Send Proposal",
   WAITING_APPROVAL: "Waiting Approval",
+  DISCUSSING_Q: "Discussing Proposal",
   SEND_CONTRACT: "Send Contract",
   WAITING_ACCEPTANCE: "Waiting Acceptance",
   SEND_RESPONSE: "Send Respond",
@@ -292,7 +294,7 @@ export const STATE_LABELS: Record<CaseState, string> = {
   INTAKE: "Intake",
   SEND_PROPOSAL: "Send Proposal",
   WAITING_RESPONSE_P: "Waiting Response (P)",
-  DISCUSSING_Q: "Discussing Q",
+  DISCUSSING_Q: "Discussing Proposal",
   SEND_CONTRACT: "Send Contract",
   WAITING_RESPONSE_C: "Waiting Response (C)",
 };

@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Search,
   Trash2,
+  UserX,
   Users,
   XCircle,
   ArrowLeft,
@@ -27,6 +28,7 @@ import {
   deletePortalChatMessage,
   deletePortalChat,
   getChatUnreadCounts,
+  deleteCustomer,
 } from "@/lib/case-store";
 import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import { Customer, LEAD_STATUS_LABELS, PortalMessage } from "@/lib/types";
@@ -64,6 +66,7 @@ const Chat = () => {
   const [chatSending, setChatSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
+  const [deletingContact, setDeletingContact] = useState(false);
 
   // Unread counts per person
   const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
@@ -329,12 +332,12 @@ const Chat = () => {
                     {unreadCount} new
                   </span>
                 )}
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-1">
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
-                    disabled={deletingChat}
+                    disabled={deletingChat || deletingContact}
                     onClick={async () => {
                       if (!selectedId) return;
                       if (!window.confirm(`Delete the entire chat with ${selectedPerson?.name}? This will archive all messages and remove them from the list. This cannot be undone.`)) return;
@@ -358,6 +361,36 @@ const Chat = () => {
                     {deletingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     Delete Chat
                   </Button>
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+                      disabled={deletingContact || deletingChat}
+                      onClick={async () => {
+                        if (!selectedId) return;
+                        if (!window.confirm(`Permanently delete contact "${selectedPerson?.name}"?\n\nThis will delete the customer record and ALL associated data (chat history, portal link, documents, etc.).\n\nThis action CANNOT be undone.`)) return;
+                        setDeletingContact(true);
+                        try {
+                          await deleteCustomer(selectedId);
+                          const deletedId = selectedId;
+                          setChatMessages([]);
+                          setChatUnreadCounts((prev) => { const next = { ...prev }; delete next[deletedId]; return next; });
+                          setPeople((prev) => prev.filter((p) => p.customerId !== deletedId));
+                          setSelectedId(null);
+                          setMobileShowChat(false);
+                          toast({ title: "Contact deleted", description: `${selectedPerson?.name} has been permanently removed.` });
+                        } catch (err) {
+                          toast({ title: "Error", description: String(err), variant: "destructive" });
+                        } finally {
+                          setDeletingContact(false);
+                        }
+                      }}
+                    >
+                      {deletingContact ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserX className="h-3.5 w-3.5" />}
+                      Delete Contact
+                    </Button>
+                  )}
                 </div>
               </div>
 

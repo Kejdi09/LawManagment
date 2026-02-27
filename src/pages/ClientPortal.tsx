@@ -138,9 +138,7 @@ export default function ClientPortalPage() {
   const [linkExpired, setLinkExpired] = useState(false);
   // Proposal response state
   const [proposalResponding, setProposalResponding] = useState(false);
-  const [proposalRespondDone, setProposalRespondDone] = useState<"accepted" | "revision" | null>(null);
-  const [revisionNote, setRevisionNote] = useState("");
-  const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [proposalRespondDone, setProposalRespondDone] = useState<"accepted" | null>(null);
   // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
   const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -508,76 +506,43 @@ export default function ClientPortalPage() {
                       Proposal accepted — your lawyer has been notified.
                     </div>
                   )}
-                  {proposalRespondDone === "revision" && (
-                    <div className="flex items-center gap-2 justify-center text-amber-700 dark:text-amber-400 font-medium text-sm">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Revision request sent — we&apos;ll be in touch shortly.
-                    </div>
-                  )}
                   {!proposalRespondDone && (
                     <>
                       <p className="text-sm font-medium text-center mb-4">Ready to proceed?</p>
-                      {!showRevisionForm ? (
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                          <Button
-                            className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                            disabled={proposalResponding}
-                            onClick={async () => {
-                              if (!token) return;
-                              setProposalResponding(true);
-                              try {
-                                await respondToProposal(token, "accept");
-                                setProposalRespondDone("accepted");
-                              } finally {
-                                setProposalResponding(false);
-                              }
-                            }}
-                          >
-                            <ThumbsUp className="w-4 h-4" />
-                            Accept Proposal
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="gap-2"
-                            disabled={proposalResponding}
-                            onClick={() => setShowRevisionForm(true)}
-                          >
-                            <PenLine className="w-4 h-4" />
-                            Request Revisions
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3 max-w-lg mx-auto">
-                          <p className="text-sm text-muted-foreground">Describe what you&apos;d like adjusted:</p>
-                          <Textarea
-                            placeholder="e.g. Please clarify the timeline for step 2…"
-                            value={revisionNote}
-                            onChange={(e) => setRevisionNote(e.target.value)}
-                            rows={3}
-                          />
-                          <div className="flex gap-2 justify-end">
-                            <Button variant="ghost" size="sm" onClick={() => setShowRevisionForm(false)}>
-                              Cancel
-                            </Button>
-                            <Button
-                              size="sm"
-                              disabled={proposalResponding || !revisionNote.trim()}
-                              onClick={async () => {
-                                if (!token) return;
-                                setProposalResponding(true);
-                                try {
-                                  await respondToProposal(token, "revision", revisionNote.trim());
-                                  setProposalRespondDone("revision");
-                                } finally {
-                                  setProposalResponding(false);
-                                }
-                              }}
+                      <div className="flex flex-col items-center gap-4">
+                        <Button
+                          className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                          disabled={proposalResponding}
+                          onClick={async () => {
+                            if (!token) return;
+                            setProposalResponding(true);
+                            try {
+                              await respondToProposal(token, "accept");
+                              setProposalRespondDone("accepted");
+                            } finally {
+                              setProposalResponding(false);
+                            }
+                          }}
+                        >
+                          <ThumbsUp className="w-4 h-4" />
+                          Accept Proposal
+                        </Button>
+                        <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm text-center max-w-sm">
+                          <p className="font-medium mb-1">Have questions or concerns about this proposal?</p>
+                          <p className="text-xs text-muted-foreground">
+                            Contact us via{" "}
+                            <a
+                              href="https://wa.me/355696952989"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline decoration-dotted hover:text-foreground font-medium"
                             >
-                              Send Request
-                            </Button>
-                          </div>
+                              WhatsApp (+355 69 69 52 989)
+                            </a>
+                            {" "}or use the <strong>Messages</strong> tab on this page — we&apos;re happy to discuss.
+                          </p>
                         </div>
-                      )}
+                      </div>
                     </>
                   )}
                 </div>

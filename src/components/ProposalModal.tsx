@@ -773,16 +773,19 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
       if (svcs.includes("visa_d")) return "Type D Visa & Residence Permit for Employees";
       return `Legal Assistance — ${svcs.map((s) => SERVICE_LABELS[s] || s).join(", ")}`;
     })();
+    // Auto-apply standard fee presets when no custom fees have been set yet
+    const hasCustomFees = (customer.proposalFields?.serviceFeeALL ?? 0) > 0;
+    const presets = hasCustomFees ? {} as ReturnType<typeof computePresetFees> : computePresetFees(svcs as ServiceType[]);
     return {
     proposalTitle: defaultTitle,
     proposalDate: customer.proposalFields?.proposalDate || today,
     propertyDescription: customer.proposalFields?.propertyDescription || "",
     transactionValueEUR: customer.proposalFields?.transactionValueEUR ?? undefined,
-    consultationFeeALL: customer.proposalFields?.consultationFeeALL ?? 0,
-    serviceFeeALL: customer.proposalFields?.serviceFeeALL ?? 0,
+    consultationFeeALL: customer.proposalFields?.consultationFeeALL ?? presets.consultationFeeALL ?? 0,
+    serviceFeeALL: customer.proposalFields?.serviceFeeALL ?? presets.serviceFeeALL ?? 0,
     serviceFeePct: customer.proposalFields?.serviceFeePct ?? undefined,
-    poaFeeALL: customer.proposalFields?.poaFeeALL ?? 0,
-    translationFeeALL: customer.proposalFields?.translationFeeALL ?? 0,
+    poaFeeALL: customer.proposalFields?.poaFeeALL ?? presets.poaFeeALL ?? 0,
+    translationFeeALL: customer.proposalFields?.translationFeeALL ?? presets.translationFeeALL ?? 0,
     otherFeesALL: customer.proposalFields?.otherFeesALL ?? 0,
     additionalCostsNote: customer.proposalFields?.additionalCostsNote || "",
     paymentTermsNote: customer.proposalFields?.paymentTermsNote || "",
@@ -915,7 +918,10 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="edit" className="flex flex-col flex-1 overflow-hidden">
+        <Tabs defaultValue={
+            (customer.proposalFields?.nationality || customer.proposalFields?.numberOfApplicants || customer.proposalFields?.businessActivity || customer.proposalFields?.dependentName || customer.proposalFields?.purposeOfStay)
+              ? "preview" : "edit"
+          } className="flex flex-col flex-1 overflow-hidden">
           <TabsList className="mx-6 mt-2 w-fit shrink-0">
             <TabsTrigger value="edit">Edit Fields</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
