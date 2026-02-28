@@ -3001,7 +3001,175 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
   res.json({ ok: true });
 });
 
-// ── Public Self-Registration ──────────────────────────────────────────────────
+// ── Public Self-Registration (standalone page — no frontend URL exposed) ─────
+// Serve a self-contained registration form from the backend domain.
+// Share /join as the public enquiry link — it never reveals the admin app URL.
+app.get('/join', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DAFKU Law Firm — Client Enquiry</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f11;color:#e2e2e8;min-height:100vh}
+a{color:#a78bfa}
+header{border-bottom:1px solid #27272a;background:#18181b;padding:16px 20px}
+.header-inner{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:50%;background:#7c3aed22;border:1px solid #7c3aed55;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#a78bfa;flex-shrink:0}
+.firm-name{font-size:14px;font-weight:600;color:#f4f4f5}
+.firm-sub{font-size:12px;color:#71717a}
+main{max-width:560px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:24px;font-weight:700;color:#f4f4f5;margin-bottom:6px}
+.subtitle{font-size:14px;color:#71717a;margin-bottom:32px;line-height:1.5}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:480px){.form-grid{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+label{font-size:13px;font-weight:500;color:#a1a1aa}
+label span{color:#f87171;margin-left:2px}
+input,textarea{background:#18181b;border:1px solid #27272a;border-radius:8px;padding:10px 12px;font-size:14px;color:#f4f4f5;width:100%;outline:none;transition:border-color .15s}
+input:focus,textarea:focus{border-color:#7c3aed}
+input::placeholder,textarea::placeholder{color:#3f3f46}
+textarea{resize:vertical;min-height:90px;font-family:inherit}
+.services-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+@media(max-width:420px){.services-grid{grid-template-columns:1fr}}
+.svc-label{display:flex;align-items:center;gap:10px;border:1px solid #27272a;border-radius:8px;padding:10px 12px;cursor:pointer;transition:background .15s,border-color .15s;font-size:13px;color:#a1a1aa;user-select:none}
+.svc-label:hover{background:#18181b;border-color:#3f3f46}
+.svc-label input[type=checkbox]{display:none}
+.checkmark{width:16px;height:16px;border:1.5px solid #3f3f46;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+.svc-label.checked{border-color:#7c3aed55;background:#7c3aed11;color:#c4b5fd}
+.svc-label.checked .checkmark{background:#7c3aed;border-color:#7c3aed}
+.checkmark svg{display:none}
+.svc-label.checked .checkmark svg{display:block}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{background:#7c3aed22;border:1px solid #7c3aed44;border-radius:999px;padding:3px 10px;font-size:11px;color:#c4b5fd}
+.error-box{background:#7f1d1d22;border:1px solid #ef444444;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-top:4px}
+.btn{width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s;margin-top:4px}
+.btn:hover:not(:disabled){background:#6d28d9}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.privacy{font-size:11px;color:#3f3f46;text-align:center;margin-top:10px}
+.success{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;gap:20px}
+.success-icon{width:64px;height:64px;border-radius:50%;background:#14532d22;border:1px solid #16a34a55;display:flex;align-items:center;justify-content:center}
+.success-icon svg{color:#4ade80}
+.success h2{font-size:22px;font-weight:700;color:#f4f4f5}
+.success p{font-size:14px;color:#71717a;max-width:380px;line-height:1.6}
+.wa-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:#16a34a22;border:1px solid #16a34a55;border-radius:8px;color:#4ade80;font-size:14px;font-weight:500;text-decoration:none;margin-top:4px;transition:background .15s}
+.wa-btn:hover{background:#16a34a33}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="logo">D</div>
+    <div>
+      <div class="firm-name">DAFKU Law Firm</div>
+      <div class="firm-sub">Client Intake Form</div>
+    </div>
+  </div>
+</header>
+<main>
+  <div id="form-section">
+    <h1>Get in Touch</h1>
+    <p class="subtitle">Fill in the form below and our team will review your enquiry and get back to you within 1–2 business days. You will receive a confirmation email with your personal client portal link.</p>
+    <form id="regForm" novalidate>
+      <div class="form-grid">
+        <div class="field">
+          <label for="f-name">Full Name<span>*</span></label>
+          <input id="f-name" name="name" type="text" placeholder="e.g. John Smith" autocomplete="name"/>
+        </div>
+        <div class="field">
+          <label for="f-email">Email Address<span>*</span></label>
+          <input id="f-email" name="email" type="email" placeholder="you@example.com" autocomplete="email"/>
+        </div>
+        <div class="field">
+          <label for="f-phone">Phone / WhatsApp<span>*</span></label>
+          <input id="f-phone" name="phone" type="tel" placeholder="+1 555 000 0000" autocomplete="tel"/>
+        </div>
+        <div class="field">
+          <label for="f-nat">Nationality<span>*</span></label>
+          <input id="f-nat" name="nationality" type="text" placeholder="e.g. American"/>
+        </div>
+        <div class="field full">
+          <label>Services Interested In<span>*</span></label>
+          <div class="services-grid" id="svcGrid">
+            <label class="svc-label" data-val="visa_c"><input type="checkbox" value="visa_c"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Visa Type C (Short-Stay)</label>
+            <label class="svc-label" data-val="visa_d"><input type="checkbox" value="visa_d"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Visa Type D (Long-Stay)</label>
+            <label class="svc-label" data-val="residency_permit"><input type="checkbox" value="residency_permit"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Residency Permit</label>
+            <label class="svc-label" data-val="company_formation"><input type="checkbox" value="company_formation"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Company Formation</label>
+            <label class="svc-label" data-val="real_estate"><input type="checkbox" value="real_estate"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Real Estate</label>
+            <label class="svc-label" data-val="tax_consulting"><input type="checkbox" value="tax_consulting"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Tax Consulting</label>
+            <label class="svc-label" data-val="compliance"><input type="checkbox" value="compliance"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Compliance &amp; Regulatory</label>
+          </div>
+          <div class="tags" id="svcTags"></div>
+        </div>
+        <div class="field full">
+          <label for="f-msg">Message / Additional Details</label>
+          <textarea id="f-msg" name="message" placeholder="Briefly describe your situation or what help you need…"></textarea>
+        </div>
+      </div>
+      <div class="error-box" id="errBox" style="display:none;margin-top:16px"></div>
+      <button type="submit" class="btn" id="submitBtn" style="margin-top:20px">Submit Enquiry</button>
+      <p class="privacy">Your information is kept strictly confidential and used only to process your enquiry.</p>
+    </form>
+  </div>
+  <div class="success" id="successSection">
+    <div class="success-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <div>
+      <h2>Enquiry Received</h2>
+      <p>Thank you for reaching out. We have received your enquiry and will be in touch within 1–2 business days.<br/><br/>Check your email for a confirmation and your personal client portal link.</p>
+    </div>
+    <a href="https://wa.me/355696952989" target="_blank" rel="noopener noreferrer" class="wa-btn">
+      <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Need help now? WhatsApp us
+    </a>
+  </div>
+</main>
+<script>
+const SVC_LABELS={visa_c:'Visa Type C',visa_d:'Visa Type D',residency_permit:'Residency Permit',company_formation:'Company Formation',real_estate:'Real Estate',tax_consulting:'Tax Consulting',compliance:'Compliance'};
+const selected=new Set();
+document.querySelectorAll('#svcGrid .svc-label').forEach(lbl=>{
+  lbl.addEventListener('click',()=>{
+    const val=lbl.dataset.val;
+    if(selected.has(val)){selected.delete(val);lbl.classList.remove('checked');}
+    else{selected.add(val);lbl.classList.add('checked');}
+    const tags=document.getElementById('svcTags');
+    tags.innerHTML=[...selected].map(v=>'<span class="tag">'+SVC_LABELS[v]+'</span>').join('');
+  });
+});
+document.getElementById('regForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const errBox=document.getElementById('errBox');
+  const btn=document.getElementById('submitBtn');
+  errBox.style.display='none';
+  const name=document.getElementById('f-name').value.trim();
+  const email=document.getElementById('f-email').value.trim();
+  const phone=document.getElementById('f-phone').value.trim();
+  const nationality=document.getElementById('f-nat').value.trim();
+  const message=document.getElementById('f-msg').value.trim();
+  if(!name){errBox.textContent='Please enter your full name.';errBox.style.display='block';return;}
+  if(!email){errBox.textContent='Please enter your email address.';errBox.style.display='block';return;}
+  if(!phone){errBox.textContent='Please enter your phone / WhatsApp number.';errBox.style.display='block';return;}
+  if(!nationality){errBox.textContent='Please enter your nationality.';errBox.style.display='block';return;}
+  if(selected.size===0){errBox.textContent='Please select at least one service you are interested in.';errBox.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Submitting…';
+  try{
+    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,services:[...selected],message:message||undefined})});
+    const d=await r.json();
+    if(!r.ok){errBox.textContent=d.error||'Submission failed. Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
+    document.getElementById('form-section').style.display='none';
+    const s=document.getElementById('successSection');s.style.display='flex';
+  }catch(err){
+    errBox.textContent='Network error. Please check your connection and try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';
+  }
+});
+</script>
+</body>
+</html>`);
+});
+
 app.post('/api/register', async (req, res) => {
   const { name, email, phone, nationality, services, message } = req.body || {};
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Full name is required.' });
