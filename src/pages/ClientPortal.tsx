@@ -56,9 +56,20 @@ function CaseCard({ c, history }: {
     c.state === "WAITING_RESPONSE_P" ||
     c.state === "WAITING_RESPONSE_C";
 
+  const accentColor = c.state === 'FINALIZED'
+    ? 'bg-green-500'
+    : isWaitingClient
+    ? 'bg-amber-400'
+    : c.state === 'IN_PROGRESS'
+    ? 'bg-blue-500'
+    : c.state === 'WAITING_AUTHORITIES'
+    ? 'bg-purple-500'
+    : 'bg-muted-foreground/20';
+
   return (
-    <Card className={isWaitingClient ? "border-amber-400 dark:border-amber-500" : ""}>
-      <CardContent className="pt-4 pb-3 space-y-3">
+    <Card className={`relative overflow-hidden ${isWaitingClient ? "border-amber-400 dark:border-amber-500" : ""}`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${accentColor}`} />
+      <CardContent className="pt-4 pb-3 pl-5 space-y-3">
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div className="min-w-0">
             <span className="font-mono text-xs text-muted-foreground">{c.caseId}</span>
@@ -251,13 +262,15 @@ export default function ClientPortalPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Top gradient accent */}
+      <div className="h-1 bg-gradient-to-r from-violet-600 via-purple-500 to-indigo-500 shrink-0" />
       {/* Sticky header */}
       <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-10 shrink-0">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <FileText className="h-5 w-5 text-primary shrink-0" />
+          <div className="h-8 w-8 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold text-sm shrink-0 select-none">D</div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">DAFKU Law Firm — Client Portal</div>
-            <div className="text-xs text-muted-foreground truncate">Welcome, {data.client.name} 👋</div>
+            <div className="font-semibold text-sm leading-tight">DAFKU Law Firm <span className="text-muted-foreground font-normal text-xs">— Client Portal</span></div>
+            <div className="text-xs text-muted-foreground truncate">Welcome, {data.client.name}</div>
           </div>
           {data.expiresAt && (
             <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
@@ -270,9 +283,10 @@ export default function ClientPortalPage() {
 
       {/* Services banner */}
       <div className="border-b bg-muted/30 shrink-0">
-        <div className="max-w-3xl mx-auto px-4 py-2 flex gap-2 flex-wrap">
+        <div className="max-w-3xl mx-auto px-4 py-2 flex gap-2 flex-wrap items-center">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium shrink-0">Services:</span>
           {(data.client.services || []).map((s: ServiceType) => (
-            <Badge key={s} variant="secondary" className="text-xs">{SERVICE_LABELS[s] || s}</Badge>
+            <Badge key={s} variant="secondary" className="text-xs bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200/60 dark:border-violet-700/40">{SERVICE_LABELS[s] || s}</Badge>
           ))}
         </div>
       </div>
@@ -321,10 +335,69 @@ export default function ClientPortalPage() {
 
           {/* ── STATUS TAB ── */}
           <TabsContent value="status" className="space-y-4 mt-0">
-            <div className="rounded-md border bg-primary/5 px-4 py-3 text-sm text-center space-y-0.5">
-              <p className="font-semibold">Hello, {data.client.name}! We're glad you're here.</p>
-              <p className="text-xs text-muted-foreground">This is your personal portal where you can track your case, review proposals, and message your lawyer directly.</p>
+            {/* Welcome card */}
+            <div className="rounded-lg border border-violet-200/60 dark:border-violet-800/30 bg-gradient-to-br from-violet-50/60 to-indigo-50/20 dark:from-violet-950/20 dark:to-indigo-950/10 px-4 py-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-9 w-9 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold text-base shrink-0 select-none">
+                  {data.client.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Hello, {data.client.name} 👋</p>
+                  <p className="text-xs text-muted-foreground">Welcome to your personal DAFKU client portal</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pl-12">This is your secure space to track your case, review proposals, and communicate directly with your lawyer.</p>
             </div>
+
+            {/* Journey progress */}
+            {(() => {
+              const steps = [
+                { key: 'enquiry', label: 'Enquiry' },
+                { key: 'intake', label: 'Intake' },
+                { key: 'proposal', label: 'Proposal' },
+                { key: 'contract', label: 'Contract' },
+                { key: 'payment', label: 'Payment' },
+                { key: 'client', label: 'Confirmed' },
+              ];
+              const statusToStep: Record<string, number> = {
+                NEW: 1, INTAKE: 1, SEND_PROPOSAL: 2, WAITING_APPROVAL: 3,
+                DISCUSSING_Q: 3, WAITING_RESPONSE_P: 3, SEND_CONTRACT: 4,
+                WAITING_ACCEPTANCE: 4, WAITING_RESPONSE_C: 4, AWAITING_PAYMENT: 5, CLIENT: 6,
+              };
+              const currentStep = statusToStep[data.client.status] ?? 1;
+              return (
+                <div className="rounded-md border bg-card px-4 py-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-3">Your Journey</p>
+                  <div className="flex items-start">
+                    {steps.map((step, i) => {
+                      const stepNum = i + 1;
+                      const done = stepNum < currentStep;
+                      const active = stepNum === currentStep;
+                      return (
+                        <div key={step.key} className="flex items-start flex-1 min-w-0">
+                          <div className="flex flex-col items-center gap-1 min-w-0 flex-shrink-0 w-full">
+                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                              done ? 'bg-green-500 text-white' : active ? 'bg-violet-600 text-white ring-2 ring-violet-300 dark:ring-violet-800' : 'bg-muted text-muted-foreground'
+                            }`}>
+                              {done ? '✓' : stepNum}
+                            </div>
+                            <span className={`text-[9px] text-center leading-tight px-0.5 ${
+                              active ? 'text-foreground font-semibold' : done ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
+                            }`}>{step.label}</span>
+                          </div>
+                          {i < steps.length - 1 && (
+                            <div className={`h-px flex-1 mt-3 min-w-[4px] mx-0.5 ${
+                              done ? 'bg-green-400' : 'bg-border'
+                            }`} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {data.client.status === 'CLIENT' && (
               <div className="rounded-md border border-green-300 bg-green-50/60 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-center space-y-0.5">
                 <p className="font-semibold text-green-800 dark:text-green-300">✓ You are a confirmed DAFKU client</p>

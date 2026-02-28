@@ -3109,6 +3109,15 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
 .success p{font-size:14px;color:#71717a;max-width:380px;line-height:1.6}
 .wa-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:#16a34a22;border:1px solid #16a34a55;border-radius:8px;color:#4ade80;font-size:14px;font-weight:500;text-decoration:none;margin-top:4px;transition:background .15s}
 .wa-btn:hover{background:#16a34a33}
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+@media(max-width:360px){.type-grid{grid-template-columns:1fr}}
+.type-card{display:flex;flex-direction:column;align-items:center;gap:5px;border:1.5px solid #27272a;border-radius:10px;padding:12px 8px;cursor:pointer;transition:background .15s,border-color .15s;color:#a1a1aa;user-select:none;text-align:center}
+.type-card:hover{background:#18181b;border-color:#3f3f46}
+.type-card.selected{border-color:#7c3aed;background:#7c3aed11;color:#c4b5fd}
+.type-icon{font-size:22px;line-height:1}
+.type-name{font-weight:600;font-size:13px;color:inherit}
+.type-desc{font-size:11px;color:#52525b;line-height:1.3}
+.type-card.selected .type-desc{color:#a78bfa}
 </style>
 </head>
 <body>
@@ -3143,16 +3152,37 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
           <label for="f-nat">Nationality<span>*</span></label>
           <input id="f-nat" name="nationality" type="text" placeholder="e.g. American"/>
         </div>
+        <div class="field">
+          <label for="f-country">Country of Residence<span>*</span></label>
+          <input id="f-country" name="country" type="text" placeholder="e.g. United States"/>
+        </div>
+        <div class="field full">
+          <label>Client Type<span>*</span></label>
+          <div class="type-grid" id="typeGrid">
+            <div class="type-card selected" data-val="Individual">
+              <span class="type-icon">&#x1F464;</span>
+              <span class="type-name">Individual</span>
+              <span class="type-desc">Single person</span>
+            </div>
+            <div class="type-card" data-val="Family">
+              <span class="type-icon">&#x1F46A;</span>
+              <span class="type-name">Family</span>
+              <span class="type-desc">Couple or family group</span>
+            </div>
+            <div class="type-card" data-val="Company">
+              <span class="type-icon">&#x1F3E2;</span>
+              <span class="type-name">Company</span>
+              <span class="type-desc">Business entity</span>
+            </div>
+          </div>
+        </div>
         <div class="field full">
           <label>Services Interested In<span>*</span></label>
           <div class="services-grid" id="svcGrid">
-            <label class="svc-label" data-val="visa_c"><input type="checkbox" value="visa_c"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Visa Type C (Short-Stay)</label>
-            <label class="svc-label" data-val="visa_d"><input type="checkbox" value="visa_d"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Visa Type D (Long-Stay)</label>
-            <label class="svc-label" data-val="residency_permit"><input type="checkbox" value="residency_permit"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Residency Permit</label>
+            <label class="svc-label" data-val="residency_pensioner"><input type="checkbox" value="residency_pensioner"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Residency Permit – Pensioner</label>
+            <label class="svc-label" data-val="visa_d"><input type="checkbox" value="visa_d"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Type D Visa &amp; Residence Permit</label>
             <label class="svc-label" data-val="company_formation"><input type="checkbox" value="company_formation"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Company Formation</label>
-            <label class="svc-label" data-val="real_estate"><input type="checkbox" value="real_estate"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Real Estate</label>
-            <label class="svc-label" data-val="tax_consulting"><input type="checkbox" value="tax_consulting"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Tax Consulting</label>
-            <label class="svc-label" data-val="compliance"><input type="checkbox" value="compliance"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Compliance &amp; Regulatory</label>
+            <label class="svc-label" data-val="real_estate"><input type="checkbox" value="real_estate"/><span class="checkmark"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Real Estate Investment</label>
           </div>
           <div class="tags" id="svcTags"></div>
         </div>
@@ -3180,13 +3210,22 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
   </div>
 </main>
 <script>
-const SVC_LABELS={visa_c:'Visa Type C',visa_d:'Visa Type D',residency_permit:'Residency Permit',company_formation:'Company Formation',real_estate:'Real Estate',tax_consulting:'Tax Consulting',compliance:'Compliance'};
+let clientType='Individual';
+document.querySelectorAll('#typeGrid .type-card').forEach(card=>{
+  card.addEventListener('click',()=>{
+    clientType=card.dataset.val;
+    document.querySelectorAll('#typeGrid .type-card').forEach(c=>c.classList.remove('selected'));
+    card.classList.add('selected');
+  });
+});
+const SVC_LABELS={residency_pensioner:'Residency Permit \u2013 Pensioner',visa_d:'Type D Visa & Residence Permit',company_formation:'Company Formation',real_estate:'Real Estate Investment'};
 const selected=new Set();
-document.querySelectorAll('#svcGrid .svc-label').forEach(lbl=>{
-  lbl.addEventListener('click',()=>{
-    const val=lbl.dataset.val;
-    if(selected.has(val)){selected.delete(val);lbl.classList.remove('checked');}
-    else{selected.add(val);lbl.classList.add('checked');}
+document.querySelectorAll('#svcGrid input[type="checkbox"]').forEach(cb=>{
+  cb.addEventListener('change',()=>{
+    const val=cb.value;
+    const lbl=cb.closest('.svc-label');
+    if(cb.checked){selected.add(val);lbl.classList.add('checked');}
+    else{selected.delete(val);lbl.classList.remove('checked');}
     const tags=document.getElementById('svcTags');
     tags.innerHTML=[...selected].map(v=>'<span class="tag">'+SVC_LABELS[v]+'</span>').join('');
   });
@@ -3200,16 +3239,18 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
   const email=document.getElementById('f-email').value.trim();
   const phone=document.getElementById('f-phone').value.trim();
   const nationality=document.getElementById('f-nat').value.trim();
+  const country=document.getElementById('f-country').value.trim();
   const message=document.getElementById('f-msg').value.trim();
   if(!name){errBox.textContent='Please enter your full name.';errBox.style.display='block';return;}
   if(!email){errBox.textContent='Please enter your email address.';errBox.style.display='block';return;}
   if(!phone){errBox.textContent='Please enter your phone / WhatsApp number.';errBox.style.display='block';return;}
   if(!nationality){errBox.textContent='Please enter your nationality.';errBox.style.display='block';return;}
+  if(!country){errBox.textContent='Please enter your country of residence.';errBox.style.display='block';return;}
   if(selected.size===0){errBox.textContent='Please select at least one service you are interested in.';errBox.style.display='block';return;}
   btn.disabled=true;btn.textContent='Submitting…';
   try{
     const csrf=document.getElementById('_csrf').value;
-    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,services:[...selected],message:message||undefined,_csrf:csrf})});
+    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined,_csrf:csrf})});
     const d=await r.json();
     if(!r.ok){errBox.textContent=d.error||'Submission failed. Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
     document.getElementById('form-section').style.display='none';
@@ -3224,7 +3265,7 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
 });
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, phone, nationality, services, message, _csrf } = req.body || {};
+  const { name, email, phone, nationality, country, clientType, services, message, _csrf } = req.body || {};
 
   // ── CSRF token check ──────────────────────────────────────────────────────
   // Only enforce CSRF when the field is present (server-rendered /join/:secret form embeds it).
@@ -3267,6 +3308,8 @@ app.post('/api/register', async (req, res) => {
     email: normalEmail,
     phone: phone ? String(phone).trim() : null,
     nationality: nationality ? String(nationality).trim() : null,
+    country: country ? String(country).trim() : null,
+    customerType: clientType && ['Individual','Family','Company'].includes(String(clientType)) ? String(clientType) : 'Individual',
     services: svcList,
     message: message ? String(message).trim() : null,
     status: 'INTAKE',
