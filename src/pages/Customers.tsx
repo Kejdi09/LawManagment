@@ -1578,8 +1578,26 @@ const Customers = () => {
                               <strong>{new Date(selectedCustomer.contractSignedAt || selectedCustomer.contractAcceptedAt!).toLocaleString()}</strong>
                             </div>
                           )}
+                          {selectedCustomer.contractSignedIp && (
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">Client IP: </span>
+                              <strong className="font-mono">{selectedCustomer.contractSignedIp}</strong>
+                            </div>
+                          )}
+                          {selectedCustomer.contractSignedUserAgent && (
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">Browser: </span>
+                              <span className="font-mono break-all">{selectedCustomer.contractSignedUserAgent}</span>
+                            </div>
+                          )}
+                          {selectedCustomer.contractSignatureHash && (
+                            <div className="text-xs mt-1 pt-1 border-t border-emerald-200 dark:border-emerald-800">
+                              <span className="text-muted-foreground">Integrity hash (SHA-256): </span>
+                              <span className="font-mono break-all text-[10px]">{selectedCustomer.contractSignatureHash}</span>
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground italic mt-1">
-                            Electronically recorded via client portal — not editable by staff
+                            Server-sealed at time of signing. Any modification to name, date, or contract content invalidates the hash.
                           </div>
                         </CardContent>
                       </Card>

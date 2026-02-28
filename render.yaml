@@ -16,3 +16,5 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: SIGNATURE_SECRET
+        sync: false

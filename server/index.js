@@ -2729,6 +2729,21 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
   const { signedByName } = req.body || {};
   const now = new Date().toISOString();
 
+  // Capture forensic metadata from the client's request
+  const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || 'unknown';
+  const userAgent = req.headers['user-agent'] || 'unknown';
+
+  // Cryptographic HMAC seal — ties name + timestamp + customerId + contract content together.
+  // Any post-hoc modification to any of these fields will invalidate the hash.
+  const snapshotDigest = crypto.createHash('sha256')
+    .update(JSON.stringify(customer.contractSnapshot || {}))
+    .digest('hex');
+  const hmacPayload = `${customer.customerId}|${signedByName || customer.name}|${now}|${snapshotDigest}`;
+  const contractSignatureHash = crypto
+    .createHmac('sha256', process.env.SIGNATURE_SECRET || 'law-sig-secret-change-me')
+    .update(hmacPayload)
+    .digest('hex');
+
   // Auto-assign to Kejdi or Albert — whoever has fewer confirmed clients; tie → Albert
   const [kejdiCount, albertCount] = await Promise.all([
     confirmedClientsCol.countDocuments({ assignedTo: 'Kejdi' }),
@@ -2744,6 +2759,9 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
     contractAcceptedAt: now,
     contractSignedByName: signedByName || customer.name,
     contractSignedAt: now,
+    contractSignedIp: clientIp,
+    contractSignedUserAgent: userAgent,
+    contractSignatureHash,
     confirmedAt: now,
     sourceCustomerId: customer.customerId,
     version: (customer.version || 0) + 1,
@@ -2759,7 +2777,7 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
   // Update the customer record to CLIENT so admin sees the transition
   await customersCol.updateOne(
     { customerId: customer.customerId },
-    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now, contractSignedByName: signedByName || customer.name, contractSignedAt: now } }
+    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now, contractSignedByName: signedByName || customer.name, contractSignedAt: now, contractSignedIp: clientIp, contractSignedUserAgent: userAgent, contractSignatureHash } }
   );
 
   await customerHistoryCol.insertOne({

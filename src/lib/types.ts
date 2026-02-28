@@ -158,6 +158,12 @@ export interface Customer {
   contractSignedByName?: string;
   /** ISO timestamp of when the client electronically signed the contract via portal */
   contractSignedAt?: string;
+  /** IP address of the client's device at the moment of signing */
+  contractSignedIp?: string;
+  /** Browser/user-agent string of the client's device at the moment of signing */
+  contractSignedUserAgent?: string;
+  /** HMAC-SHA256 integrity hash sealing name + timestamp + customerId + contract snapshot */
+  contractSignatureHash?: string;
   /** Message / note left by the client when self-registering */
   message?: string | null;
   /** Source of the record, e.g. 'self_register' */
