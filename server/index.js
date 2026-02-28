@@ -3273,12 +3273,7 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
 // ── Public Self-Registration (standalone page — no frontend URL exposed) ─────
 // Security layers:
 //  1. Secret path: /join/:INTAKE_SECRET — unknown path = 404
-//  2. One-time CSRF token embedded in the form — /api/register rejects calls without it
-//  3. Per-IP rate limit: max 3 submissions per hour
-
-// CSRF token store: token → expiry (ms). Cleaned up lazily.
-const _intakeCsrfTokens = new Map();
-const CSRF_TTL_MS = 30 * 60 * 1000; // 30 minutes
+//  2. Per-IP rate limit: max 3 submissions per hour
 
 // Per-IP submission rate limiter: ip → [timestamps]
 const _intakeRateMap = new Map();
@@ -3290,12 +3285,6 @@ app.get('/join/:token', (req, res) => {
   if (!secret || req.params.token !== secret) {
     return res.status(404).send('Not found');
   }
-  // Generate a one-time CSRF token for this page load
-  const csrfToken = crypto.randomBytes(32).toString('hex');
-  const now = Date.now();
-  _intakeCsrfTokens.set(csrfToken, now + CSRF_TTL_MS);
-  // Prune expired tokens lazily
-  for (const [t, exp] of _intakeCsrfTokens) { if (exp < now) _intakeCsrfTokens.delete(t); }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -3431,7 +3420,6 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
           <textarea id="f-msg" name="message" placeholder="Briefly describe your situation or what help you need…"></textarea>
         </div>
       </div>
-      <input type="hidden" id="_csrf" value="${csrfToken}"/>
       <div class="error-box" id="errBox" style="display:none;margin-top:16px"></div>
       <button type="submit" class="btn" id="submitBtn" style="margin-top:20px">Submit Enquiry</button>
       <p class="privacy">Your information is kept strictly confidential and used only to process your enquiry.</p>
@@ -3489,14 +3477,13 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
   if(selected.size===0){errBox.textContent='Please select at least one service you are interested in.';errBox.style.display='block';return;}
   btn.disabled=true;btn.textContent='Submitting…';
   try{
-    const csrf=document.getElementById('_csrf').value;
-    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined,_csrf:csrf})});
-    const d=await r.json();
-    if(!r.ok){errBox.textContent=d.error||'Submission failed. Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
+    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){errBox.textContent=d.error||'Submission failed ('+r.status+'). Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
     document.getElementById('form-section').style.display='none';
     const s=document.getElementById('successSection');s.style.display='flex';
   }catch(err){
-    errBox.textContent='Network error. Please check your connection and try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';
+    errBox.textContent='Could not reach the server. Please check your connection and try again. ('+err.message+')';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';
   }
 });
 </script>
@@ -3505,18 +3492,7 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
 });
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, phone, nationality, country, clientType, services, message, _csrf } = req.body || {};
-
-  // ── CSRF token check ──────────────────────────────────────────────────────
-  // Only enforce CSRF when the field is present (server-rendered /join/:secret form embeds it).
-  // Calls from the React SPA omit _csrf and are already protected by CORS + JSON content-type.
-  if (_csrf !== undefined && _csrf !== null && _csrf !== '') {
-    const csrfExpiry = _intakeCsrfTokens.get(_csrf);
-    if (!csrfExpiry || csrfExpiry < Date.now()) {
-      return res.status(403).json({ error: 'Invalid or expired form session. Please reload the page and try again.' });
-    }
-    _intakeCsrfTokens.delete(_csrf); // one-time use
-  }
+  const { name, email, phone, nationality, country, clientType, services, message } = req.body || {};
 
   // ── Per-IP rate limit ─────────────────────────────────────────────────────
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
