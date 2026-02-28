@@ -3002,13 +3002,31 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
 });
 
 // ── Public Self-Registration (standalone page — no frontend URL exposed) ─────
-// Route is secret: /join/:token — only works if the token matches INTAKE_SECRET env var.
-// Share the full URL including the token; hitting /join without the correct token returns 404.
+// Security layers:
+//  1. Secret path: /join/:INTAKE_SECRET — unknown path = 404
+//  2. One-time CSRF token embedded in the form — /api/register rejects calls without it
+//  3. Per-IP rate limit: max 3 submissions per hour
+
+// CSRF token store: token → expiry (ms). Cleaned up lazily.
+const _intakeCsrfTokens = new Map();
+const CSRF_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// Per-IP submission rate limiter: ip → [timestamps]
+const _intakeRateMap = new Map();
+const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_MAX = 3;
+
 app.get('/join/:token', (req, res) => {
   const secret = process.env.INTAKE_SECRET;
   if (!secret || req.params.token !== secret) {
     return res.status(404).send('Not found');
   }
+  // Generate a one-time CSRF token for this page load
+  const csrfToken = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  _intakeCsrfTokens.set(csrfToken, now + CSRF_TTL_MS);
+  // Prune expired tokens lazily
+  for (const [t, exp] of _intakeCsrfTokens) { if (exp < now) _intakeCsrfTokens.delete(t); }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -3114,6 +3132,7 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
           <textarea id="f-msg" name="message" placeholder="Briefly describe your situation or what help you need…"></textarea>
         </div>
       </div>
+      <input type="hidden" id="_csrf" value="${csrfToken}"/>
       <div class="error-box" id="errBox" style="display:none;margin-top:16px"></div>
       <button type="submit" class="btn" id="submitBtn" style="margin-top:20px">Submit Enquiry</button>
       <p class="privacy">Your information is kept strictly confidential and used only to process your enquiry.</p>
@@ -3160,7 +3179,8 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
   if(selected.size===0){errBox.textContent='Please select at least one service you are interested in.';errBox.style.display='block';return;}
   btn.disabled=true;btn.textContent='Submitting…';
   try{
-    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,services:[...selected],message:message||undefined})});
+    const csrf=document.getElementById('_csrf').value;
+    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,services:[...selected],message:message||undefined,_csrf:csrf})});
     const d=await r.json();
     if(!r.ok){errBox.textContent=d.error||'Submission failed. Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
     document.getElementById('form-section').style.display='none';
@@ -3175,7 +3195,25 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
 });
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, phone, nationality, services, message } = req.body || {};
+  const { name, email, phone, nationality, services, message, _csrf } = req.body || {};
+
+  // ── CSRF token check ──────────────────────────────────────────────────────
+  const csrfExpiry = _csrf ? _intakeCsrfTokens.get(_csrf) : undefined;
+  if (!csrfExpiry || csrfExpiry < Date.now()) {
+    return res.status(403).json({ error: 'Invalid or expired form session. Please reload the page and try again.' });
+  }
+  _intakeCsrfTokens.delete(_csrf); // one-time use
+
+  // ── Per-IP rate limit ─────────────────────────────────────────────────────
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const hits = (_intakeRateMap.get(ip) || []).filter(t => t > now - RATE_WINDOW_MS);
+  if (hits.length >= RATE_MAX) {
+    return res.status(429).json({ error: 'Too many submissions from your connection. Please try again later.' });
+  }
+  hits.push(now);
+  _intakeRateMap.set(ip, hits);
+
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Full name is required.' });
   if (!email || !String(email).trim()) return res.status(400).json({ error: 'Email address is required.' });
   const normalEmail = String(email).toLowerCase().trim();
