@@ -1009,7 +1009,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       const senderLabel = getUserLawyerName(req.user) || 'the legal team';
       const tokenDoc = await portalTokensCol.findOne({ customerId: id });
       const portalUrl = (tokenDoc && process.env.APP_URL)
-        ? `${process.env.APP_URL}/portal/${tokenDoc.token}`
+        ? `${process.env.APP_URL}/#/portal/${tokenDoc.token}`
         : null;
       sendEmail({
         to: current.email,
@@ -1040,7 +1040,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       const senderLabel = getUserLawyerName(req.user) || 'the legal team';
       const tokenDoc = await portalTokensCol.findOne({ customerId: id });
       const portalUrl = (tokenDoc && process.env.APP_URL)
-        ? `${process.env.APP_URL}/portal/${tokenDoc.token}`
+        ? `${process.env.APP_URL}/#/portal/${tokenDoc.token}`
         : null;
 
       // Build payment summary from proposal fee fields
@@ -2339,7 +2339,7 @@ app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
   await portalTokensCol.insertOne(doc);
   // Auto-email the portal link if the person has an email and APP_URL is configured
   if (person.email && process.env.APP_URL) {
-    const portalUrl = `${process.env.APP_URL}/portal/${rawToken}`;
+    const portalUrl = `${process.env.APP_URL}/#/portal/${rawToken}`;
     sendEmail({
       to: person.email,
       subject: 'Your DAFKU Law Firm Customer Portal Access',
@@ -2994,7 +2994,7 @@ app.post('/api/register', async (req, res) => {
   await portalTokensCol.insertOne({ token: rawToken, customerId, clientName: doc.name, clientType: 'customer', createdAt: now, expiresAt, createdBy: 'self_register' });
   await logAudit({ username: 'public', role: 'public', action: 'self_register', resource: 'customer', resourceId: customerId, details: { name: doc.name, email: normalEmail } });
   // Welcome email to new enquirer
-  const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/portal/${rawToken}` : null;
+  const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${rawToken}` : null;
   sendEmail({
     to: normalEmail,
     subject: 'Thank you for contacting DAFKU Law Firm',
