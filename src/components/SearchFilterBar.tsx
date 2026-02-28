@@ -9,17 +9,37 @@ interface SearchFilterBarProps {
   onQueryChange: (q: string) => void;
   docFilter: "all" | "ok" | "missing";
   onDocFilterChange: (d: "all" | "ok" | "missing") => void;
+  assignedToFilter?: string;
+  onAssignedToFilterChange?: (v: string) => void;
+  priorityFilter?: string;
+  onPriorityFilterChange?: (v: string) => void;
+  lawyerOptions?: string[];
 }
 
 export function SearchFilterBar({
   query, onQueryChange,
   docFilter, onDocFilterChange,
+  assignedToFilter = "all",
+  onAssignedToFilterChange,
+  priorityFilter = "all",
+  onPriorityFilterChange,
+  lawyerOptions = [],
 }: SearchFilterBarProps) {
-  const hasFilters = query || docFilter !== "all";
+  const hasFilters = query || docFilter !== "all" || assignedToFilter !== "all" || priorityFilter !== "all";
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const clearAll = () => {
+    onQueryChange("");
+    onDocFilterChange("all");
+    onAssignedToFilterChange?.("all");
+    onPriorityFilterChange?.("all");
+  };
+
   const activeFilters = [
     query ? { key: "query", label: `Search: ${query}`, onClear: () => onQueryChange("") } : null,
     docFilter !== "all" ? { key: "docs", label: `Docs: ${docFilter}`, onClear: () => onDocFilterChange("all") } : null,
+    assignedToFilter !== "all" ? { key: "assignedTo", label: `Lawyer: ${assignedToFilter}`, onClear: () => onAssignedToFilterChange?.("all") } : null,
+    priorityFilter !== "all" ? { key: "priority", label: `Priority: ${priorityFilter}`, onClear: () => onPriorityFilterChange?.("all") } : null,
   ].filter(Boolean) as Array<{ key: string; label: string; onClear: () => void }>;
 
   return (
@@ -30,22 +50,23 @@ export function SearchFilterBar({
           {showMobileFilters ? "Close" : "Filters"}
         </Button>
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { onQueryChange(""); onDocFilterChange("all"); }}>
+          <Button variant="ghost" size="sm" onClick={clearAll}>
             <X className="h-4 w-4 mr-1" /> Clear
           </Button>
         )}
       </div>
 
       <div className={`${showMobileFilters ? "flex" : "hidden"} sm:flex flex-wrap items-center gap-3`}>
-      <div className="relative flex-1 min-w-[200px]">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search cases, customers, lawyers..."
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search cases, customers, lawyers..."
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         <div className="w-full sm:w-[140px]">
           <Select value={docFilter} onValueChange={(v) => onDocFilterChange(v as "all" | "ok" | "missing")}>
             <SelectTrigger className="w-full">
@@ -59,17 +80,43 @@ export function SearchFilterBar({
           </Select>
         </div>
 
+        {onAssignedToFilterChange && lawyerOptions.length > 0 && (
+          <div className="w-full sm:w-[160px]">
+            <Select value={assignedToFilter} onValueChange={onAssignedToFilterChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Lawyer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Lawyers</SelectItem>
+                {lawyerOptions.map((l) => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {onPriorityFilterChange && (
+          <div className="w-full sm:w-[140px]">
+            <Select value={priorityFilter} onValueChange={onPriorityFilterChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Desktop clear button (mobile has it next to Filters toggle) */}
         <div className="hidden sm:block">
           {hasFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onQueryChange("");
-                onDocFilterChange("all");
-              }}
-            >
+            <Button variant="ghost" size="sm" onClick={clearAll}>
               <X className="h-4 w-4 mr-1" /> Clear
             </Button>
           )}
@@ -94,3 +141,4 @@ export function SearchFilterBar({
     </div>
   );
 }
+

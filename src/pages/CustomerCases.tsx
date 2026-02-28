@@ -38,6 +38,8 @@ type SavedCaseView = {
   query: string;
   docFilter: "all" | "ok" | "missing";
   stageFilter: "all" | CaseStage;
+  assignedToFilter?: string;
+  priorityFilter?: string;
 };
 
 const SAVED_CASE_VIEWS_KEY = "lm:saved-customer-case-views";
@@ -70,6 +72,8 @@ const CustomerCases = () => {
   const [tick, setTick] = useState(0);
   const [query, setQuery] = useState("");
   const [docFilter, setDocFilter] = useState<"all" | "ok" | "missing">("all");
+  const [assignedToFilter, setAssignedToFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [showCaseForm, setShowCaseForm] = useState(false);
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
@@ -176,17 +180,19 @@ const CustomerCases = () => {
       toast({ title: "Name required", description: "Enter a name for this view", variant: "destructive" });
       return;
     }
-    const nextView: SavedCaseView = { name, query, docFilter, stageFilter };
+    const nextView: SavedCaseView = { name, query, docFilter, stageFilter, assignedToFilter, priorityFilter };
     const withoutSameName = savedViews.filter((v) => v.name.toLowerCase() !== name.toLowerCase());
     persistSavedViews([nextView, ...withoutSameName].slice(0, 8));
     setNewViewName("");
     toast({ title: "View saved" });
-  }, [newViewName, query, docFilter, stageFilter, savedViews, persistSavedViews, toast]);
+  }, [newViewName, query, docFilter, stageFilter, assignedToFilter, priorityFilter, savedViews, persistSavedViews, toast]);
 
   const applySavedView = useCallback((view: SavedCaseView) => {
     setQuery(view.query);
     setDocFilter(view.docFilter);
     setStageFilter(view.stageFilter);
+    setAssignedToFilter(view.assignedToFilter ?? "all");
+    setPriorityFilter(view.priorityFilter ?? "all");
   }, []);
 
   const deleteSavedView = useCallback((name: string) => {
@@ -198,10 +204,12 @@ const CustomerCases = () => {
     const base = query ? await searchCases(query, 'customer') : all;
     const filtered = base.filter((c) => {
       if (docFilter !== "all" && c.documentState !== docFilter) return false;
+      if (assignedToFilter !== "all" && c.assignedTo !== assignedToFilter) return false;
+      if (priorityFilter !== "all" && c.priority !== priorityFilter) return false;
       return true;
     });
     setCaseList(filtered);
-  }, [query, docFilter]);
+  }, [query, docFilter, assignedToFilter, priorityFilter]);
 
   const handleQuickStateChange = useCallback(async (caseId: string, newState: string) => {
     try {
@@ -490,6 +498,11 @@ const CustomerCases = () => {
               onQueryChange={setQuery}
               docFilter={docFilter}
               onDocFilterChange={setDocFilter}
+              assignedToFilter={assignedToFilter}
+              onAssignedToFilterChange={setAssignedToFilter}
+              priorityFilter={priorityFilter}
+              onPriorityFilterChange={setPriorityFilter}
+              lawyerOptions={INTAKE_LAWYERS}
             />
             <div className="mt-3 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row">

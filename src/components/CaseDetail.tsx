@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import {
   getCaseById, getCustomerById, getHistoryByCaseId, getNotesByCaseId,
   getTasksByCaseId, addHistory, addNote, addTask, toggleTask, deleteTask, updateCase, deleteCase,
-  getDocuments, uploadDocument, deleteDocument, fetchDocumentBlob, StoredDocument,
+  getDocuments, uploadDocument, deleteDocument, updateDocumentStatus, fetchDocumentBlob, StoredDocument, DocStatus,
   getCommsLog, addCommEntry, deleteCommEntry,
 } from "@/lib/case-store";
 import {
@@ -170,6 +170,16 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
     } catch (err: unknown) {
       toast({ title: 'Delete failed', description: String(err), variant: 'destructive' });
     } finally { setIsLoading(false); }
+  };
+
+  const handleUpdateDocumentStatus = async (docId: string, status: DocStatus) => {
+    try {
+      await updateDocumentStatus(docId, status);
+      setDocuments((d) => d.map((x) => x.docId === docId ? { ...x, docStatus: status } : x));
+      toast({ title: 'Status updated', description: `Document marked as ${status}` });
+    } catch (err: unknown) {
+      toast({ title: 'Update failed', description: String(err), variant: 'destructive' });
+    }
   };
 
   const handlePreviewDocument = async (docId: string) => {
@@ -595,9 +605,18 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                   <div className="space-y-2">
                     {documents.map((doc) => (
                       <div key={doc.docId} className="flex items-center gap-2 rounded-md border p-2">
-                        <span className="font-medium truncate max-w-[220px]" title={doc.originalName}>{doc.originalName}</span>
-                        <span className="text-xs text-muted-foreground ml-auto">{new Date(doc.uploadedAt).toLocaleString()}</span>
-                        <div className="ml-2">
+                        <span className="font-medium truncate max-w-[180px]" title={doc.originalName}>{doc.originalName}</span>
+                        {doc.docStatus && (
+                          <span className={`text-xs rounded-full px-2 py-0.5 font-medium shrink-0 ${
+                            doc.docStatus === 'received' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            doc.docStatus === 'pending'  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          }`}>
+                            {doc.docStatus}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto shrink-0">{new Date(doc.uploadedAt).toLocaleString()}</span>
+                        <div className="ml-2 shrink-0">
                           <DropdownMenu>
                             <DropdownMenuTrigger className="inline-flex items-center rounded-md px-2 py-1 border">
                               <MoreVertical className="h-4 w-4" />
@@ -605,6 +624,9 @@ export function CaseDetail({ caseId, open, onClose, onStateChanged, availableLaw
                             <DropdownMenuContent>
                               <DropdownMenuItem onClick={() => handlePreviewDocument(doc.docId)}>Preview</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleDownloadDocument(doc.docId, doc.originalName)}>Download</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateDocumentStatus(doc.docId, 'received')}>Mark as Received</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateDocumentStatus(doc.docId, 'pending')}>Mark as Pending</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateDocumentStatus(doc.docId, 'expired')}>Mark as Expired</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleDeleteDocument(doc.docId)} className="text-destructive">Delete</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

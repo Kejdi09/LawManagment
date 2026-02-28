@@ -1909,6 +1909,37 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   setInterval(() => {
     cleanupStaleCases().catch((err) => console.error("cleanup failed", err));
   }, 60 * 60 * 1000);
+
+  // deadline reminder emails — runs every hour, sends once per day per case
+  setInterval(async () => {
+    try {
+      if (!process.env.ADMIN_EMAIL) return;
+      const now = new Date();
+      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const today = now.toISOString().slice(0, 10);
+      const approaching = await casesCol.find({
+        deadline: { $gte: now.toISOString(), $lte: in24h.toISOString() },
+        deadlineReminderSentDate: { $ne: today },
+        state: { $nin: ['archived', 'closed'] },
+      }).toArray();
+      if (approaching.length === 0) return;
+      const lines = approaching.map(
+        (c) =>
+          `• [${c.caseId}] ${c.title || '(untitled)'} — ${c.category || ''} — assigned: ${c.assignedTo || 'unassigned'} — deadline: ${(c.deadline || '').slice(0, 10)}`
+      );
+      sendEmail({
+        to: process.env.ADMIN_EMAIL,
+        subject: `⏰ ${approaching.length} case${approaching.length !== 1 ? 's' : ''} due in the next 24 hours`,
+        text: `The following cases have deadlines approaching in the next 24 hours:\n\n${lines.join('\n')}\n\nPlease log in to review and take action.`,
+      });
+      for (const c of approaching) {
+        await casesCol.updateOne({ caseId: c.caseId }, { $set: { deadlineReminderSentDate: today } });
+      }
+      console.log(`[deadline-reminder] sent reminder for ${approaching.length} case(s)`);
+    } catch (err) {
+      console.error('[deadline-reminder] error', err);
+    }
+  }, 60 * 60 * 1000);
   app.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);
   });
@@ -2027,6 +2058,26 @@ app.delete('/api/documents/:docId', verifyAuth, async (req, res) => {
   } catch (err) {
     console.error('/api/documents/:docId delete error', err);
     return res.status(500).json({ error: 'delete_failed' });
+  }
+});
+
+app.patch('/api/documents/:docId/status', verifyAuth, async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { status } = req.body || {};
+    if (!['received', 'pending', 'expired'].includes(status)) {
+      return res.status(400).json({ error: 'invalid_status' });
+    }
+    const doc = await documentsCol.findOne({ docId });
+    if (!doc) return res.status(404).json({ error: 'not_found' });
+    const allowed = await verifyDocumentOwnerAccess(req.user, doc.ownerType, doc.ownerId);
+    if (!allowed) return res.status(403).json({ error: 'forbidden' });
+    await documentsCol.updateOne({ docId }, { $set: { docStatus: status } });
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'document', resourceId: docId, details: { docStatus: status } });
+    return res.json({ ok: true, docStatus: status });
+  } catch (err) {
+    console.error('/api/documents/:docId/status patch error', err);
+    return res.status(500).json({ error: 'update_failed' });
   }
 });
 

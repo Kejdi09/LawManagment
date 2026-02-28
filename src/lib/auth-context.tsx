@@ -8,6 +8,17 @@ interface AuthContextType {
   login: (token?: string) => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
+  sessionExpiresIn: number | null; // ms until JWT expires; null if no JWT
+}
+
+function getTokenExpMs(token: string | null): number | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 const AUTH_FLAG_KEY = 'auth';
@@ -35,6 +46,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [user, setUser] = useState<{ username: string; role: string; consultantName?: string | null; lawyerName?: string | null } | null>(null);
+  const [sessionExpiresIn, setSessionExpiresIn] = useState<number | null>(null);
+
+  useEffect(() => {
+    const checkExpiry = () => {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      const expMs = getTokenExpMs(token);
+      setSessionExpiresIn(expMs !== null ? expMs - Date.now() : null);
+    };
+    checkExpiry();
+    const interval = setInterval(checkExpiry, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const refreshSession = async (): Promise<boolean> => {
     setIsAuthLoading(true);
@@ -92,7 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = (token?: string) => {
     setIsAuthenticated(true);
     localStorage.setItem(AUTH_FLAG_KEY, 'true');
-    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      const expMs = getTokenExpMs(token);
+      setSessionExpiresIn(expMs !== null ? expMs - Date.now() : null);
+    }
   };
 
   const logout = async () => {
@@ -116,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, user, login, logout, refreshSession }}>
+    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, user, login, logout, refreshSession, sessionExpiresIn }}>
       {children}
     </AuthContext.Provider>
   );

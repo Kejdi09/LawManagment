@@ -244,6 +244,8 @@ export async function deleteTask(taskId: string): Promise<void> {
 }
 
 // ── Documents ──
+export type DocStatus = 'received' | 'pending' | 'expired';
+
 export type StoredDocument = {
   docId: string;
   ownerType: 'case' | 'customer';
@@ -251,6 +253,7 @@ export type StoredDocument = {
   filename?: string;
   originalName?: string;
   uploadedAt: string;
+  docStatus?: DocStatus;
 };
 
 export async function getDocuments(ownerType: 'case' | 'customer', ownerId: string): Promise<StoredDocument[]> {
@@ -279,6 +282,13 @@ export async function uploadDocument(ownerType: 'case' | 'customer', ownerId: st
 
 export async function deleteDocument(docId: string) {
   await api(`/api/documents/${docId}`, { method: 'DELETE' });
+}
+
+export async function updateDocumentStatus(docId: string, status: DocStatus): Promise<void> {
+  await api(`/api/documents/${docId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function fetchDocumentBlob(docId: string): Promise<{ blob: Blob; fileName: string | null }> {
