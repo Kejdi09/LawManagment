@@ -2541,6 +2541,13 @@ app.get('/api/portal/:token', async (req, res) => {
     contractSentAt: client.contractSentAt || null,
     contractSnapshot: client.contractSnapshot || null,
     contractViewedAt: client.contractViewedAt || null,
+    // Payment fields (shown after contract signing)
+    paymentAmountALL: client.paymentAmountALL ?? null,
+    paymentAmountEUR: client.paymentAmountEUR ?? null,
+    paymentNote: client.paymentNote ?? null,
+    paymentMethods: client.paymentMethods ?? null,
+    paymentSelectedMethod: client.paymentSelectedMethod ?? null,
+    paymentDoneAt: client.paymentDoneAt ?? null,
   });
 });
 
@@ -2796,7 +2803,7 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
   // Build the confirmed-client payload
   const confirmedPayload = {
     ...customer,
-    status: 'CLIENT',
+    status: 'AWAITING_PAYMENT',
     assignedTo,
     contractAcceptedAt: now,
     contractSignedByName: signedByName || customer.name,
@@ -2809,24 +2816,29 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
     version: (customer.version || 0) + 1,
   };
 
-  // Upsert into confirmedClients
+  // Atomic update — do this FIRST with status in filter to prevent double-submission.
+  // If two requests arrive simultaneously (double-tap, network retry), only one gets matchedCount=1.
+  const customerUpdateResult = await customersCol.updateOne(
+    { customerId: customer.customerId, status: { $in: ['WAITING_ACCEPTANCE', 'SEND_CONTRACT'] } },
+    { $set: { status: 'AWAITING_PAYMENT', assignedTo, contractAcceptedAt: now, contractSignedByName: signedByName || customer.name, contractSignedAt: now, contractSignedIp: clientIp, contractSignedUserAgent: userAgent, contractSignatureHash } }
+  );
+  if (customerUpdateResult.matchedCount === 0) {
+    // Already processed (idempotent — return success so portal doesn't show an error on retry)
+    return res.json({ ok: true, status: 'AWAITING_PAYMENT', assignedTo });
+  }
+
+  // Upsert into confirmedClients (safe to upsert — unique index on customerId)
   await confirmedClientsCol.updateOne(
     { customerId: customer.customerId },
     { $set: confirmedPayload },
     { upsert: true }
   );
 
-  // Update the customer record to CLIENT so admin sees the transition
-  await customersCol.updateOne(
-    { customerId: customer.customerId },
-    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now, contractSignedByName: signedByName || customer.name, contractSignedAt: now, contractSignedIp: clientIp, contractSignedUserAgent: userAgent, contractSignatureHash } }
-  );
-
   await customerHistoryCol.insertOne({
     historyId: genShortId('CH'),
     customerId: customer.customerId,
     statusFrom: customer.status,
-    statusTo: 'CLIENT',
+    statusTo: 'AWAITING_PAYMENT',
     date: now,
     changedBy: 'portal-client',
     changedByRole: 'client',
@@ -2838,43 +2850,167 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
   await portalMessagesCol.insertOne({
     messageId: genShortId('MSG'),
     customerId: customer.customerId,
-    text: `[Contract Accepted] The client has accepted the contract and is now a confirmed client. Electronic signature recorded as: "${signedByName || customer.name}" at ${now}.`,
+    text: `[Contract Accepted] The client has accepted the contract. Electronic signature recorded as: "${signedByName || customer.name}" at ${now}. Awaiting payment confirmation.`,
     senderType: 'client',
     readByStaff: false,
     readByClient: true,
     timestamp: now,
   });
 
-  // Welcome email to the newly confirmed client
+  // Welcome email telling client to complete payment
   if (customer.email) {
     const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${req.params.token}` : null;
+    const methodsList = (customer.paymentMethods || []).map(m => m === 'bank' ? 'Bank Transfer' : m === 'crypto' ? 'Crypto (USDT)' : 'Cash').join(', ');
     sendEmail({
       to: customer.email,
-      subject: 'Welcome to DAFKU Law Firm — You are now a confirmed client',
+      subject: 'Contract Signed — Please Complete Your Payment',
       text: [
         `Dear ${customer.name},`,
         '',
-        'Congratulations — your contract has been signed and you are now a confirmed client of DAFKU Law Firm.',
+        'Thank you for signing your contract with DAFKU Law Firm.',
         '',
-        'Our team will be in touch shortly to begin work on your matter. In the meantime, here is what you can access through your secure client portal:',
+        'To complete your onboarding as a confirmed client, please make the required payment.',
         '',
-        '  • Your signed contract',
-        '  • Invoices and payment status',
-        '  • Case progress updates',
-        '  • Secure messaging with our team',
+        customer.paymentAmountALL ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL` + (customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : '') : '',
+        methodsList ? `Accepted payment methods: ${methodsList}` : '',
+        customer.paymentNote ? `\nPayment note: ${customer.paymentNote}` : '',
         '',
-        portalUrl
-          ? `Access your portal at any time here:\n${portalUrl}`
-          : 'Please use the portal link we sent you earlier to access your account.',
+        portalUrl ? `Open your portal to select your payment method and view instructions:\n${portalUrl}` : 'Please visit your portal to see payment instructions.',
         '',
-        'If you have any questions right now, you can reach us instantly on WhatsApp: https://wa.me/355696952989',
+        'Once we confirm receipt of payment, your account will be fully activated.',
         '',
-        `Best regards,\nDAFKU Law Firm Legal Team\ninfo@dafkulawfirm.al`,
+        'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+        '',
+        `Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+      ].filter(l => l !== null && l !== undefined).join('\n'),
+    });
+  }
+
+  return res.json({ ok: true, status: 'AWAITING_PAYMENT', assignedTo });
+});
+
+// ── Portal: client selects payment method ────────────────────────────────────
+app.post('/api/portal/:token/select-payment', portalActionLimiter, async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
+
+  const { method } = req.body || {};
+  if (!['bank', 'crypto', 'cash'].includes(method)) {
+    return res.status(400).json({ error: 'Invalid payment method. Choose bank, crypto, or cash.' });
+  }
+
+  // Find in customers or confirmedClients
+  let coll = customersCol;
+  let record = await customersCol.findOne({ customerId: tokenDoc.customerId });
+  if (!record) {
+    record = await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
+    coll = confirmedClientsCol;
+  }
+  if (!record) return res.status(404).json({ error: 'Customer not found' });
+  if (record.status !== 'AWAITING_PAYMENT') {
+    return res.status(400).json({ error: 'Not in awaiting payment state' });
+  }
+
+  // Validate method is in accepted list
+  const allowed = record.paymentMethods || [];
+  if (!allowed.includes(method)) {
+    return res.status(400).json({ error: 'This payment method is not available for your account.' });
+  }
+
+  await coll.updateOne(
+    { customerId: tokenDoc.customerId },
+    { $set: { paymentSelectedMethod: method } }
+  );
+
+  res.json({ ok: true, method });
+});
+
+// ── Admin: mark payment done → promotes to CLIENT ─────────────────────────────
+app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req, res) => {
+  const customerId = String(req.params.customerId).trim();
+  const now = new Date().toISOString();
+  const doneBy = req.user?.consultantName || req.user?.username || 'admin';
+
+  const clientPayload = { status: 'CLIENT', paymentDoneAt: now, paymentDoneBy: doneBy };
+
+  // Atomic findOneAndUpdate — prevents two admins clicking simultaneously from double-processing.
+  // returnDocument:'before' gives us the original record for history/email, and status in filter
+  // guarantees only one request can transition out of AWAITING_PAYMENT.
+  let record = await customersCol.findOneAndUpdate(
+    { customerId, status: 'AWAITING_PAYMENT' },
+    { $set: clientPayload },
+    { returnDocument: 'before' }
+  );
+
+  if (!record) {
+    // Not in customers — try confirmedClients (edge case: manually migrated)
+    record = await confirmedClientsCol.findOneAndUpdate(
+      { customerId, status: 'AWAITING_PAYMENT' },
+      { $set: clientPayload },
+      { returnDocument: 'before' }
+    );
+    if (!record) {
+      const exists = await customersCol.findOne({ customerId }) || await confirmedClientsCol.findOne({ customerId });
+      if (!exists) return res.status(404).json({ error: 'Customer not found' });
+      return res.status(400).json({ error: 'Customer is not in AWAITING_PAYMENT status' });
+    }
+    // Keep customers in sync
+    await customersCol.updateOne({ customerId }, { $set: clientPayload });
+  } else {
+    // Upsert to confirmedClients (respond-contract already created it, but upsert:true is safe)
+    await confirmedClientsCol.updateOne(
+      { customerId },
+      { $set: { ...record, ...clientPayload, confirmedAt: record.confirmedAt || now } },
+      { upsert: true }
+    );
+    // Remove from customers — they are now a confirmed CLIENT and should only live in confirmedClients
+    await customersCol.deleteOne({ customerId });
+  }
+
+  await customerHistoryCol.insertOne({
+    historyId: genShortId('CH'),
+    customerId,
+    statusFrom: 'AWAITING_PAYMENT',
+    statusTo: 'CLIENT',
+    date: now,
+    changedBy: req.user?.username || 'admin',
+    changedByRole: req.user?.role || 'admin',
+    changedByConsultant: req.user?.consultantName || null,
+    changedByLawyer: record.assignedTo || null,
+  });
+
+  await logAudit({
+    username: req.user?.username,
+    role: req.user?.role,
+    consultantName: req.user?.consultantName,
+    action: 'mark_payment_done',
+    resource: 'customer',
+    resourceId: customerId,
+    details: { paymentDoneBy: doneBy, paymentDoneAt: now },
+  });
+
+  // Notify client via email
+  const clientRecord = await confirmedClientsCol.findOne({ customerId }) || await customersCol.findOne({ customerId });
+  if (clientRecord?.email) {
+    sendEmail({
+      to: clientRecord.email,
+      subject: 'Payment Confirmed — Welcome to DAFKU Law Firm!',
+      text: [
+        `Dear ${clientRecord.name},`,
+        '',
+        'We have confirmed receipt of your payment. You are now a fully confirmed client of DAFKU Law Firm.',
+        '',
+        'Our team will be in touch shortly to begin work on your matter.',
+        '',
+        'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+        '',
+        `Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
       ].join('\n'),
     });
   }
 
-  return res.json({ ok: true, status: 'CLIENT', assignedTo });
+  res.json({ ok: true, status: 'CLIENT' });
 });
 
 // ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────
@@ -3240,11 +3376,15 @@ app.post('/api/register', async (req, res) => {
   const { name, email, phone, nationality, services, message, _csrf } = req.body || {};
 
   // ── CSRF token check ──────────────────────────────────────────────────────
-  const csrfExpiry = _csrf ? _intakeCsrfTokens.get(_csrf) : undefined;
-  if (!csrfExpiry || csrfExpiry < Date.now()) {
-    return res.status(403).json({ error: 'Invalid or expired form session. Please reload the page and try again.' });
+  // Only enforce CSRF when the field is present (server-rendered /join/:secret form embeds it).
+  // Calls from the React SPA omit _csrf and are already protected by CORS + JSON content-type.
+  if (_csrf !== undefined && _csrf !== null && _csrf !== '') {
+    const csrfExpiry = _intakeCsrfTokens.get(_csrf);
+    if (!csrfExpiry || csrfExpiry < Date.now()) {
+      return res.status(403).json({ error: 'Invalid or expired form session. Please reload the page and try again.' });
+    }
+    _intakeCsrfTokens.delete(_csrf); // one-time use
   }
-  _intakeCsrfTokens.delete(_csrf); // one-time use
 
   // ── Per-IP rate limit ─────────────────────────────────────────────────────
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';

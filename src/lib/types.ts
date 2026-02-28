@@ -168,6 +168,21 @@ export interface Customer {
   message?: string | null;
   /** Source of the record, e.g. 'self_register' */
   source?: string;
+  // ── Payment fields (set by admin when sending contract) ──
+  /** Payment amount in ALL (pre-filled from contract total) */
+  paymentAmountALL?: number;
+  /** Payment amount in EUR (secondary display) */
+  paymentAmountEUR?: number;
+  /** Note shown to client about payment (e.g. payment terms, deadline) */
+  paymentNote?: string | null;
+  /** Payment methods the admin will accept: 'bank', 'crypto', 'cash' */
+  paymentMethods?: Array<'bank' | 'crypto' | 'cash'>;
+  /** Payment method the client selected via the portal */
+  paymentSelectedMethod?: 'bank' | 'crypto' | 'cash' | null;
+  /** ISO timestamp of when the admin marked payment as done */
+  paymentDoneAt?: string | null;
+  /** Username of admin who marked payment done */
+  paymentDoneBy?: string | null;
 }
 
 export interface HistoryRecord {
@@ -267,6 +282,7 @@ export type LeadStatus =
   | "DISCUSSING_Q"
   | "SEND_CONTRACT"
   | "WAITING_ACCEPTANCE"
+  | "AWAITING_PAYMENT"
   | "SEND_RESPONSE"
   | "CONFIRMED"
   | "CLIENT"
@@ -282,6 +298,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   DISCUSSING_Q: "Discussing Proposal",
   SEND_CONTRACT: "Send Contract",
   WAITING_ACCEPTANCE: "Waiting Acceptance",
+  AWAITING_PAYMENT: "Awaiting Payment",
   SEND_RESPONSE: "Send Respond",
   CONFIRMED: "Confirmed",
   CLIENT: "Client Confirmed",
@@ -530,4 +547,11 @@ export interface PortalData {
   contractSentAt?: string | null;
   contractSnapshot?: ProposalFields | null;
   contractViewedAt?: string | null;
+  // Payment fields (visible after contract signing)
+  paymentAmountALL?: number | null;
+  paymentAmountEUR?: number | null;
+  paymentNote?: string | null;
+  paymentMethods?: Array<'bank' | 'crypto' | 'cash'> | null;
+  paymentSelectedMethod?: 'bank' | 'crypto' | 'cash' | null;
+  paymentDoneAt?: string | null;
 }

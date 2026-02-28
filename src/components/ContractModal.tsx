@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, FileText } from "lucide-react";
 import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
 import ProposalRenderer from "@/components/ProposalRenderer";
@@ -85,6 +86,18 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
   const [fields, setFields] = useState<ProposalFields>(initFields);
   const [saving, setSaving] = useState(false);
 
+  // ── Payment setup ──
+  const [paymentMethods, setPaymentMethods] = useState<Array<'bank' | 'crypto' | 'cash'>>(
+    customer.paymentMethods ?? ['bank', 'cash']
+  );
+  const [paymentNote, setPaymentNote] = useState(customer.paymentNote ?? '');
+
+  function togglePaymentMethod(method: 'bank' | 'crypto' | 'cash') {
+    setPaymentMethods(prev =>
+      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+    );
+  }
+
   function setField<K extends keyof ProposalFields>(key: K, value: ProposalFields[K]) {
     setFields((prev) => ({ ...prev, [key]: value }));
   }
@@ -114,12 +127,24 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
   }
 
   async function handleSendContract() {
+    if (paymentMethods.length === 0) {
+      toast({ title: "Payment methods required", description: "Please select at least one accepted payment method.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const updated = await updateCustomer(customer.customerId, {
         contractSentAt: new Date().toISOString(),
         contractSnapshot: fields,
         status: "WAITING_ACCEPTANCE" as const,
+        paymentAmountALL: totalALL,
+        paymentAmountEUR: Math.round(totalEUR * 100) / 100,
+        paymentMethods,
+        paymentNote: paymentNote.trim() || null,
+        // Reset any previous payment selection/done state when re-sending
+        paymentSelectedMethod: null,
+        paymentDoneAt: null,
+        paymentDoneBy: null,
       });
       toast({ title: "Contract sent", description: "The contract has been sent. Waiting for client acceptance." });
       onSent?.(updated);
@@ -314,6 +339,55 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
                   <span>TOTAL</span>
                   <span className="font-mono">{fmt(totalALL, 0)} ALL ≈ {fmt(totalEUR)} EUR</span>
                 </div>
+              </div>
+
+              {/* ── Payment Setup ── */}
+              <div className="md:col-span-2">
+                <hr className="my-2" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Payment Setup</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  The payment amount is auto-filled from the contract total above. Choose which payment methods the client can use.
+                </p>
+              </div>
+
+              {/* Payment amount (read-only) */}
+              <div className="space-y-1">
+                <Label>Payment Amount (ALL) — auto from total</Label>
+                <div className="rounded-md border bg-muted/60 px-3 py-2 text-sm font-mono font-medium">
+                  {fmt(totalALL, 0)} ALL ≈ {fmt(totalEUR)} EUR
+                </div>
+              </div>
+
+              {/* Accepted payment methods */}
+              <div className="space-y-1">
+                <Label>Accepted Payment Methods <span className="text-destructive">*</span></Label>
+                <div className="flex flex-col gap-2 mt-1">
+                  {(["bank", "crypto", "cash"] as const).map(m => (
+                    <label key={m} className="flex items-center gap-2.5 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
+                      <Checkbox
+                        checked={paymentMethods.includes(m)}
+                        onCheckedChange={() => togglePaymentMethod(m)}
+                      />
+                      <span className="text-sm capitalize">
+                        {m === 'bank' ? '🏦 Bank Transfer' : m === 'crypto' ? '💎 Crypto (USDT)' : '💵 Cash'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {paymentMethods.length === 0 && (
+                  <p className="text-xs text-destructive mt-1">Select at least one method.</p>
+                )}
+              </div>
+
+              {/* Payment note for client */}
+              <div className="md:col-span-2 space-y-1">
+                <Label>Payment Note for Client (optional)</Label>
+                <Textarea
+                  value={paymentNote}
+                  onChange={e => setPaymentNote(e.target.value)}
+                  placeholder="e.g. Please complete payment within 5 business days of signing. Reference your name on the transfer."
+                  rows={2}
+                />
               </div>
             </div>
 

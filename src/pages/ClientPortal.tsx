@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract } from "@/lib/case-store";
+import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract, selectPortalPaymentMethod } from "@/lib/case-store";
 import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import ContractRenderer from "@/components/ContractRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown, Receipt,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown, Receipt, CreditCard,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -151,6 +151,10 @@ export default function ClientPortalPage() {
   const portalPrintRef = useRef<HTMLDivElement>(null);
   const [contractSignName, setContractSignName] = useState("");
   const [contractSignAgreed, setContractSignAgreed] = useState(false);
+  // Payment state
+  const [paymentMethod, setPaymentMethod] = useState<'bank' | 'crypto' | 'cash' | ''>('');
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentMethodSaved, setPaymentMethodSaved] = useState(false);
 
   function handlePortalPrint() {
     const content = portalPrintRef.current;
@@ -306,9 +310,10 @@ export default function ClientPortalPage() {
   const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
   const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
+  const showPaymentTab = data.client.status === 'AWAITING_PAYMENT';
   const showInvoicesTab = !!(data.invoices && data.invoices.length > 0);
-  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
-  const defaultTab = showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
+  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showPaymentTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
+  const defaultTab = showPaymentTab ? "payment" : showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
   const hasNewMessages = unreadFromLawyer;
 
@@ -371,6 +376,11 @@ export default function ClientPortalPage() {
             {showContractTab && (
               <TabsTrigger value="contract" className="flex items-center gap-1.5 text-xs">
                 <PenLine className="h-3.5 w-3.5" /> Contract
+              </TabsTrigger>
+            )}
+            {showPaymentTab && (
+              <TabsTrigger value="payment" className="flex items-center gap-1.5 text-xs">
+                <CreditCard className="h-3.5 w-3.5" /> Payment
               </TabsTrigger>
             )}
             <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
@@ -585,7 +595,7 @@ export default function ClientPortalPage() {
                   {contractRespondDone === "accepted" && (
                     <div className="flex items-center gap-2 justify-center text-green-700 dark:text-green-400 font-medium text-sm">
                       <CheckCircle2 className="w-4 h-4" />
-                      Contract accepted — congratulations, you're now a confirmed DAFKU client!
+                      Contract signed! Please proceed to the <strong>Payment</strong> tab to complete your onboarding.
                     </div>
                   )}
                   {!contractRespondDone && (
@@ -657,6 +667,163 @@ export default function ClientPortalPage() {
                   )}
                 </div>
               )}
+            </TabsContent>
+          )}
+
+          {/* ── PAYMENT TAB ── */}
+          {showPaymentTab && (
+            <TabsContent value="payment" className="mt-0 space-y-4">
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 text-sm space-y-1">
+                <p className="font-semibold text-amber-900 dark:text-amber-300">💳 Payment Required to Activate Your Account
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-400">
+                  Your contract has been signed. Please complete the payment below to become a confirmed client.
+                </p>
+              </div>
+
+              {/* Amount due */}
+              {(data.paymentAmountALL || data.paymentAmountEUR) && (
+                <div className="rounded-md border bg-card px-4 py-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Amount Due</p>
+                  <p className="text-2xl font-bold">
+                    {data.paymentAmountALL ? `${data.paymentAmountALL.toLocaleString()} ALL` : ''}
+                    {data.paymentAmountALL && data.paymentAmountEUR ? ' ≈ ' : ''}
+                    {data.paymentAmountEUR ? `${data.paymentAmountEUR.toFixed(2)} EUR` : ''}
+                  </p>
+                </div>
+              )}
+
+              {/* Admin note */}
+              {data.paymentNote && (
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex gap-2">
+                  <StickyNote className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">{data.paymentNote}</span>
+                </div>
+              )}
+
+              {/* Method selection */}
+              {!paymentMethodSaved && !data.paymentDoneAt && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Select your preferred payment method:</p>
+                  <div className="grid gap-2">
+                    {(data.paymentMethods || []).map((m) => {
+                      const labels: Record<string, string> = {
+                        bank: '🏦 Bank Transfer',
+                        crypto: '💎 Crypto (USDT)',
+                        cash: '💵 Cash',
+                      };
+                      return (
+                        <label
+                          key={m}
+                          className={`flex items-center gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                            paymentMethod === m ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentMethod"
+                            value={m}
+                            checked={paymentMethod === m}
+                            onChange={() => setPaymentMethod(m as 'bank' | 'crypto' | 'cash')}
+                            className="accent-primary"
+                          />
+                          <span className="text-sm font-medium">{labels[m] ?? m}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Show instructions for selected method */}
+                  {paymentMethod === 'bank' && (
+                    <div className="rounded-md border bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm space-y-1">
+                      <p className="font-semibold text-blue-900 dark:text-blue-300">Bank Transfer Instructions</p>
+                      <p className="text-xs text-muted-foreground">Transfer the amount due to the account below. Use your full name as the payment reference.</p>
+                      <div className="mt-2 space-y-1 text-xs font-mono bg-white dark:bg-zinc-900 rounded border px-3 py-2">
+                        <div><span className="text-muted-foreground">Bank:</span> Raiffeisen Bank Albania</div>
+                        <div><span className="text-muted-foreground">Account Holder:</span> DAFKU Law Firm Sh.p.k.</div>
+                        <div><span className="text-muted-foreground">IBAN:</span> AL47 0000 0000 0000 0000 0000 0000</div>
+                        <div><span className="text-muted-foreground">BIC/SWIFT:</span> SGSBALTX</div>
+                        <div><span className="text-muted-foreground">Currency:</span> ALL or EUR</div>
+                        <div><span className="text-muted-foreground">Reference:</span> Your full name</div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">After transferring, please send proof of payment via the <strong>Messages</strong> tab.</p>
+                    </div>
+                  )}
+
+                  {paymentMethod === 'crypto' && (
+                    <div className="rounded-md border bg-purple-50 dark:bg-purple-950/30 px-4 py-3 text-sm space-y-1">
+                      <p className="font-semibold text-purple-900 dark:text-purple-300">Crypto Payment Instructions (USDT)</p>
+                      <p className="text-xs text-muted-foreground">Send USDT to the wallet address below. Use the TRC-20 (TRON) network.</p>
+                      <div className="mt-2 bg-white dark:bg-zinc-900 rounded border px-3 py-2 text-xs font-mono break-all">
+                        <div><span className="text-muted-foreground">Network:</span> TRON (TRC-20)</div>
+                        <div><span className="text-muted-foreground">Token:</span> USDT</div>
+                        <div><span className="text-muted-foreground">Address:</span> T_PLACEHOLDER_WALLET_ADDRESS</div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">After sending, share the transaction hash via the <strong>Messages</strong> tab.</p>
+                      <p className="text-xs text-amber-600">Note: Always double-check the network (TRC-20) before sending.</p>
+                    </div>
+                  )}
+
+                  {paymentMethod === 'cash' && (
+                    <div className="rounded-md border bg-green-50 dark:bg-green-950/30 px-4 py-3 text-sm space-y-1">
+                      <p className="font-semibold text-green-900 dark:text-green-300">Cash Payment Instructions</p>
+                      <p className="text-xs text-muted-foreground">Visit our office to pay in cash. Please call ahead to schedule a time.</p>
+                      <div className="mt-2 bg-white dark:bg-zinc-900 rounded border px-3 py-2 text-xs">
+                        <div><span className="font-medium">Address:</span> Rr. Ismail Qemali, Tirana, Albania</div>
+                        <div><span className="font-medium">Hours:</span> Mon–Fri, 09:00 – 17:00</div>
+                        <div><span className="font-medium">Phone:</span> +355 69 69 52 989</div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Once you arrive, mention your name and that you are here for a contract payment.</p>
+                    </div>
+                  )}
+
+                  {paymentMethod && (
+                    <Button
+                      className="w-full"
+                      disabled={paymentSaving}
+                      onClick={async () => {
+                        if (!token || !paymentMethod) return;
+                        setPaymentSaving(true);
+                        try {
+                          await selectPortalPaymentMethod(token, paymentMethod as 'bank' | 'crypto' | 'cash');
+                          setPaymentMethodSaved(true);
+                        } catch (e) {
+                          alert(String((e as Error)?.message ?? 'Failed to save selection.'));
+                        } finally {
+                          setPaymentSaving(false);
+                        }
+                      }}
+                    >
+                      {paymentSaving ? 'Saving...' : `Confirm I will pay by ${paymentMethod === 'bank' ? 'bank transfer' : paymentMethod === 'crypto' ? 'crypto' : 'cash'}`}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* After method saved */}
+              {(paymentMethodSaved || (data.paymentSelectedMethod && !data.paymentDoneAt)) && !data.paymentDoneAt && (
+                <div className="rounded-md border border-blue-300 bg-blue-50/60 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm space-y-1">
+                  <p className="font-semibold text-blue-800 dark:text-blue-300">🕒 Waiting for Payment Confirmation</p>
+                  <p className="text-xs text-muted-foreground">
+                    Your payment method preference has been recorded. Once our team confirms receipt of payment, your account will be fully activated.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Have you already made the payment? Let us know via the <strong>Messages</strong> tab.
+                  </p>
+                </div>
+              )}
+
+              {/* Payment confirmed by admin */}
+              {data.paymentDoneAt && (
+                <div className="rounded-md border border-green-300 bg-green-50/60 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-center space-y-1">
+                  <p className="font-semibold text-green-800 dark:text-green-300">✓ Payment Confirmed!</p>
+                  <p className="text-xs text-muted-foreground">Your payment has been confirmed. You are now a fully confirmed DAFKU client.</p>
+                </div>
+              )}
+
+              <p className="text-center text-xs text-muted-foreground pt-2">
+                Questions? Use the <strong>Messages</strong> tab or WhatsApp: <strong>+355 69 69 52 989</strong>
+              </p>
             </TabsContent>
           )}
 

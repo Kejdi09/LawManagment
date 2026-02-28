@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Briefcase, Users, UserSearch, UserCheck, CalendarDays, ActivitySquare,
+  Users, UserSearch, UserCheck, CalendarDays, ActivitySquare,
   Receipt, MessageSquare, Trash2, ShieldCheck, ChevronDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -40,14 +40,13 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const onClients = location.pathname.startsWith("/clients");
   const onCalendar = location.pathname.startsWith("/calendar");
   const onActivity = location.pathname.startsWith("/activity");
-  const onCustomerCases = location.pathname.startsWith("/customer-cases");
   const onInvoices = location.pathname.startsWith("/invoices");
   const onChat = location.pathname.startsWith("/chat");
   const onArchived = location.pathname.startsWith("/archived");
   const onStaff = location.pathname.startsWith("/staff");
   const onClientCases =
     location.pathname === "/" ||
-    (!onCustomers && !onClients && !onCalendar && !onActivity && !onCustomerCases && !onInvoices && !onChat && !onArchived && !onStaff);
+    (!onCustomers && !onClients && !onCalendar && !onActivity && !onInvoices && !onChat && !onArchived && !onStaff);
 
   const displayName =
     user?.role === "admin"
@@ -85,7 +84,6 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         {!isAuthLoading && isIntake && (
           <>
             <SectionLabel>Intake</SectionLabel>
-            <NavBtn path="/customer-cases" icon={<Briefcase className="w-4 h-4" />} label="Customer Cases" isActive={onCustomerCases} />
             <NavBtn path="/customers" icon={<UserSearch className="w-4 h-4" />} label="Customers" isActive={onCustomers} />
           </>
         )}

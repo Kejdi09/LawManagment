@@ -79,7 +79,7 @@ export function GlobalSearch() {
               {results.cases.map((c) => (
                 <button
                   key={c.caseId}
-                  onClick={() => go(c.caseType === "customer" ? "/customer-cases" : "/")}
+                  onClick={() => go(c.caseType === "customer" ? "/customers" : "/")}
                   className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-muted transition-colors text-left"
                 >
                   <div>

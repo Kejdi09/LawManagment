@@ -48,15 +48,9 @@ const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
 
 const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
-  "INTAKE",
-  "SEND_PROPOSAL",
-  "WAITING_APPROVAL",
-  "SEND_CONTRACT",
-  "WAITING_ACCEPTANCE",
-  "SEND_RESPONSE",
   "CLIENT",
-  "ARCHIVED",
   "ON_HOLD",
+  "ARCHIVED",
   "CONSULTATION_SCHEDULED",
 ];
 
@@ -64,6 +58,7 @@ const statusAccent: Record<string, string> = {
   INTAKE: "bg-slate-100 text-slate-800",
   SEND_PROPOSAL: "bg-blue-100 text-blue-800",
   WAITING_APPROVAL: "bg-amber-100 text-amber-800",
+  AWAITING_PAYMENT: "bg-red-50 text-red-800",
   SEND_CONTRACT: "bg-indigo-100 text-indigo-800",
   WAITING_ACCEPTANCE: "bg-orange-100 text-orange-800",
   SEND_RESPONSE: "bg-emerald-100 text-emerald-800",
@@ -114,10 +109,6 @@ const ClientsPage = () => {
 
   const openDetail = async (client: Customer) => {
     setSelectedClient(client);
-    setPortalLink(null);
-    setPortalNotes([]);
-    setChatMessages([]);
-    setChatText("");
     setSelectedCases([]);
     const [cases, history, docs] = await Promise.all([
       getCasesByCustomer(client.customerId),
