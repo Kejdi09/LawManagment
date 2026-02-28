@@ -3268,7 +3268,7 @@ app.post('/api/register', async (req, res) => {
     return res.status(409).json({ error: 'An account with this email already exists. Please contact us directly or use your existing portal link.' });
   }
   const customerId = genShortId('CUS');
-  const now = new Date().toISOString();
+  const nowIso = new Date().toISOString();
   const svcList = Array.isArray(services) ? services : (services ? [String(services)] : []);
   const doc = {
     customerId,
@@ -3279,8 +3279,8 @@ app.post('/api/register', async (req, res) => {
     services: svcList,
     message: message ? String(message).trim() : null,
     status: 'INTAKE',
-    createdAt: now,
-    updatedAt: now,
+    createdAt: nowIso,
+    updatedAt: nowIso,
     source: 'self_register',
     version: 1,
   };
@@ -3288,7 +3288,7 @@ app.post('/api/register', async (req, res) => {
   // Auto-generate portal token valid for 30 days
   const rawToken = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  await portalTokensCol.insertOne({ token: rawToken, customerId, clientName: doc.name, clientType: 'customer', createdAt: now, expiresAt, createdBy: 'self_register' });
+  await portalTokensCol.insertOne({ token: rawToken, customerId, clientName: doc.name, clientType: 'customer', createdAt: nowIso, expiresAt, createdBy: 'self_register' });
   await logAudit({ username: 'public', role: 'public', action: 'self_register', resource: 'customer', resourceId: customerId, details: { name: doc.name, email: normalEmail } });
   // Welcome email to new enquirer
   const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${rawToken}` : null;
