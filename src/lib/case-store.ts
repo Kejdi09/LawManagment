@@ -481,11 +481,11 @@ export async function respondToProposal(token: string, action: "accept" | "revis
   }
 }
 
-export async function respondToContract(token: string): Promise<{ status: string; assignedTo: string }> {
+export async function respondToContract(token: string, signedByName: string): Promise<{ status: string; assignedTo: string }> {
   const res = await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/respond-contract`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ signedByName }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));

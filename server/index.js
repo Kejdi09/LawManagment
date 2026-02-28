@@ -2570,6 +2570,7 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
     return res.status(400).json({ error: 'Contract is not awaiting acceptance' });
   }
 
+  const { signedByName } = req.body || {};
   const now = new Date().toISOString();
 
   // Auto-assign to Kejdi or Albert — whoever has fewer confirmed clients; tie → Albert
@@ -2585,6 +2586,8 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
     status: 'CLIENT',
     assignedTo,
     contractAcceptedAt: now,
+    contractSignedByName: signedByName || customer.name,
+    contractSignedAt: now,
     confirmedAt: now,
     sourceCustomerId: customer.customerId,
     version: (customer.version || 0) + 1,
@@ -2600,7 +2603,7 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
   // Update the customer record to CLIENT so admin sees the transition
   await customersCol.updateOne(
     { customerId: customer.customerId },
-    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now } }
+    { $set: { status: 'CLIENT', assignedTo, contractAcceptedAt: now, contractSignedByName: signedByName || customer.name, contractSignedAt: now } }
   );
 
   await customerHistoryCol.insertOne({
@@ -2619,7 +2622,7 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
   await portalMessagesCol.insertOne({
     messageId: genShortId('MSG'),
     customerId: customer.customerId,
-    text: '[Contract Accepted] The client has accepted the contract and is now a confirmed client.',
+    text: `[Contract Accepted] The client has accepted the contract and is now a confirmed client. Electronic signature recorded as: "${signedByName || customer.name}" at ${now}.`,
     senderType: 'client',
     readByStaff: false,
     readByClient: true,
@@ -2629,7 +2632,7 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
   sendEmail({
     to: process.env.ADMIN_EMAIL,
     subject: `Contract accepted — ${customer.name}`,
-    text: `${customer.name} has accepted the contract via the client portal.\n\nThey have been confirmed as a client and auto-assigned to ${assignedTo}.`,
+    text: `${customer.name} has accepted the contract via the client portal.\n\nElectronic signature name: "${signedByName || customer.name}"\nAccepted at: ${now}\n\nThey have been confirmed as a client and auto-assigned to ${assignedTo}.`,
   });
 
   return res.json({ ok: true, status: 'CLIENT', assignedTo });

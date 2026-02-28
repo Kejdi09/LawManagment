@@ -18,6 +18,7 @@ import { Customer, ProposalFields, SERVICE_LABELS, ServiceType } from "@/lib/typ
 import { updateCustomer } from "@/lib/case-store";
 import { useToast } from "@/hooks/use-toast";
 import ProposalRenderer from "@/components/ProposalRenderer";
+import ContractRenderer from "@/components/ContractRenderer";
 import { EUR_RATE, USD_RATE, GBP_RATE, fmt, computePresetFees } from "@/components/ProposalModal";
 
 // ── Main component ──
@@ -336,13 +337,12 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
               </Button>
             </div>
             <div className="px-6 pb-6">
-              <ProposalRenderer
+              <ContractRenderer
                 clientName={customer.name}
                 clientId={customer.customerId}
                 services={svcs}
                 fields={fields}
                 innerRef={printRef}
-                mode="contract"
               />
             </div>
           </TabsContent>

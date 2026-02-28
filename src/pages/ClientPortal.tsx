@@ -11,6 +11,7 @@ import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPan
 import ClientIntakeForm from "@/components/ClientIntakeForm";
 import FaqBot from "@/components/FaqBot";
 import ProposalRenderer from "@/components/ProposalRenderer";
+import ContractRenderer from "@/components/ContractRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
@@ -558,13 +559,12 @@ export default function ClientPortalPage() {
                   Save as PDF
                 </Button>
               </div>
-              <ProposalRenderer
+              <ContractRenderer
                 innerRef={contractPrintRef}
                 clientName={data.client.name}
                 clientId={data.client.customerId}
                 services={(data.client.services || []) as import("@/lib/types").ServiceType[]}
                 fields={data.contractSnapshot}
-                mode="contract"
               />
               <p className="text-xs text-muted-foreground text-center">
                 Questions about this contract?{" "}
@@ -592,11 +592,22 @@ export default function ClientPortalPage() {
                               Type your full legal name to confirm
                             </label>
                             <input
-                              className="w-full border rounded px-3 py-2 text-sm"
+                              className={`w-full border rounded px-3 py-2 text-sm ${
+                                contractSignName.trim() &&
+                                contractSignName.trim().toLowerCase() !== data.client.name.trim().toLowerCase()
+                                  ? "border-red-400 bg-red-50"
+                                  : ""
+                              }`}
                               placeholder={data.client.name}
                               value={contractSignName}
                               onChange={(e) => setContractSignName(e.target.value)}
                             />
+                            {contractSignName.trim() &&
+                              contractSignName.trim().toLowerCase() !== data.client.name.trim().toLowerCase() && (
+                              <p className="text-xs text-red-500">
+                                Name must match exactly: <strong>{data.client.name}</strong>
+                              </p>
+                            )}
                           </div>
                           <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
                             <input
@@ -610,12 +621,12 @@ export default function ClientPortalPage() {
                         </div>
                         <Button
                           className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                          disabled={contractResponding || !contractSignName.trim() || !contractSignAgreed}
+                          disabled={contractResponding || contractSignName.trim().toLowerCase() !== data.client.name.trim().toLowerCase() || !contractSignAgreed}
                           onClick={async () => {
                             if (!token) return;
                             setContractResponding(true);
                             try {
-                              await respondToContract(token);
+                              await respondToContract(token, contractSignName.trim());
                               setContractRespondDone("accepted");
                             } finally {
                               setContractResponding(false);
