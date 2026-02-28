@@ -9,7 +9,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { seedCustomers, seedCases, seedHistory, seedNotes, seedTasks } from "./seed-data.js";
-import nodemailer from "nodemailer";
+import nodemailer from "nodemailer"; // kept for potential future SMTP use
 
 dotenv.config();
 
@@ -36,18 +36,18 @@ const STATE_EMAIL_LABELS = {
   ARCHIVED: 'Archived',
 };
 function logEmailConfig() {
-  const { RESEND_API_KEY, SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL } = process.env;
-  if (RESEND_API_KEY) {
-    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'} | ADMIN=${ADMIN_EMAIL || '(not set)'}`);
-  } else if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-    console.log(`[email] SMTP configured: ${SMTP_USER}@${SMTP_HOST} | FROM=${SMTP_FROM || SMTP_USER} | ADMIN=${ADMIN_EMAIL || '(not set)'}`);
+  const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
+  if (BREVO_API_KEY) {
+    console.log(`[email] Brevo API configured | FROM=${SMTP_FROM || 'mucikejdi522@gmail.com'}`);
+  } else if (RESEND_API_KEY) {
+    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'} (NOTE: requires verified domain to send to others)`);
   } else {
-    console.warn('[email] NOT configured — set RESEND_API_KEY (recommended) or SMTP_HOST/USER/PASS to enable emails.');
+    console.warn('[email] NOT configured — set BREVO_API_KEY on Render to enable emails.');
   }
 }
 logEmailConfig();
 
-// Reusable SMTP transport instance (created lazily, reset on connection errors)
+// Reusable SMTP transport instance (kept for potential future use)
 let _smtpTransport = null;
 
 // ── Professional HTML email wrapper ─────────────────────────────────────────
@@ -87,28 +87,47 @@ function buildHtmlEmail(bodyHtml) {
 async function sendEmail({ to, subject, text, html }) {
   if (!to) { console.warn(`[email] Skipping "${subject}" — no recipient address.`); return; }
 
-  const { RESEND_API_KEY, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
+  const fromAddr = SMTP_FROM || 'DAFKU Law Firm <mucikejdi522@gmail.com>';
 
-  // ── Option 1: Resend HTTP API (recommended on Render — no SMTP port issues) ──
-  // NOTE: With Resend free tier (no verified domain), emails can only be sent to
-  // your own registered Resend email address. To send to any recipient, you must
-  // add and verify your sending domain in the Resend dashboard and set SMTP_FROM
-  // to an address on that domain (e.g. noreply@dafkulawfirm.al).
+  // ── Option 1: Brevo HTTPS API (works on Render free tier — no domain needed) ──
+  if (BREVO_API_KEY) {
+    try {
+      // Parse "Name <email>" or plain "email" from fromAddr
+      const fromMatch = fromAddr.match(/^(.*?)\s*<([^>]+)>$/);
+      const fromPayload = fromMatch
+        ? { name: fromMatch[1].trim(), email: fromMatch[2].trim() }
+        : { email: fromAddr.trim() };
+      const payload = { sender: fromPayload, to: [{ email: to }], subject, textContent: text };
+      if (html) payload.htmlContent = html;
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        console.log(`[email] ✓ Sent via Brevo "${subject}" → ${to}`);
+      } else {
+        console.error(`[email] ✗ Brevo error "${subject}" → ${to}:`, JSON.stringify(data));
+      }
+    } catch (e) {
+      console.error(`[email] ✗ Brevo fetch failed "${subject}" → ${to}:`, e.message);
+    }
+    return;
+  }
+
+  // ── Option 2: Resend HTTPS API ──
   if (RESEND_API_KEY) {
     try {
-      const payload = {
-        from: SMTP_FROM || 'DAFKU Law Firm <onboarding@resend.dev>',
-        to: [to],
-        subject,
-        text,
-      };
+      const payload = { from: fromAddr, to: [to], subject, text };
       if (html) payload.html = html;
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         console.log(`[email] ✓ Sent via Resend "${subject}" → ${to}`);
       } else {
@@ -120,43 +139,7 @@ async function sendEmail({ to, subject, text, html }) {
     return;
   }
 
-  // ── Option 2: SMTP / Gmail (nodemailer) ──
-  if (!SMTP_USER || !SMTP_PASS) {
-    console.warn('[email] Skipping — neither RESEND_API_KEY nor SMTP_USER/SMTP_PASS configured.');
-    return;
-  }
-  // Detect Gmail and use the nodemailer gmail service shortcut (handles OAuth2 quirks automatically)
-  const isGmail = (SMTP_HOST || '').toLowerCase().includes('gmail') || SMTP_USER.toLowerCase().endsWith('@gmail.com');
-  const optionsKey = `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`;
-  if (!_smtpTransport || _smtpTransport._options_key !== optionsKey) {
-    if (isGmail) {
-      _smtpTransport = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
-      });
-    } else {
-      const port = Number(SMTP_PORT) || 587;
-      _smtpTransport = nodemailer.createTransport({
-        host: SMTP_HOST, port,
-        secure: port === 465,
-        requireTLS: port !== 465,
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
-        tls: { rejectUnauthorized: true },
-      });
-    }
-    _smtpTransport._options_key = optionsKey;
-    console.log(`[email] ${isGmail ? 'Gmail' : 'SMTP'} transport created for ${SMTP_USER}`);
-  }
-  try {
-    const info = await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, ...(html ? { html } : {}) });
-    console.log(`[email] ✓ Sent via ${isGmail ? 'Gmail' : 'SMTP'} "${subject}" → ${to} [${info.messageId}]`);
-  } catch (e) {
-    console.error(`[email] ✗ ${isGmail ? 'Gmail' : 'SMTP'} failed "${subject}" → ${to}: ${e.message} (code=${e.code || 'none'} response=${e.response || 'none'})`);
-    // Reset transport on connection errors so the next call creates a fresh one
-    if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' || e.code === 'EAUTH') {
-      _smtpTransport = null;
-    }
-  }
+  console.warn(`[email] NOT configured — set BREVO_API_KEY on Render to enable emails. Skipping "${subject}" → ${to}`);
 }
 
 const PORT = process.env.PORT || 4000;
@@ -3602,10 +3585,8 @@ app.get('/api/admin/test-email', verifyAuth, async (req, res) => {
   if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
   const to = String(req.query.to || '').trim();
   if (!to) return res.status(400).json({ error: 'Provide ?to=email address' });
-  const { RESEND_API_KEY, SMTP_USER, SMTP_PASS, SMTP_HOST } = process.env;
-  const config = RESEND_API_KEY
-    ? `Resend API (key set)`
-    : (SMTP_USER && SMTP_PASS ? `SMTP: ${SMTP_USER} @ ${SMTP_HOST || 'gmail'}` : 'NOT CONFIGURED');
+  const { BREVO_API_KEY, RESEND_API_KEY } = process.env;
+  const config = BREVO_API_KEY ? `Brevo API` : RESEND_API_KEY ? `Resend API` : 'NOT CONFIGURED';
   try {
     await sendEmail({
       to,
