@@ -154,6 +154,10 @@ export interface Customer {
   contractViewedAt?: string;
   /** ISO timestamp of when the client accepted the contract */
   contractAcceptedAt?: string;
+  /** Name typed by the client when electronically signing the contract via portal */
+  contractSignedByName?: string;
+  /** ISO timestamp of when the client electronically signed the contract via portal */
+  contractSignedAt?: string;
   /** Message / note left by the client when self-registering */
   message?: string | null;
   /** Source of the record, e.g. 'self_register' */

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Phone, Mail, MapPin, StickyNote, Trash2, Loader2 } from "lucide-react";
+import { Phone, Mail, MapPin, StickyNote, Trash2, Loader2, ShieldCheck } from "lucide-react";
 import {
   Customer,
   CustomerHistoryRecord,
@@ -433,6 +433,35 @@ const ClientsPage = () => {
                       )}
                     </CardContent>
                   </Card>
+
+                  {/* Contract Electronic Signature Proof */}
+                  {(selectedClient.contractSignedByName || selectedClient.contractAcceptedAt) && (
+                    <Card className="border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-900">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                          <ShieldCheck className="h-4 w-4" />
+                          Electronic Signature — Contract Accepted
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1 text-sm">
+                        {selectedClient.contractSignedByName && (
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Signed as: </span>
+                            <strong>{selectedClient.contractSignedByName}</strong>
+                          </div>
+                        )}
+                        {(selectedClient.contractSignedAt || selectedClient.contractAcceptedAt) && (
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Date &amp; time: </span>
+                            <strong>{new Date(selectedClient.contractSignedAt || selectedClient.contractAcceptedAt!).toLocaleString()}</strong>
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground italic mt-1">
+                          Electronically recorded via client portal — not editable by staff
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Documents</CardTitle></CardHeader>
