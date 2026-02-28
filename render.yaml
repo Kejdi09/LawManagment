@@ -18,3 +18,5 @@ services:
         sync: false
       - key: SIGNATURE_SECRET
         sync: false
+      - key: INTAKE_SECRET
+        sync: false

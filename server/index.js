@@ -3002,9 +3002,13 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
 });
 
 // ── Public Self-Registration (standalone page — no frontend URL exposed) ─────
-// Serve a self-contained registration form from the backend domain.
-// Share /join as the public enquiry link — it never reveals the admin app URL.
-app.get('/join', (req, res) => {
+// Route is secret: /join/:token — only works if the token matches INTAKE_SECRET env var.
+// Share the full URL including the token; hitting /join without the correct token returns 404.
+app.get('/join/:token', (req, res) => {
+  const secret = process.env.INTAKE_SECRET;
+  if (!secret || req.params.token !== secret) {
+    return res.status(404).send('Not found');
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="en">
