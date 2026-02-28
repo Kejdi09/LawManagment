@@ -4,10 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import {
   Users, UserSearch, UserCheck, CalendarDays, ActivitySquare,
-  Receipt, MessageSquare, Trash2, ShieldCheck, ChevronDown,
+  Receipt, Trash2, ShieldCheck, ChevronDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { getChatUnreadCounts } from "@/lib/case-store";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <div className="px-3 pt-3 pb-1">
@@ -21,32 +20,16 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
   const { user, isAuthLoading, logout } = useAuth();
   const [adminOpen, setAdminOpen] = useState(true);
 
-  // Poll for total unread chat messages to show badge in nav
-  const [chatUnread, setChatUnread] = useState(0);
-  useEffect(() => {
-    if (!user) return;
-    const fetchUnread = async () => {
-      try {
-        const data = await getChatUnreadCounts();
-        setChatUnread(data.reduce((s, d) => s + d.unreadCount, 0));
-      } catch { /* ignore */ }
-    };
-    fetchUnread();
-    const id = setInterval(fetchUnread, 8_000);
-    return () => clearInterval(id);
-  }, [user]);
-
   const onCustomers = location.pathname.startsWith("/customers");
   const onClients = location.pathname.startsWith("/clients");
   const onCalendar = location.pathname.startsWith("/calendar");
   const onActivity = location.pathname.startsWith("/activity");
   const onInvoices = location.pathname.startsWith("/invoices");
-  const onChat = location.pathname.startsWith("/chat");
   const onArchived = location.pathname.startsWith("/archived");
   const onStaff = location.pathname.startsWith("/staff");
   const onClientCases =
     location.pathname === "/" ||
-    (!onCustomers && !onClients && !onCalendar && !onActivity && !onInvoices && !onChat && !onArchived && !onStaff);
+    (!onCustomers && !onClients && !onCalendar && !onActivity && !onInvoices && !onArchived && !onStaff);
 
   const displayName =
     user?.role === "admin"
@@ -102,19 +85,6 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
           <>
             <SectionLabel>General</SectionLabel>
             <NavBtn path="/calendar" icon={<CalendarDays className="w-4 h-4" />} label="Calendar" isActive={onCalendar} />
-            <button
-              type="button"
-              className={`${itemBase} ${onChat ? active : inactive}`}
-              onClick={() => go("/chat")}
-            >
-              <span className="shrink-0 w-4 h-4 flex items-center justify-center"><MessageSquare className="w-4 h-4" /></span>
-              <span>Chat</span>
-              {chatUnread > 0 && (
-                <span className="ml-auto h-4 min-w-[1rem] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-1">
-                  {chatUnread}
-                </span>
-              )}
-            </button>
           </>
         )}
 

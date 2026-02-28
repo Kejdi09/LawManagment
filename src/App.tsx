@@ -18,7 +18,6 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Login = lazy(() => import("./pages/Login"));
 const Invoices = lazy(() => import("./pages/Invoices"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
-const Chat = lazy(() => import("./pages/Chat"));
 const StaffManagement = lazy(() => import("./pages/StaffManagement"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 
@@ -128,7 +127,7 @@ const App = () => (
                 <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
                 <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
                 <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
-                <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
+                <Route path="/chat" element={<Navigate to="/" replace />} />
                 <Route path="/staff" element={<RequireAuth><StaffManagement /></RequireAuth>} />
                 <Route path="/portal/:token" element={<ClientPortal />} />
                 <Route path="/register" element={<RegisterPage />} />

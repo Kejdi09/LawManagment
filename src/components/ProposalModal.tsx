@@ -1235,11 +1235,16 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
               </div>
             </div>
 
-            <div className="flex gap-2 mt-6">
+            {!customer.intakeLastSubmittedAt && (
+              <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                ⚠️ The client has not yet submitted the intake form. You can save the proposal draft, but sending is disabled until the intake form is submitted.
+              </div>
+            )}
+            <div className="flex gap-2 mt-4">
               <Button onClick={handleSave} disabled={saving} variant="secondary">
-                {saving ? "Saving..." : "Save"}
+                {saving ? "Saving..." : "Save Draft"}
               </Button>
-              <Button onClick={handleSendProposal} disabled={saving}>
+              <Button onClick={handleSendProposal} disabled={saving || !customer.intakeLastSubmittedAt} title={!customer.intakeLastSubmittedAt ? "Intake form not yet submitted" : undefined}>
                 <Send className="h-4 w-4 mr-1.5" />
                 {saving ? "Sending..." : "Send Proposal"}
               </Button>

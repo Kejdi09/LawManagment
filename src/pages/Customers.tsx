@@ -14,8 +14,8 @@ import {
   getCustomerHistory,
   createMeeting,
   generatePortalToken,
-  getChatUnreadCounts,
   markPaymentDone,
+  setInitialPaymentAmount,
 } from "@/lib/case-store";
 import {
   SERVICE_LABELS,
@@ -68,6 +68,38 @@ function safeFormatDate(dateValue: string | Date | null | undefined) {
 }
 
 const CUSTOMER_TYPES = ["Individual", "Family", "Company"] as const;
+
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Argentina", "Armenia", "Australia",
+  "Austria", "Azerbaijan", "Bahrain", "Bangladesh", "Belgium", "Bosnia and Herzegovina",
+  "Brazil", "Bulgaria", "Canada", "China", "Colombia", "Croatia", "Czech Republic",
+  "Denmark", "Egypt", "Estonia", "Ethiopia", "Finland", "France", "Georgia", "Germany",
+  "Ghana", "Greece", "Hungary", "India", "Indonesia", "Iran", "Iraq", "Ireland",
+  "Israel", "Italy", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kosovo", "Kuwait",
+  "Lebanon", "Lithuania", "Malaysia", "Mexico", "Moldova", "Montenegro", "Morocco",
+  "Netherlands", "Nigeria", "Norway", "Pakistan", "Palestine", "Philippines",
+  "Poland", "Portugal", "Qatar", "Romania", "Russia", "Saudi Arabia", "Serbia",
+  "Slovakia", "Slovenia", "South Africa", "Spain", "Sri Lanka", "Sweden", "Switzerland",
+  "Syria", "Taiwan", "Tunisia", "Turkey", "UAE", "Ukraine", "United Kingdom",
+  "United States", "Uzbekistan", "Venezuela", "Vietnam", "Other",
+];
+
+const NATIONALITIES = [
+  "Afghan", "Albanian", "Algerian", "American", "Argentinian", "Australian",
+  "Austrian", "Azerbaijani", "Bahraini", "Bangladeshi", "Belgian", "Bosnian",
+  "Brazilian", "British", "Bulgarian", "Cameroonian", "Canadian", "Chinese",
+  "Colombian", "Croatian", "Czech", "Danish", "Dutch", "Egyptian",
+  "Emirati", "Estonian", "Ethiopian", "Filipino", "Finnish", "French",
+  "Georgian", "German", "Ghanaian", "Greek", "Hungarian", "Indian",
+  "Indonesian", "Iranian", "Iraqi", "Irish", "Israeli", "Italian",
+  "Jamaican", "Japanese", "Jordanian", "Kazakh", "Kenyan", "Kosovar",
+  "Kuwaiti", "Lebanese", "Lithuanian", "Macedonian", "Malaysian", "Mexican",
+  "Moldovan", "Montenegrin", "Moroccan", "Nigerian", "Norwegian", "Pakistani",
+  "Palestinian", "Polish", "Portuguese", "Qatari", "Romanian", "Russian",
+  "Saudi", "Serbian", "Slovak", "Slovenian", "South African", "Spanish",
+  "Sri Lankan", "Swedish", "Swiss", "Syrian", "Taiwanese", "Tunisian",
+  "Turkish", "Ukrainian", "Uzbek", "Venezuelan", "Vietnamese", "Other",
+];
 const CATEGORY_OPTIONS = [...CUSTOMER_TYPES, "Other"] as const;
 const UNASSIGNED_CONSULTANT = "__UNASSIGNED__";
 const CUSTOMER_COLUMNS_MODE_KEY = "lm:show-more-columns";
@@ -140,6 +172,8 @@ const Customers = () => {
     phone: "",
     email: "",
     address: "",
+    nationality: "",
+    country: "",
     registeredAt: new Date().toISOString(),
     services: [] as (keyof typeof SERVICE_LABELS)[],
     serviceDescription: "",
@@ -158,6 +192,9 @@ const Customers = () => {
   const [showProposalModal, setShowProposalModal] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
   const [markingPayment, setMarkingPayment] = useState(false);
+  const [initialPayAmt, setInitialPayAmt] = useState("");
+  const [initialPayCurrency, setInitialPayCurrency] = useState("EUR");
+  const [savingInitialPay, setSavingInitialPay] = useState(false);
   const [showIntakeSheet, setShowIntakeSheet] = useState(false);
   const [resetBotLoading, setResetBotLoading] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
@@ -168,7 +205,7 @@ const Customers = () => {
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+;
   const selectedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -225,24 +262,7 @@ const Customers = () => {
     }
   }, [customers]);
 
-  const loadUnreadCounts = useCallback(async () => {
-    try {
-      const data = await getChatUnreadCounts();
-      setUnreadCounts(Object.fromEntries(data.map((d) => [d.customerId, d.unreadCount])));
-    } catch { /* ignore */ }
-  }, []);
-
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
-
-  // Auto-refresh unread portal message counts every 5s
-  useEffect(() => {
-    loadUnreadCounts();
-    const id = setInterval(() => loadUnreadCounts(), 5_000);
-    return () => clearInterval(id);
-  }, [loadUnreadCounts]);
-
-  // NOTE: Dot clears automatically when the CLIENT opens their portal chat (server marks readByClient=true).
-  // No action needed when staff opens the customer panel.
 
   // Real-time polling: refresh customers every 5s
   useEffect(() => {
@@ -252,6 +272,14 @@ const Customers = () => {
     return () => clearInterval(id);
   }, [loadCustomers]);
   useEffect(() => { loadCustomerDetail(selectedId); }, [selectedId, loadCustomerDetail]);
+
+  // Sync initial payment amount inputs when a new customer is selected
+  useEffect(() => {
+    if (selectedCustomer?.status === 'AWAITING_PAYMENT') {
+      setInitialPayAmt(selectedCustomer.initialPaymentAmount ? String(selectedCustomer.initialPaymentAmount) : '');
+      setInitialPayCurrency(selectedCustomer.initialPaymentCurrency ?? 'EUR');
+    }
+  }, [selectedCustomer?.customerId]);
 
   const filteredCustomers = useMemo(() => {
     if (!search) return customers;
@@ -386,6 +414,8 @@ const Customers = () => {
       phone: "",
       email: "",
       address: "",
+      nationality: "",
+      country: "",
       registeredAt: new Date().toISOString(),
       services: [],
       serviceDescription: "",
@@ -414,6 +444,8 @@ const Customers = () => {
       assignedTo: stripProfessionalTitle(c.assignedTo) || c.assignedTo || "",
       followUpDate: c.followUpDate ? String(c.followUpDate).slice(0, 10) : "",
       notes: c.notes ?? "",
+      nationality: c.nationality ?? "",
+      country: c.country ?? "",
     });
     setShowForm(true);
   };
@@ -427,6 +459,14 @@ const Customers = () => {
       }
       if (!form.phone?.trim() && !form.email?.trim()) {
         toast({ title: 'Contact required', description: 'Please enter at least a phone number or email address.', variant: 'destructive' });
+        return;
+      }
+      if (form.phone?.trim() && !/^\+?[\d\s\-().]{6,25}$/.test(form.phone.trim())) {
+        toast({ title: 'Invalid phone', description: 'Phone number must be 6–25 characters and may include digits, spaces, +, -, (, ) only.', variant: 'destructive' });
+        return;
+      }
+      if (form.name.trim().length < 2) {
+        toast({ title: 'Name too short', description: 'Please enter at least 2 characters for the name.', variant: 'destructive' });
         return;
       }
       if (!form.services || form.services.length === 0) {
@@ -1010,14 +1050,6 @@ const Customers = () => {
                             <div className="flex justify-end items-center gap-2 flex-nowrap opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); navigate('/chat'); }} aria-label="Chat">
-                                    <MessageSquare className="h-3.5 w-3.5" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Open Chat</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
                                   <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
@@ -1205,7 +1237,6 @@ const Customers = () => {
               <Label>Phone <span className="text-destructive">*</span></Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
             </div>
-            {/* Country removed; use Address field to store country if desired */}
             <div className="space-y-2">
               <Label>Email <span className="text-destructive">*</span></Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email address" />
@@ -1213,6 +1244,24 @@ const Customers = () => {
             <div className="space-y-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Country</Label>
+              <Select value={(form as { country?: string }).country || ""} onValueChange={(v) => setForm({ ...form, country: v })}>
+                <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {COUNTRIES.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Nationality</Label>
+              <Select value={(form as { nationality?: string }).nationality || ""} onValueChange={(v) => setForm({ ...form, nationality: v })}>
+                <SelectTrigger><SelectValue placeholder="Select nationality" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {NATIONALITIES.map((n) => (<SelectItem key={n} value={n}>{n}</SelectItem>))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Registered At</Label>
@@ -1440,42 +1489,97 @@ const Customers = () => {
                         {/* Mark Payment Done – activate client once payment is confirmed */}
                         {selectedCustomer.status === 'AWAITING_PAYMENT' && !selectedCustomer.paymentDoneAt && (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            <div className="w-full rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-800 dark:text-red-300 space-y-1">
+                            <div className="w-full rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-800 dark:text-red-300 space-y-1.5">
                               <p className="font-semibold">💳 Awaiting Payment</p>
                               {selectedCustomer.paymentAmountALL && (
-                                <p>Amount: <strong>{selectedCustomer.paymentAmountALL.toLocaleString()} ALL{selectedCustomer.paymentAmountEUR ? ` ≈ ${selectedCustomer.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong></p>
+                                <p>Total: <strong>{selectedCustomer.paymentAmountALL.toLocaleString()} ALL{selectedCustomer.paymentAmountEUR ? ` ≈ ${selectedCustomer.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong></p>
                               )}
-                              {selectedCustomer.paymentSelectedMethod && (
+                              {selectedCustomer.paymentSelectedMethod ? (
                                 <p>Client selected: <strong className="capitalize">{selectedCustomer.paymentSelectedMethod === 'bank' ? 'Bank Transfer' : selectedCustomer.paymentSelectedMethod === 'crypto' ? 'Crypto (USDT)' : 'Cash'}</strong></p>
+                              ) : (
+                                <p className="text-amber-700 dark:text-amber-400">⚠ Client has not selected a payment method yet</p>
                               )}
                               {selectedCustomer.paymentNote && (
                                 <p className="text-muted-foreground">Note: {selectedCustomer.paymentNote}</p>
                               )}
+                              {/* Initial payment amount editor */}
+                              <div className="pt-1 space-y-1">
+                                <p className="font-medium">Initial payment required:</p>
+                                <div className="flex items-center gap-1.5">
+                                  <Input
+                                    type="number"
+                                    className="h-6 text-xs w-28 bg-white dark:bg-zinc-900"
+                                    placeholder="Amount"
+                                    value={initialPayAmt}
+                                    onChange={(e) => setInitialPayAmt(e.target.value)}
+                                    disabled={savingInitialPay}
+                                  />
+                                  <select
+                                    className="h-6 text-xs rounded border px-1 bg-white dark:bg-zinc-900"
+                                    value={initialPayCurrency}
+                                    onChange={(e) => setInitialPayCurrency(e.target.value)}
+                                    disabled={savingInitialPay}
+                                  >
+                                    <option value="EUR">EUR</option>
+                                    <option value="ALL">ALL</option>
+                                    <option value="USD">USD</option>
+                                  </select>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 text-xs px-2"
+                                    disabled={savingInitialPay || !initialPayAmt}
+                                    onClick={async () => {
+                                      const amt = parseFloat(initialPayAmt);
+                                      if (!amt || amt <= 0) return;
+                                      setSavingInitialPay(true);
+                                      try {
+                                        await setInitialPaymentAmount(selectedCustomer.customerId, amt, initialPayCurrency);
+                                        const updated = { ...selectedCustomer, initialPaymentAmount: amt, initialPaymentCurrency: initialPayCurrency };
+                                        setSelectedCustomer(updated);
+                                        setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
+                                        toast({ title: 'Initial payment amount saved' });
+                                      } catch (e) {
+                                        toast({ title: 'Failed', description: String((e as Error)?.message), variant: 'destructive' });
+                                      } finally {
+                                        setSavingInitialPay(false);
+                                      }
+                                    }}
+                                  >
+                                    {savingInitialPay ? '…' : 'Save'}
+                                  </Button>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">This amount will be shown to the customer and deducted from their invoice when confirmed.</p>
+                              </div>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
-                              disabled={markingPayment}
-                              onClick={async () => {
-                                if (!confirm('Confirm that payment has been received? This will activate the client account.')) return;
-                                setMarkingPayment(true);
-                                try {
-                                  await markPaymentDone(selectedCustomer.customerId);
-                                  const updated = { ...selectedCustomer, status: 'CLIENT' as const, paymentDoneAt: new Date().toISOString() };
-                                  setSelectedCustomer(updated);
-                                  setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
-                                  toast({ title: 'Payment confirmed', description: 'Client account has been activated.' });
-                                } catch (e) {
-                                  toast({ title: 'Failed', description: String((e as Error)?.message ?? 'Could not mark payment done.'), variant: 'destructive' });
-                                } finally {
-                                  setMarkingPayment(false);
-                                }
-                              }}
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              {markingPayment ? 'Processing...' : 'Mark Payment Done → Activate Client'}
-                            </Button>
+                            {selectedCustomer.paymentSelectedMethod ? (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+                                disabled={markingPayment}
+                                onClick={async () => {
+                                  if (!confirm('Confirm that payment has been received? This will activate the client account.')) return;
+                                  setMarkingPayment(true);
+                                  try {
+                                    await markPaymentDone(selectedCustomer.customerId);
+                                    const updated = { ...selectedCustomer, status: 'CLIENT' as const, paymentDoneAt: new Date().toISOString() };
+                                    setSelectedCustomer(updated);
+                                    setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
+                                    toast({ title: 'Payment confirmed', description: 'Client account has been activated.' });
+                                  } catch (e) {
+                                    toast({ title: 'Failed', description: String((e as Error)?.message ?? 'Could not mark payment done.'), variant: 'destructive' });
+                                  } finally {
+                                    setMarkingPayment(false);
+                                  }
+                                }}
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                {markingPayment ? 'Processing...' : 'Mark Payment Done → Activate Client'}
+                              </Button>
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic">Waiting for client to select a payment method before you can confirm.</p>
+                            )}
                           </div>
                         )}
                         {selectedCustomer.status === 'AWAITING_PAYMENT' && selectedCustomer.paymentDoneAt && (
@@ -1484,15 +1588,25 @@ const Customers = () => {
                         {/* Proposal button – only shown when status is SEND_PROPOSAL and no proposal sent yet */}
                         {(selectedCustomer.status === "SEND_PROPOSAL" && !selectedCustomer.proposalSentAt) && (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="h-7 text-xs gap-1"
-                              onClick={() => setShowProposalModal(true)}
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                              Generate Proposal
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="h-7 text-xs gap-1"
+                                    disabled={!selectedCustomer.intakeLastSubmittedAt}
+                                    onClick={() => setShowProposalModal(true)}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Generate Proposal
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {!selectedCustomer.intakeLastSubmittedAt && (
+                                <TooltipContent>Intake form must be submitted by the client before generating a proposal</TooltipContent>
+                              )}
+                            </Tooltip>
                           </div>
                         )}
                         {/* Reset intake bot button – only for INTAKE / SEND_PROPOSAL stages */}

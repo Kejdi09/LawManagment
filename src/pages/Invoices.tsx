@@ -9,12 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { createInvoice, deleteInvoice, getConfirmedClients, getInvoices, updateInvoice, recordInvoicePayment, deleteInvoicePayment } from "@/lib/case-store";
-import { Invoice, InvoiceStatus, InvoicePayment } from "@/lib/types";
+import { createInvoice, deleteInvoice, getConfirmedClients, getInvoices, updateInvoice, recordInvoicePayment, deleteInvoicePayment, getCustomersAwaitingPayment, markPaymentDone, setInitialPaymentAmount } from "@/lib/case-store";
+import { Invoice, InvoiceStatus, InvoicePayment, Customer } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, Check, Download, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, Download, CreditCard, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
   pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
@@ -64,17 +64,30 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("");
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
 
+  // Awaiting-payment customers state
+  const [awaitingCustomers, setAwaitingCustomers] = useState<Customer[]>([]);
+  const [confirmCustomer, setConfirmCustomer] = useState<Customer | null>(null);
+  const [confirmInitialAmt, setConfirmInitialAmt] = useState("");
+  const [confirmCurrency, setConfirmCurrency] = useState("EUR");
+  const [confirmInvoiceId, setConfirmInvoiceId] = useState("");
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
   // Payment modal state
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "bank_transfer", note: "" });
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   const load = async () => {
-    const [invs, clients] = await Promise.all([getInvoices(), getConfirmedClients()]);
+    const [invs, clients, awaiting] = await Promise.all([
+      getInvoices(),
+      getConfirmedClients(),
+      getCustomersAwaitingPayment(),
+    ]);
     setInvoices(invs);
     const map: Record<string, string> = {};
     clients.forEach((c) => { map[c.customerId] = c.name; });
     setClientNames(map);
+    setAwaitingCustomers(awaiting);
   };
 
   useEffect(() => { load().catch(() => {}); }, []);
@@ -175,6 +188,27 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleConfirmInitialPayment = async () => {
+    if (!confirmCustomer) return;
+    const amt = parseFloat(confirmInitialAmt);
+    if (!amt || amt <= 0) { toast({ title: "Enter a valid initial payment amount", variant: "destructive" }); return; }
+    setConfirmLoading(true);
+    try {
+      await markPaymentDone(confirmCustomer.customerId, {
+        initialPaymentAmount: amt,
+        currency: confirmCurrency,
+        invoiceId: confirmInvoiceId || undefined,
+      });
+      toast({ title: "Payment confirmed", description: `${confirmCustomer.name} is now an active client.` });
+      setConfirmCustomer(null);
+      await load();
+    } catch (e) {
+      toast({ title: "Failed", description: String((e as Error)?.message ?? "Could not confirm payment"), variant: "destructive" });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
   const togglePayments = (id: string) => {
     setExpandedPayments(prev => {
       const next = new Set(prev);
@@ -217,9 +251,10 @@ export default function InvoicesPage() {
     return true;
   });
 
-  const totalPending = invoices.filter((i) => i.status === "pending").reduce((s, i) => s + i.amount, 0);
+  // Fix stats: Pending/Overdue = remaining balance (not full amount); Collected = all amountPaid
+  const totalPending = invoices.filter((i) => i.status === "pending").reduce((s, i) => s + Math.max(0, i.amount - (i.amountPaid ?? 0)), 0);
   const totalPaid = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
-  const totalOverdue = invoices.filter((i) => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
+  const totalOverdue = invoices.filter((i) => i.status === "overdue").reduce((s, i) => s + Math.max(0, i.amount - (i.amountPaid ?? 0)), 0);
   const totalCollected = invoices.reduce((s, i) => s + (i.amountPaid ?? 0), 0);
 
   return (
@@ -240,6 +275,51 @@ export default function InvoicesPage() {
           </Card>
         ))}
       </div>
+
+      {/* ── Initial Payments Pending ── */}
+      {awaitingCustomers.length > 0 && (
+        <Card className="mb-4 border-amber-300 dark:border-amber-700">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-4 w-4" />
+              Initial Payments Pending ({awaitingCustomers.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {awaitingCustomers.map((c) => {
+                const customerInvoices = invoices.filter((i) => i.customerId === c.customerId && i.status !== 'cancelled');
+                const methodLabel = c.paymentSelectedMethod === 'bank' ? '🏦 Bank Transfer' : c.paymentSelectedMethod === 'crypto' ? '💎 Crypto (USDT)' : '💵 Cash';
+                return (
+                  <div key={c.customerId} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="font-medium text-sm">{c.name}</div>
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>Method: <strong>{methodLabel}</strong></span>
+                        {c.paymentAmountALL && <span>Total: <strong>{c.paymentAmountALL.toLocaleString()} ALL{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong></span>}
+                        {c.initialPaymentAmount && <span>Initial: <strong>{c.initialPaymentAmount.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}</strong></span>}
+                        {customerInvoices.length > 0 && <span>{customerInvoices.length} invoice{customerInvoices.length > 1 ? 's' : ''}</span>}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => {
+                        setConfirmCustomer(c);
+                        setConfirmInitialAmt(c.initialPaymentAmount ? String(c.initialPaymentAmount) : c.paymentAmountEUR ? String(c.paymentAmountEUR) : "");
+                        setConfirmCurrency(c.initialPaymentCurrency ?? (c.paymentAmountEUR ? "EUR" : "ALL"));
+                        setConfirmInvoiceId(customerInvoices[0]?.invoiceId ?? "");
+                      }}
+                    >
+                      <Check className="h-3 w-3 mr-1" />Confirm Payment
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -496,6 +576,76 @@ export default function InvoicesPage() {
             <Button variant="outline" onClick={() => setPaymentInvoice(null)} disabled={paymentLoading}>Cancel</Button>
             <Button onClick={handleRecordPayment} disabled={paymentLoading}>
               {paymentLoading ? "Saving…" : "Record Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Confirm Initial Payment Dialog ── */}
+      <Dialog open={!!confirmCustomer} onOpenChange={(o) => { if (!o) setConfirmCustomer(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirm Initial Payment</DialogTitle>
+          </DialogHeader>
+          {confirmCustomer && (
+            <div className="space-y-4">
+              <div className="rounded-md bg-muted/40 border px-3 py-2 text-sm space-y-1">
+                <div className="font-medium">{confirmCustomer.name}</div>
+                <div className="text-muted-foreground text-xs">
+                  Method: <strong>{confirmCustomer.paymentSelectedMethod === 'bank' ? 'Bank Transfer' : confirmCustomer.paymentSelectedMethod === 'crypto' ? 'Crypto (USDT)' : 'Cash'}</strong>
+                  {confirmCustomer.paymentAmountALL && <> · Total: <strong>{confirmCustomer.paymentAmountALL.toLocaleString()} ALL{confirmCustomer.paymentAmountEUR ? ` ≈ ${confirmCustomer.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong></>}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label>Initial Payment Amount <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 500"
+                    value={confirmInitialAmt}
+                    onChange={(e) => setConfirmInitialAmt(e.target.value)}
+                    disabled={confirmLoading}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Currency</Label>
+                  <Select value={confirmCurrency} onValueChange={setConfirmCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                      <SelectItem value="ALL">ALL</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {/* Invoice picker — only shown if customer has invoices */}
+              {invoices.filter((i) => i.customerId === confirmCustomer.customerId && i.status !== 'cancelled').length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Apply to Invoice</Label>
+                  <Select value={confirmInvoiceId} onValueChange={setConfirmInvoiceId}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select invoice" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— None —</SelectItem>
+                      {invoices.filter((i) => i.customerId === confirmCustomer.customerId && i.status !== 'cancelled').map((i) => (
+                        <SelectItem key={i.invoiceId} value={i.invoiceId}>
+                          {i.invoiceId} · {i.currency} {i.amount.toLocaleString()} ({i.status})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">The initial payment will be recorded as a payment on the selected invoice, reducing the remaining balance.</p>
+                </div>
+              )}
+              <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 px-2 py-1.5">
+                Confirming this will activate {confirmCustomer.name} as a full CLIENT. This cannot be undone.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCustomer(null)} disabled={confirmLoading}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleConfirmInitialPayment} disabled={confirmLoading}>
+              {confirmLoading ? "Processing…" : "Confirm & Activate Client"}
             </Button>
           </DialogFooter>
         </DialogContent>

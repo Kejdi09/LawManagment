@@ -167,7 +167,6 @@ function clientIp(req) {
 app.use(makeRateLimiter(200, 60 * 1000, clientIp));
 
 // Specific limiters reused on portal endpoints (defined here, applied below)
-const portalChatLimiter    = makeRateLimiter(20, 60 * 60 * 1000, req => `chat:${req.params.token}`);   // 20 msgs/hr per token
 const portalActionLimiter  = makeRateLimiter(10, 60 * 60 * 1000, req => `action:${req.params.token}`); // 10 actions/hr per token
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -190,7 +189,6 @@ let auditLogsCol;
 let portalNotesCol;
 let portalMessagesCol;
 let deletedRecordsCol;
-let deletedChatsCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -238,7 +236,6 @@ async function connectDb() {
   portalNotesCol = db.collection("portalNotes");
   portalMessagesCol = db.collection("portalMessages");
   deletedRecordsCol = db.collection("deletedRecords");
-  deletedChatsCol = db.collection("deletedChats");
 }
 
 async function seedIfEmpty() {
@@ -1370,18 +1367,6 @@ app.delete("/api/customers/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
-  const chatMessages = await portalMessagesCol.find({ customerId: id }).sort({ createdAt: 1 }).toArray();
-  if (chatMessages.length > 0) {
-    await deletedChatsCol.insertOne({
-      deletedChatId: genShortId('DC'),
-      customerId: id,
-      customerName: current.name || id,
-      deletedAt: now,
-      deletedBy: req.user?.username || 'unknown',
-      reason: 'customer-deleted',
-      messages: chatMessages,
-    });
-  }
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'customer',
@@ -1420,18 +1405,6 @@ app.delete("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     customerHistoryCol.find({ customerId: id }).toArray(),
   ]);
   const now = new Date().toISOString();
-  const chatMessages = await portalMessagesCol.find({ customerId: id }).sort({ createdAt: 1 }).toArray();
-  if (chatMessages.length > 0) {
-    await deletedChatsCol.insertOne({
-      deletedChatId: genShortId('DC'),
-      customerId: id,
-      customerName: current.name || id,
-      deletedAt: now,
-      deletedBy: req.user?.username || 'unknown',
-      reason: 'customer-deleted',
-      messages: chatMessages,
-    });
-  }
   const deletedRecord = {
     recordId: genShortId('DR'),
     recordType: 'confirmedClient',
@@ -1951,6 +1924,65 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   setInterval(() => {
     cleanupStaleCases().catch((err) => console.error("cleanup failed", err));
   }, 60 * 60 * 1000);
+
+  // Payment reminder: send once after 3 days AWAITING_PAYMENT with no method selected
+  async function sendPaymentReminders() {
+    try {
+      const THREE_DAYS_AGO = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const overdue = await customersCol.find({
+        status: 'AWAITING_PAYMENT',
+        paymentSelectedMethod: { $in: [null, '', undefined] },
+        contractAcceptedAt: { $lt: THREE_DAYS_AGO },
+        paymentReminderSentAt: { $exists: false },
+      }).toArray();
+      for (const customer of overdue) {
+        if (!customer.email) continue;
+        const portalToken = await portalTokensCol.findOne({ customerId: customer.customerId });
+        const portalUrl = portalToken && process.env.APP_URL
+          ? `${process.env.APP_URL}/#/portal/${portalToken.token}`
+          : null;
+        const methodsList = (customer.paymentMethods || [])
+          .map(m => m === 'bank' ? 'Bank Transfer' : m === 'crypto' ? 'Crypto (USDT)' : 'Cash')
+          .join(', ');
+        sendEmail({
+          to: customer.email,
+          subject: 'Reminder: Please Complete Your Payment — DAFKU Law Firm',
+          text: [
+            `Dear ${customer.name},`,
+            '',
+            'This is a friendly reminder that your contract has been signed but your payment has not yet been completed.',
+            '',
+            customer.paymentAmountALL
+              ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL` +
+                (customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : '')
+              : '',
+            methodsList ? `Accepted payment methods: ${methodsList}` : '',
+            customer.paymentNote ? `\nPayment note: ${customer.paymentNote}` : '',
+            '',
+            portalUrl
+              ? `Please visit your portal to select a payment method and complete the process:\n${portalUrl}`
+              : 'Please visit your portal to complete the payment process.',
+            '',
+            'If you have already made the payment, please ignore this reminder — we will confirm receipt shortly.',
+            '',
+            'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+            '',
+            'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+          ].filter(l => l !== null && l !== undefined).join('\n'),
+        });
+        await customersCol.updateOne(
+          { customerId: customer.customerId },
+          { $set: { paymentReminderSentAt: new Date().toISOString() } }
+        );
+        console.log(`Payment reminder sent to ${customer.email} (${customer.customerId})`);
+      }
+    } catch (err) {
+      console.error('Payment reminder job failed:', err?.message || err);
+    }
+  }
+  // Run once on startup (catches any overdue on restart), then daily
+  sendPaymentReminders().catch(() => {});
+  setInterval(() => sendPaymentReminders().catch(() => {}), 24 * 60 * 60 * 1000);
 
   app.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);
@@ -2498,10 +2530,9 @@ app.get('/api/portal/:token', async (req, res) => {
   const caseTypeFilter = isConfirmedClient ? 'client' : 'customer';
   const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: caseTypeFilter }).sort({ lastStateChange: -1 }).toArray();
   const caseIds = cases.map(c => c.caseId);
-  const [history, portalNotes, chatMessages, invoices] = await Promise.all([
+  const [history, portalNotes, invoices] = await Promise.all([
     caseIds.length ? historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [],
     portalNotesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
-    portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray(),
     invoicesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
   ]);
   res.json({
@@ -2519,7 +2550,6 @@ app.get('/api/portal/:token', async (req, res) => {
     })),
     history,
     portalNotes: portalNotes.map(n => ({ noteId: n.noteId, text: n.text, createdAt: n.createdAt, createdBy: n.createdBy })),
-    chatMessages: chatMessages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt, readByLawyer: m.readByLawyer })),
     invoices: invoices.map(inv => ({
       invoiceId: inv.invoiceId,
       description: inv.description,
@@ -2548,47 +2578,9 @@ app.get('/api/portal/:token', async (req, res) => {
     paymentMethods: client.paymentMethods ?? null,
     paymentSelectedMethod: client.paymentSelectedMethod ?? null,
     paymentDoneAt: client.paymentDoneAt ?? null,
+    initialPaymentAmount: client.initialPaymentAmount ?? null,
+    initialPaymentCurrency: client.initialPaymentCurrency ?? null,
   });
-});
-
-// ── Portal Chat (client side — token-based, no auth) ─────────────────────────────────────────────────────────
-// Returns messages even if link is expired (read-only mode)
-app.get('/api/portal/chat/:token', async (req, res) => {
-  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
-  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
-  const messages = await portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray();
-  const expired = new Date(tokenDoc.expiresAt) < new Date();
-  // Mark all unread lawyer messages as read by the client (fires async, non-blocking)
-  portalMessagesCol.updateMany(
-    { customerId: tokenDoc.customerId, senderType: 'lawyer', readByClient: false },
-    { $set: { readByClient: true } }
-  ).catch(() => {});
-  res.json({
-    expired,
-    messages: messages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt })),
-  });
-});
-
-// Client sends a message (token-based, public)
-app.post('/api/portal/chat/:token', portalChatLimiter, async (req, res) => {
-  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
-  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
-  if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'This link has expired. Contact your lawyer for a new link.' });
-  const { text } = req.body;
-  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
-  // Enforce 3-message cap: count consecutive trailing client messages
-  const allMessages = await portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray();
-  let trailingClientCount = 0;
-  for (let i = allMessages.length - 1; i >= 0; i--) {
-    if (allMessages[i].senderType === 'client') trailingClientCount++;
-    else break;
-  }
-  if (trailingClientCount >= 3) {
-    return res.status(429).json({ error: 'You have sent 3 messages in a row. Please wait for your lawyer to reply before sending more.' });
-  }
-  const msg = { messageId: genShortId('PM'), customerId: tokenDoc.customerId, text: String(text).trim(), senderType: 'client', senderName: tokenDoc.clientName || 'Client', createdAt: new Date().toISOString(), readByLawyer: false };
-  await portalMessagesCol.insertOne(msg);
-  res.status(201).json({ messageId: msg.messageId, text: msg.text, senderType: msg.senderType, senderName: msg.senderName, createdAt: msg.createdAt });
 });
 
 // Save intake/proposal fields from portal (token-based, no auth required)
@@ -2693,18 +2685,6 @@ app.post('/api/portal/:token/respond-proposal', portalActionLimiter, async (req,
       changedByConsultant: null,
       changedByLawyer: null,
     });
-    // Post acceptance note to portal chat if provided
-    if (note && note.trim()) {
-      await portalMessagesCol.insertOne({
-        messageId: genShortId('MSG'),
-        customerId: customer.customerId,
-        text: `[Proposal Accepted] ${note.trim()}`,
-        senderType: 'client',
-        readByStaff: false,
-        readByClient: true,
-        timestamp: now,
-      });
-    }
     // Auto-draft invoice from proposal fee snapshot
     const snap = customer.proposalSnapshot || customer.proposalFields || {};
     const invAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
@@ -2731,18 +2711,6 @@ app.post('/api/portal/:token/respond-proposal', portalActionLimiter, async (req,
 
   if (action === 'revision') {
     const now = new Date().toISOString();
-    const text = note?.trim()
-      ? `[Revision Request] ${note.trim()}`
-      : '[Revision Request] The client has requested revisions to the proposal.';
-    await portalMessagesCol.insertOne({
-      messageId: genShortId('MSG'),
-      customerId: customer.customerId,
-      text,
-      senderType: 'client',
-      readByStaff: false,
-      readByClient: true,
-      timestamp: now,
-    });
     // Change status to Under Discussion so staff can see the request clearly
     await customersCol.updateOne(
       { customerId: customer.customerId },
@@ -2846,17 +2814,6 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
     changedByLawyer: assignedTo,
   });
 
-  // Post acceptance note to portal chat
-  await portalMessagesCol.insertOne({
-    messageId: genShortId('MSG'),
-    customerId: customer.customerId,
-    text: `[Contract Accepted] The client has accepted the contract. Electronic signature recorded as: "${signedByName || customer.name}" at ${now}. Awaiting payment confirmation.`,
-    senderType: 'client',
-    readByStaff: false,
-    readByClient: true,
-    timestamp: now,
-  });
-
   // Welcome email telling client to complete payment
   if (customer.email) {
     const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${req.params.token}` : null;
@@ -2926,11 +2883,47 @@ app.post('/api/portal/:token/select-payment', portalActionLimiter, async (req, r
   res.json({ ok: true, method });
 });
 
+// ── Admin: get customers awaiting payment (have selected a method) ────────────
+app.get('/api/customers/awaiting-payment', verifyAuth, async (req, res) => {
+  const docs = await customersCol.find({
+    status: 'AWAITING_PAYMENT',
+    paymentSelectedMethod: { $nin: [null, '', undefined] },
+  }).sort({ contractAcceptedAt: 1 }).toArray();
+  res.json(docs);
+});
+
+// ── Admin: set initial payment amount ────────────────────────────────────────
+app.put('/api/customers/:customerId/initial-payment-amount', verifyAuth, async (req, res) => {
+  const customerId = String(req.params.customerId).trim();
+  const amount = Number(req.body?.amount);
+  const currency = String(req.body?.currency || 'EUR').trim();
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'amount must be > 0' });
+
+  const r = await customersCol.findOneAndUpdate(
+    { customerId },
+    { $set: { initialPaymentAmount: amount, initialPaymentCurrency: currency } },
+    { returnDocument: 'after' }
+  );
+  if (!r) return res.status(404).json({ error: 'Customer not found' });
+  res.json({ ok: true });
+});
+
 // ── Admin: mark payment done → promotes to CLIENT ─────────────────────────────
 app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req, res) => {
   const customerId = String(req.params.customerId).trim();
   const now = new Date().toISOString();
   const doneBy = req.user?.consultantName || req.user?.username || 'admin';
+
+  // Optional: auto-record initial payment on invoice
+  const initialPaymentAmount = req.body?.initialPaymentAmount ? Number(req.body.initialPaymentAmount) : null;
+  const initialPaymentCurrency = req.body?.currency ? String(req.body.currency) : null;
+  const targetInvoiceId = req.body?.invoiceId ? String(req.body.invoiceId) : null;
+
+  // Require customer to have selected a payment method before admin can confirm
+  const preCheck = await customersCol.findOne({ customerId }) || await confirmedClientsCol.findOne({ customerId });
+  if (!preCheck) return res.status(404).json({ error: 'Customer not found' });
+  if (preCheck.status !== 'AWAITING_PAYMENT') return res.status(400).json({ error: 'Customer is not in AWAITING_PAYMENT status' });
+  if (!preCheck.paymentSelectedMethod) return res.status(400).json({ error: 'Customer has not selected a payment method yet.' });
 
   const clientPayload = { status: 'CLIENT', paymentDoneAt: now, paymentDoneBy: doneBy };
 
@@ -2951,8 +2944,6 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
       { returnDocument: 'before' }
     );
     if (!record) {
-      const exists = await customersCol.findOne({ customerId }) || await confirmedClientsCol.findOne({ customerId });
-      if (!exists) return res.status(404).json({ error: 'Customer not found' });
       return res.status(400).json({ error: 'Customer is not in AWAITING_PAYMENT status' });
     }
     // Keep customers in sync
@@ -2966,6 +2957,32 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
     );
     // Remove from customers — they are now a confirmed CLIENT and should only live in confirmedClients
     await customersCol.deleteOne({ customerId });
+  }
+
+  // Auto-record initial payment on invoice (if provided and invoice exists)
+  if (initialPaymentAmount && initialPaymentAmount > 0) {
+    const invFilter = targetInvoiceId
+      ? { invoiceId: targetInvoiceId }
+      : { customerId, status: { $ne: 'cancelled' } };
+    const inv = await invoicesCol.findOne(invFilter, { sort: { createdAt: -1 } });
+    if (inv) {
+      const payment = {
+        paymentId: genShortId('PAY'),
+        amount: initialPaymentAmount,
+        method: preCheck.paymentSelectedMethod || 'bank_transfer',
+        note: 'Initial payment (confirmed by admin)',
+        date: now,
+        recordedBy: req.user?.username || 'admin',
+      };
+      const existingPayments = inv.payments || [];
+      const allPayments = [...existingPayments, payment];
+      const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0);
+      const newStatus = totalPaid >= inv.amount ? 'paid' : inv.status === 'paid' ? 'pending' : inv.status;
+      await invoicesCol.updateOne(
+        { invoiceId: inv.invoiceId },
+        { $push: { payments: payment }, $set: { amountPaid: totalPaid, status: newStatus } }
+      );
+    }
   }
 
   await customerHistoryCol.insertOne({
@@ -2987,7 +3004,7 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
     action: 'mark_payment_done',
     resource: 'customer',
     resourceId: customerId,
-    details: { paymentDoneBy: doneBy, paymentDoneAt: now },
+    details: { paymentDoneBy: doneBy, paymentDoneAt: now, initialPaymentAmount },
   });
 
   // Notify client via email
@@ -3011,110 +3028,6 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
   }
 
   res.json({ ok: true, status: 'CLIENT' });
-});
-
-// ── Portal Chat (admin/lawyer side — JWT auth) ──────────────────────────────────────────────────────────────
-// IMPORTANT: specific routes (/unread-counts) must come BEFORE parameterised routes (/:customerId)
-
-// Get unread counts for all customers (for sidebar badges)
-// Shows dot when lawyer sent a message the client hasn't opened yet
-app.get('/api/portal-chat/unread-counts', verifyAuth, async (req, res) => {
-  const pipeline = [
-    { $match: { senderType: 'lawyer', readByClient: false } },
-    { $group: { _id: '$customerId', count: { $sum: 1 } } },
-  ];
-  const results = await portalMessagesCol.aggregate(pipeline).toArray();
-  res.json(results.map(r => ({ customerId: r._id, unreadCount: r.count })));
-});
-
-// Helper: verify caller can access a given customerId's chat (admin always yes; others only their own customer/client)
-async function verifyPortalChatAccess(user, customerId) {
-  if (isAdminUser(user)) return true;
-  const [cust, cli] = await Promise.all([
-    customersCol.findOne({ customerId, ...buildCustomerScopeFilter(user) }),
-    confirmedClientsCol.findOne({ customerId, ...buildClientScopeFilter(user) }),
-  ]);
-  return !!(cust || cli);
-}
-
-// Get all messages for a customer (admin/scoped)
-app.get('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
-  const customerId = String(req.params.customerId).trim();
-  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
-  const messages = await portalMessagesCol.find({ customerId }).sort({ createdAt: 1 }).toArray();
-  res.json(messages);
-});
-
-// Lawyer sends a message to client (admin/scoped)
-app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
-  const { text } = req.body;
-  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
-  const customerId = String(req.params.customerId).trim();
-  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
-  const senderName = req.user?.lawyerName || req.user?.consultantName || req.user?.username || 'Lawyer';
-  const msg = { messageId: genShortId('PM'), customerId, text: String(text).trim(), senderType: 'lawyer', senderName, createdAt: new Date().toISOString(), readByLawyer: true, readByClient: false };
-  await portalMessagesCol.insertOne(msg);
-  // Notify client via email
-  const [cust, cli] = await Promise.all([
-    customersCol.findOne({ customerId: msg.customerId }, { projection: { email: 1, name: 1 } }),
-    confirmedClientsCol.findOne({ customerId: msg.customerId }, { projection: { email: 1, name: 1 } }),
-  ]);
-  const clientRecord = cust || cli;
-  if (clientRecord?.email) {
-    sendEmail({ to: clientRecord.email, subject: 'New message from your lawyer', text: `Dear ${clientRecord.name || 'Client'},\n\nYour lawyer sent you a new message:\n\n"${msg.text}"\n\nVisit your customer portal to reply.` });
-  }
-  res.status(201).json(msg);
-});
-
-// Mark all client messages as read (scoped)
-app.put('/api/portal-chat/:customerId/read', verifyAuth, async (req, res) => {
-  const customerId = String(req.params.customerId).trim();
-  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
-  await portalMessagesCol.updateMany(
-    { customerId, senderType: 'client', readByLawyer: false },
-    { $set: { readByLawyer: true } }
-  );
-  res.json({ ok: true });
-});
-
-// Delete a single message (scoped)
-app.delete('/api/portal-chat/:customerId/:messageId', verifyAuth, async (req, res) => {
-  const customerId = String(req.params.customerId).trim();
-  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
-  await portalMessagesCol.deleteOne({ customerId, messageId: String(req.params.messageId) });
-  res.json({ ok: true });
-});
-
-// Delete entire chat history for a customer (archives to deletedChats)
-app.delete('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
-  const customerId = String(req.params.customerId).trim();
-  if (!(await verifyPortalChatAccess(req.user, customerId))) return res.status(403).json({ error: 'forbidden' });
-  const messages = await portalMessagesCol.find({ customerId }).sort({ createdAt: 1 }).toArray();
-  const [cust, cli] = await Promise.all([
-    customersCol.findOne({ customerId }, { projection: { name: 1 } }),
-    confirmedClientsCol.findOne({ customerId }, { projection: { name: 1 } }),
-  ]);
-  const customerName = (cust || cli)?.name || customerId;
-  await deletedChatsCol.insertOne({
-    deletedChatId: genShortId('DC'),
-    customerId,
-    customerName,
-    deletedAt: new Date().toISOString(),
-    deletedBy: req.user?.username || 'unknown',
-    reason: 'manual',
-    messages,
-  });
-  await portalMessagesCol.deleteMany({ customerId });
-  res.json({ ok: true });
-});
-
-// ── Admin: Deleted Chats ──────────────────────────────────────────────────────
-app.get('/api/admin/deleted-chats', verifyAuth, async (req, res) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const q = req.query.search ? String(req.query.search).trim() : '';
-  const filter = q ? { customerName: { $regex: q, $options: 'i' } } : {};
-  const chats = await deletedChatsCol.find(filter).sort({ deletedAt: -1 }).toArray();
-  res.json(chats);
 });
 
 // ── Staff Workload ────────────────────────────────────────────────────────────

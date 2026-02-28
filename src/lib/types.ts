@@ -183,6 +183,12 @@ export interface Customer {
   paymentDoneAt?: string | null;
   /** Username of admin who marked payment done */
   paymentDoneBy?: string | null;
+  /** Initial (first-instalment) amount the admin requires before activating the client */
+  initialPaymentAmount?: number | null;
+  /** Currency for the initial payment (EUR, ALL, USD…) */
+  initialPaymentCurrency?: string | null;
+  /** ISO timestamp of when the payment reminder was sent */
+  paymentReminderSentAt?: string | null;
 }
 
 export interface HistoryRecord {
@@ -453,24 +459,6 @@ export interface PortalInvoice {
 export type CommChannel = "email" | "whatsapp" | "phone" | "inperson";
 export type CommDirection = "inbound" | "outbound";
 
-export interface DeletedChatMessage {
-  messageId: string;
-  text: string;
-  senderType: string;
-  senderName?: string;
-  createdAt: string;
-}
-
-export interface DeletedChatRecord {
-  deletedChatId: string;
-  customerId: string;
-  customerName: string;
-  deletedAt: string;
-  deletedBy: string;
-  reason: 'manual' | 'customer-deleted';
-  messages: DeletedChatMessage[];
-}
-
 export interface CommEntry {
   commId: string;
   caseId: string;
@@ -492,16 +480,6 @@ export interface PortalNote {
   text: string;
   createdAt: string;
   createdBy: string;
-}
-
-export interface PortalMessage {
-  messageId: string;
-  customerId?: string;
-  text: string;
-  senderType: 'client' | 'lawyer';
-  senderName: string;
-  createdAt: string;
-  readByLawyer?: boolean;
 }
 
 export interface DeletedRecord {
@@ -536,7 +514,6 @@ export interface PortalData {
   }>;
   history: HistoryRecord[];
   portalNotes: PortalNote[];
-  chatMessages: PortalMessage[];
   invoices?: PortalInvoice[];
   expiresAt?: string;
   proposalSentAt?: string | null;
@@ -554,4 +531,8 @@ export interface PortalData {
   paymentMethods?: Array<'bank' | 'crypto' | 'cash'> | null;
   paymentSelectedMethod?: 'bank' | 'crypto' | 'cash' | null;
   paymentDoneAt?: string | null;
+  /** Initial (first-instalment) amount set by admin */
+  initialPaymentAmount?: number | null;
+  /** Currency of the initial payment */
+  initialPaymentCurrency?: string | null;
 }

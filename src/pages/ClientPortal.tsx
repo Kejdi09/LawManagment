@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getPortalData, getPortalChatByToken, sendPortalMessage, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract, selectPortalPaymentMethod } from "@/lib/case-store";
-import { PortalData, PortalMessage, ServiceType, SERVICE_LABELS } from "@/lib/types";
+import { getPortalData, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract, selectPortalPaymentMethod } from "@/lib/case-store";
+import { PortalData, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
-import { PortalChatPanel, countTrailingClient } from "@/components/PortalChatPanel";
 import ClientIntakeForm from "@/components/ClientIntakeForm";
 import FaqBot from "@/components/FaqBot";
 import ProposalRenderer from "@/components/ProposalRenderer";
@@ -15,7 +14,7 @@ import ContractRenderer from "@/components/ContractRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown, Receipt, CreditCard,
+  CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown, Receipt, CreditCard,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -131,10 +130,6 @@ export default function ClientPortalPage() {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<PortalMessage[]>([]);
-  const [chatText, setChatText] = useState("");
-  const [chatSending, setChatSending] = useState(false);
   const [linkExpired, setLinkExpired] = useState(false);
   // Proposal response state
   const [proposalResponding, setProposalResponding] = useState(false);
@@ -143,10 +138,6 @@ export default function ClientPortalPage() {
   const [contractResponding, setContractResponding] = useState(false);
   const [contractRespondDone, setContractRespondDone] = useState<"accepted" | null>(null);
   const contractPrintRef = useRef<HTMLDivElement>(null);
-  // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
-  const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevMsgCountRef = useRef(0);
   const proposalViewedRef = useRef(false);
   const portalPrintRef = useRef<HTMLDivElement>(null);
   const [contractSignName, setContractSignName] = useState("");
@@ -207,11 +198,6 @@ export default function ClientPortalPage() {
     getPortalData(token)
       .then((d) => {
         setData(d);
-        // Initialise chat from the portal data payload (avoids an extra round-trip)
-        if (d.chatMessages) {
-          setChatMessages(d.chatMessages);
-          prevMsgCountRef.current = d.chatMessages.length;
-        }
       })
       .catch((e) => {
         const msg = String(e?.message || "");
@@ -225,13 +211,6 @@ export default function ClientPortalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  // Request browser notification permission so we can alert on new messages
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
   // If the proposal tab is the default tab on first load, mark it viewed immediately
   useEffect(() => {
     if (!data || !token || proposalViewedRef.current) return;
@@ -241,52 +220,6 @@ export default function ClientPortalPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
-
-  // Poll for new chat messages every 12 seconds (client-visible only)
-  useEffect(() => {
-    if (!token) return;
-    const fetchChat = () => {
-      getPortalChatByToken(token)
-        .then(({ expired, messages }) => {
-          // Detect new lawyer messages and fire a browser notification
-          const prev = prevMsgCountRef.current;
-          const newLawyerMsgs = messages.slice(prev).filter((m) => m.senderType === 'lawyer');
-          if (newLawyerMsgs.length > 0) {
-            // Show the unread dot on the Messages tab
-            setUnreadFromLawyer(true);
-            // Also fire a browser notification if permitted
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('New message from your lawyer', {
-                body: newLawyerMsgs[newLawyerMsgs.length - 1].text.slice(0, 100),
-                icon: '/favicon.ico',
-              });
-            }
-          }
-          prevMsgCountRef.current = messages.length;
-          setChatMessages(messages);
-          if (expired) setLinkExpired(true);
-        })
-        .catch(() => {});
-    };
-    pollRef.current = setInterval(fetchChat, 12_000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [token]);
-
-  const handleSendChat = async () => {
-    if (!token || !chatText.trim() || chatSending) return;
-    setChatSending(true);
-    try {
-      const msg = await sendPortalMessage(token, chatText.trim());
-      setChatMessages((prev) => [...prev, msg]);
-      setChatText("");
-    } catch (e) {
-      alert(String((e as Error)?.message ?? "Failed to send message."));
-    } finally {
-      setChatSending(false);
-    }
-  };
-
-  const trailingClientCount = countTrailingClient(chatMessages);
 
   if (loading) {
     return (
@@ -308,15 +241,12 @@ export default function ClientPortalPage() {
   }
 
   const showIntakeTab = data.client.status === "SEND_PROPOSAL";
-  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
+  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
   const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
   const showPaymentTab = data.client.status === 'AWAITING_PAYMENT';
   const showInvoicesTab = !!(data.invoices && data.invoices.length > 0);
-  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showPaymentTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
-  const defaultTab = showPaymentTab ? "payment" : showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
-  // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
-  const hasNewMessages = unreadFromLawyer;
-
+  const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showPaymentTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
+  const defaultTab = showPaymentTab ? "payment" : (data.client.status === 'CLIENT' ? "status" : showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status");
   const snap = data.proposalSnapshot;
 
   return (
@@ -354,10 +284,6 @@ export default function ClientPortalPage() {
               proposalViewedRef.current = true;
               markProposalViewed(token);
             }
-            // Clear the unread dot as soon as the client opens the Messages tab
-            if (tab === 'messages') {
-              setUnreadFromLawyer(false);
-            }
           }}>
           <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
             <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
@@ -391,12 +317,6 @@ export default function ClientPortalPage() {
                 <Receipt className="h-3.5 w-3.5" /> Invoices
               </TabsTrigger>
             )}
-            <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs relative">
-              <MessageSquare className="h-3.5 w-3.5" /> Messages
-              {hasNewMessages && (
-                <span className="absolute top-1 right-2 h-2 w-2 rounded-full bg-blue-500" />
-              )}
-            </TabsTrigger>
           </TabsList>
 
           {/* ── STATUS TAB ── */}
@@ -683,13 +603,22 @@ export default function ClientPortalPage() {
 
               {/* Amount due */}
               {(data.paymentAmountALL || data.paymentAmountEUR) && (
-                <div className="rounded-md border bg-card px-4 py-3">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Amount Due</p>
-                  <p className="text-2xl font-bold">
+                <div className="rounded-md border bg-card px-4 py-3 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Contract Amount</p>
+                  <p className="text-xl font-bold">
                     {data.paymentAmountALL ? `${data.paymentAmountALL.toLocaleString()} ALL` : ''}
                     {data.paymentAmountALL && data.paymentAmountEUR ? ' ≈ ' : ''}
                     {data.paymentAmountEUR ? `${data.paymentAmountEUR.toFixed(2)} EUR` : ''}
                   </p>
+                  {data.initialPaymentAmount && (
+                    <div className="mt-2 pt-2 border-t">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Initial Payment Required Now</p>
+                      <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                        {data.initialPaymentAmount.toLocaleString()} {data.initialPaymentCurrency ?? 'EUR'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">The remaining balance will be due at a later stage as agreed.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -746,7 +675,7 @@ export default function ClientPortalPage() {
                         <div><span className="text-muted-foreground">Currency:</span> ALL or EUR</div>
                         <div><span className="text-muted-foreground">Reference:</span> Your full name</div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">After transferring, please send proof of payment via the <strong>Messages</strong> tab.</p>
+                      <p className="text-xs text-muted-foreground mt-1">After transferring, please email proof of payment to <strong>info@dafkulawfirm.al</strong> or via WhatsApp: <strong>+355 69 69 52 989</strong>.</p>
                     </div>
                   )}
 
@@ -759,7 +688,7 @@ export default function ClientPortalPage() {
                         <div><span className="text-muted-foreground">Token:</span> USDT</div>
                         <div><span className="text-muted-foreground">Address:</span> T_PLACEHOLDER_WALLET_ADDRESS</div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">After sending, share the transaction hash via the <strong>Messages</strong> tab.</p>
+                      <p className="text-xs text-muted-foreground mt-1">After sending, share the transaction hash via email: <strong>info@dafkulawfirm.al</strong> or WhatsApp: <strong>+355 69 69 52 989</strong>.</p>
                       <p className="text-xs text-amber-600">Note: Always double-check the network (TRC-20) before sending.</p>
                     </div>
                   )}
@@ -808,7 +737,7 @@ export default function ClientPortalPage() {
                     Your payment method preference has been recorded. Once our team confirms receipt of payment, your account will be fully activated.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Have you already made the payment? Let us know via the <strong>Messages</strong> tab.
+                    Have you already made the payment? Let us know via email: <strong>info@dafkulawfirm.al</strong> or WhatsApp: <strong>+355 69 69 52 989</strong>.
                   </p>
                 </div>
               )}
@@ -822,7 +751,7 @@ export default function ClientPortalPage() {
               )}
 
               <p className="text-center text-xs text-muted-foreground pt-2">
-                Questions? Use the <strong>Messages</strong> tab or WhatsApp: <strong>+355 69 69 52 989</strong>
+                Questions? Email us at <strong>info@dafkulawfirm.al</strong> or WhatsApp: <strong>+355 69 69 52 989</strong>
               </p>
             </TabsContent>
           )}
@@ -910,42 +839,6 @@ export default function ClientPortalPage() {
             </p>
           </TabsContent>
 
-          {/* ── MESSAGES TAB ── */}
-          <TabsContent value="messages" className="mt-0 space-y-3">
-            {data.client.status === 'CLIENT' ? (
-              <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-                <p className="font-medium mb-0.5">Direct line to your lawyer</p>
-                <p className="text-xs text-muted-foreground">As a confirmed client, you can message your lawyer here any time. We typically reply within one business day.</p>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Send a message directly to your lawyer. You can send up to 10 messages in a row before waiting for a reply.
-                {linkExpired && " This link has expired — message history is preserved but you cannot send new messages."}
-              </p>
-            )}
-            <PortalChatPanel
-              messages={chatMessages}
-              text={chatText}
-              onTextChange={setChatText}
-              onSend={handleSendChat}
-              sending={chatSending}
-              isAdmin={false}
-              trailingClientCount={trailingClientCount}
-              linkExpired={linkExpired}
-              fillHeight={false}
-            />
-            <p className="text-xs text-muted-foreground text-center">
-              For urgent matters, reach us directly on WhatsApp:{" "}
-              <a
-                href="https://wa.me/355696952989"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline decoration-dotted hover:text-foreground"
-              >
-                +355 69 69 52 989
-              </a>
-            </p>
-          </TabsContent>
         </Tabs>
       </div>
     </div>
