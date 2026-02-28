@@ -55,8 +55,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
     </button>
   );
 
-  const isIntake = user?.role === "intake" || user?.role === "manager" || user?.role === "admin";
-  const isClientTeam = user?.role === "consultant" || user?.role === "admin";
+  const isLawyer = user?.role === "lawyer" || user?.role === "admin";
   const isAdminRole = user?.role === "admin";
 
   return (
@@ -64,7 +63,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
       <div className="flex flex-col gap-0.5 px-1">
 
         {/* ── INTAKE section ─────────────────────────── */}
-        {!isAuthLoading && isIntake && (
+        {!isAuthLoading && isLawyer && (
           <>
             <SectionLabel>Intake</SectionLabel>
             <NavBtn path="/customers" icon={<UserSearch className="w-4 h-4" />} label="Customers" isActive={onCustomers} />
@@ -72,7 +71,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
         )}
 
         {/* ── CLIENTS section ────────────────────────── */}
-        {!isAuthLoading && isClientTeam && (
+        {!isAuthLoading && isLawyer && (
           <>
             <SectionLabel>Clients</SectionLabel>
             <NavBtn path="/" icon={<Users className="w-4 h-4" />} label="Client Cases" isActive={onClientCases} />
@@ -102,7 +101,6 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
             {adminOpen && (
               <>
                 <NavBtn path="/activity" icon={<ActivitySquare className="w-4 h-4" />} label="Activity Log" isActive={onActivity} />
-                <NavBtn path="/invoices" icon={<Receipt className="w-4 h-4" />} label="Invoices" isActive={onInvoices} />
                 <NavBtn path="/staff" icon={<ShieldCheck className="w-4 h-4" />} label="Staff" isActive={onStaff} />
                 <NavBtn path="/archived" icon={<Trash2 className="w-4 h-4" />} label="Deleted Records" isActive={onArchived} />
               </>

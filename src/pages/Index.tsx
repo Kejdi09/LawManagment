@@ -67,10 +67,10 @@ const Index = () => {
     assignedTo: CLIENT_LAWYERS[0],
   });
   const isAdmin = user?.role === "admin";
-  const isManager = user?.role === "manager";
+  const isLawyer = user?.role === "lawyer";
   const currentLawyer = user?.consultantName || user?.lawyerName || "";
-  // Client Cases: admin assigns to Kejdi/Albert only; consultants are locked to themselves
-  const availableLawyers = isAdmin ? CLIENT_LAWYERS : [];
+  // Client Cases: admin and lawyers can assign to Kejdi/Albert
+  const availableLawyers = (isAdmin || isLawyer) ? CLIENT_LAWYERS : [];
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -284,24 +284,13 @@ const Index = () => {
     const mine = assignee ? caseList.filter((c) => c.assignedTo === assignee) : [];
     const highPriorityMine = mine.filter((c) => c.priority === "high");
 
-    if (user?.role === "admin") {
+    if (user?.role === "admin" || user?.role === "lawyer") {
       return {
         title: "Admin Focus",
         cards: [
           { label: "New Cases", value: caseList.filter((c) => mapCaseStateToStage(c.state) === "NEW").length },
           { label: "Due in 24h", value: todaysQueue.dueToday.length },
           { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
-        ],
-      };
-    }
-
-    if (user?.role === "intake") {
-      return {
-        title: "Intake Focus",
-        cards: [
-          { label: "New Cases", value: caseList.filter((c) => mapCaseStateToStage(c.state) === "NEW").length },
-          { label: "Need Documents", value: caseList.filter((c) => c.documentState === "missing").length },
-          { label: "Due in 24h", value: todaysQueue.dueToday.length },
         ],
       };
     }
@@ -328,7 +317,7 @@ const Index = () => {
       generalNote: "",
       priority: "medium",
       deadline: "",
-      assignedTo: isAdmin ? (CLIENT_LAWYERS[0]) : (currentLawyer || CLIENT_LAWYERS[0]),
+      assignedTo: (isAdmin || isLawyer) ? (CLIENT_LAWYERS[0]) : (currentLawyer || CLIENT_LAWYERS[0]),
     });
     setShowCaseForm(true);
   };
@@ -347,7 +336,7 @@ const Index = () => {
       const mappedState = mapStageToState(caseForm.state);
       const payload = {
         ...caseForm,
-        assignedTo: isAdmin ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
+        assignedTo: (isAdmin || isLawyer) ? caseForm.assignedTo : (currentLawyer || caseForm.assignedTo),
         state: mappedState,
         deadline: caseForm.deadline ? new Date(caseForm.deadline).toISOString() : null,
       };
@@ -621,7 +610,7 @@ const Index = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Assigned Consultant</label>
-              {(isAdmin || isManager) ? (
+              {(isAdmin || isLawyer) ? (
                 <Select value={caseForm.assignedTo} onValueChange={(v) => setCaseForm({ ...caseForm, assignedTo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

@@ -40,7 +40,7 @@ function RequireCustomersAccess({ children }: { children: JSX.Element }) {
   if (isAuthLoading) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;
   }
-  const canAccessCustomers = user?.role === "intake" || user?.role === "manager" || user?.role === "admin";
+  const canAccessCustomers = user?.role === "lawyer" || user?.role === "admin";
   if (!canAccessCustomers) return <Navigate to="/" replace />;
   return children;
 }
@@ -50,9 +50,8 @@ function LoginRoute() {
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
   const returnTo = from ? `${from.pathname || "/"}${from.search || ""}${from.hash || ""}` : "/";
-  // Default redirect for intake/manager users → customers (intake funnel)
-  const defaultRedirect = user?.role === 'intake' || user?.role === 'manager' ? '/customers' : '/';
-  const finalReturnTo = from ? returnTo : defaultRedirect;
+  // All users go to home page by default
+  const finalReturnTo = from ? returnTo : '/';
 
   if (isAuthLoading) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Restoring session...</div>;

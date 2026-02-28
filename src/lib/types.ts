@@ -400,13 +400,13 @@ export const ALL_STATES: CaseState[] = [
   "WAITING_RESPONSE_C",
 ];
 
-export const LAWYERS = ["Kejdi", "Albert", "Kejdi 1", "Kejdi 2", "Kejdi 3"];
+export const LAWYERS = ["Kejdi", "Albert"];
 
-/** Consultants who handle confirmed clients (after intake) */
+/** Lawyers who handle confirmed clients */
 export const CLIENT_LAWYERS = ["Kejdi", "Albert"];
 
-/** Intake team who handle customers before confirmation */
-export const INTAKE_LAWYERS = ["Lenci", "Kejdi 1", "Kejdi 2", "Kejdi 3"];
+/** Lawyers who handle customer intake */
+export const INTAKE_LAWYERS = ["Kejdi", "Albert"];
 
 export interface CustomerNotification {
   notificationId: string;

@@ -47,7 +47,7 @@ export function AgendaWidget({ customerNames }: { customerNames?: Record<string,
   useEffect(() => {
     Promise.all([getMeetings(), getAllCases()]).then(([meetings, cases]) => {
       const myName = stripProfessionalTitle(user?.consultantName || user?.lawyerName || "") || "";
-      const isAdmin = user?.role === "admin" || user?.role === "manager";
+      const isAdmin = user?.role === "admin" || user?.role === "lawyer";
 
       const myMeetings = isAdmin
         ? meetings

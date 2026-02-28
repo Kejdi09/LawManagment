@@ -288,19 +288,11 @@ const CONSULTANT_BY_USERNAME = {
   admirim: "Albert",
   albert: "Albert",
   kejdi: "Kejdi",
-  lenci: "Lenci",
-  kejdi1: "Kejdi 1",
-  kejdi2: "Kejdi 2",
-  kejdi3: "Kejdi 3",
 };
 
-const TEAM_MEMBERS_BY_MANAGER = {
-  lenci: ["kejdi1", "kejdi2", "kejdi3"],
-};
-
-// Hard boundaries: client cases ↔ client team only; customer cases ↔ intake team only
+// Hard boundaries: both client and customer cases go to the lawyer team
 const CLIENT_LAWYERS_SERVER = ['Kejdi', 'Albert'];
-const INTAKE_LAWYERS_SERVER = ['Lenci', 'Kejdi 1', 'Kejdi 2', 'Kejdi 3'];
+const INTAKE_LAWYERS_SERVER = ['Kejdi', 'Albert'];
 
 function validateCaseTeamBoundary(caseType, assignedTo) {
   if (!assignedTo) return null;
@@ -318,19 +310,8 @@ function isAdminUser(user) {
   return user?.role === "admin";
 }
 
-function isManagerUser(user) {
-  return user?.role === "manager";
-}
-
-function getManagedUsernames(user) {
-  if (!user?.username) return [];
-  return TEAM_MEMBERS_BY_MANAGER[user.username] || [];
-}
-
-function getManagedLawyerNames(user) {
-  return getManagedUsernames(user)
-    .map((username) => stripProfessionalTitle(CONSULTANT_BY_USERNAME[username] || ""))
-    .filter(Boolean);
+function isLawyerUser(user) {
+  return user?.role === "lawyer";
 }
 
 function stripProfessionalTitle(value) {
@@ -352,24 +333,7 @@ function getUserLawyerName(user) {
 
 function buildCaseScopeFilter(user) {
   if (isAdminUser(user)) return {};
-  if (isManagerUser(user)) {
-    const managedLawyers = getManagedLawyerNames(user);
-    if (!managedLawyers.length) return { _id: { $exists: false } };
-    const matchers = managedLawyers.map((name) => buildAssignedToMatcher(name) || name);
-    return {
-      $or: [
-        { assignedTo: { $in: matchers } },
-        { createdBy: user.username || "" },
-      ],
-    };
-  }
-  // Intake users (kejdi1/2/3) see only their own cases (proposal/document prep work)
-  if (user?.role === "intake") {
-    const lawyerName = getUserLawyerName(user);
-    if (!lawyerName) return { _id: { $exists: false } };
-    const matcher = buildAssignedToMatcher(lawyerName);
-    return matcher ? { assignedTo: matcher } : { assignedTo: lawyerName };
-  }
+  if (isLawyerUser(user)) return {};
   const lawyerName = getUserLawyerName(user);
   if (!lawyerName) return { _id: { $exists: false } };
   const matcher = buildAssignedToMatcher(lawyerName);
@@ -378,12 +342,8 @@ function buildCaseScopeFilter(user) {
 
 function buildCustomerScopeFilter(user) {
   if (isAdminUser(user)) return {};
-  if (isManagerUser(user)) return {};
-  // Consultants (albert/kejdi) handle confirmed clients only — block pre-confirmation customers
-  if (user?.role === "consultant") return { _id: { $exists: false } };
+  if (isLawyerUser(user)) return {};
   const lawyerName = getUserLawyerName(user);
-  // Allow creators to see their own customers. Intake users may not have a lawyerName,
-  // so include a createdBy clause so they can see customers they created.
   const clauses = [];
   if (lawyerName) {
     const matcher = buildAssignedToMatcher(lawyerName);
@@ -397,7 +357,7 @@ function buildCustomerScopeFilter(user) {
 function userCanAccessCustomer(user, customer) {
   if (!customer) return false;
   if (isAdminUser(user)) return true;
-  if (isManagerUser(user)) return true;
+  if (isLawyerUser(user)) return true;
   const lawyerName = getUserLawyerName(user);
   return Boolean(lawyerName) && stripProfessionalTitle(customer.assignedTo) === lawyerName;
 }
@@ -405,29 +365,14 @@ function userCanAccessCustomer(user, customer) {
 function userCanAccessCase(user, doc) {
   if (!doc) return false;
   if (isAdminUser(user)) return true;
-  if (isManagerUser(user)) {
-    const allowedLawyers = new Set(getManagedLawyerNames(user));
-    const assigned = stripProfessionalTitle(doc.assignedTo);
-    return allowedLawyers.has(assigned) || doc.createdBy === user.username;
-  }
+  if (isLawyerUser(user)) return true;
   const lawyerName = getUserLawyerName(user);
   return Boolean(lawyerName) && stripProfessionalTitle(doc.assignedTo) === lawyerName;
 }
 
 function buildMeetingScopeFilter(user) {
   if (isAdminUser(user)) return {};
-  if (isManagerUser(user)) {
-    const managedLawyers = getManagedLawyerNames(user);
-    if (!managedLawyers.length) return { createdBy: user.username || "" };
-    const matchers = managedLawyers.map((name) => buildAssignedToMatcher(name) || name);
-    return {
-      $or: [
-        { assignedTo: { $in: matchers } },
-        { createdBy: user.username || "" },
-      ],
-    };
-  }
-  if (user?.role === "intake") return { createdBy: user.username || "" };
+  if (isLawyerUser(user)) return {};
   const lawyerName = getUserLawyerName(user);
   if (!lawyerName) return { _id: { $exists: false } };
   return {
@@ -438,11 +383,10 @@ function buildMeetingScopeFilter(user) {
   };
 }
 
-// Confirmed clients are only for admin and consultants (albert/kejdi).
-// Manager (lenci) and intake (kejdi1/2/3) handle pre-confirmation customers only.
+// Confirmed clients are for admin and lawyers (Kejdi/Albert).
 function buildClientScopeFilter(user) {
   if (isAdminUser(user)) return {};
-  if (isManagerUser(user) || user?.role === "intake") return { _id: { $exists: false } };
+  if (isLawyerUser(user)) return {};
   const lawyerName = getUserLawyerName(user);
   if (!lawyerName) return { _id: { $exists: false } };
   const matcher = buildAssignedToMatcher(lawyerName);
@@ -750,12 +694,8 @@ async function seedDemoUser() {
   try {
     const demoUsers = [
       { username: "admirim", password: "adi33", role: "admin", consultantName: "Albert" },
-      { username: "albert", password: "alb33", role: "consultant", consultantName: "Albert" },
-      { username: "kejdi", password: "kej33", role: "consultant", consultantName: "Kejdi" },
-      { username: "lenci", password: "len33", role: "manager", consultantName: "Lenci" },
-      { username: "kejdi1", password: "kej331", role: "intake", consultantName: "Kejdi 1", managerUsername: "lenci" },
-      { username: "kejdi2", password: "kej332", role: "intake", consultantName: "Kejdi 2", managerUsername: "lenci" },
-      { username: "kejdi3", password: "kej333", role: "intake", consultantName: "Kejdi 3", managerUsername: "lenci" },
+      { username: "albert", password: "alb33", role: "lawyer", consultantName: "Albert" },
+      { username: "kejdi", password: "kej33", role: "lawyer", consultantName: "Kejdi" },
     ];
 
     for (const demoUser of demoUsers) {
@@ -939,7 +879,7 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
   // Only intake users and admin should see non-confirmed customers
   const paging = parsePagingQuery(req.query || {});
   const { sortBy, sortDir } = parseSortQuery(req.query || {}, ["customerId", "name", "registeredAt", "status"], "customerId");
-  if (!(req.user?.role === 'intake' || isManagerUser(req.user) || isAdminUser(req.user))) {
+  if (!(isLawyerUser(req.user) || isAdminUser(req.user))) {
     if (paging.requested) {
       return res.json({ items: [], total: 0, page: paging.page, pageSize: paging.pageSize, totalPages: 0 });
     }
@@ -968,10 +908,10 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
 });
 
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
-  // Apply scope filter for all roles — intake users only see their assigned/created customers.
+  // Apply scope filter for roles
   const customerScope = buildCustomerScopeFilter(req.user);
   let doc = await customersCol.findOne({ customerId: req.params.id, ...customerScope });
-  if (!doc && req.user?.role === 'consultant') {
+  if (!doc && isLawyerUser(req.user)) {
     doc = await confirmedClientsCol.findOne({ customerId: req.params.id, ...buildClientScopeFilter(req.user) });
   }
   if (!doc) {
@@ -981,8 +921,8 @@ app.get("/api/customers/:id", verifyAuth, async (req, res) => {
 });
 
 app.post("/api/customers", verifyAuth, async (req, res) => {
-  // Only intake users can create new (non-confirmed) customers
-  if (req.user?.role !== 'intake' && !isManagerUser(req.user) && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
+  // Only lawyers and admin can create new customers
+  if (!isLawyerUser(req.user) && !isAdminUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = genCustomerId(req.user?.username);
   const payload = { ...req.body, customerId, createdBy: req.user?.username || null, version: 1 };
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
@@ -1255,11 +1195,10 @@ app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
   // Admins see notifications for non-confirmed customers.
   if (isAdminUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
 
-  // Intake users may see notifications for non-confirmed customers.
-  // Manager (lenci) oversees all pre-confirmation customers — show all notifications
-  if (req.user?.role === 'intake' || isManagerUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
+  // Lawyers see all customer notifications
+  if (isLawyerUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
 
-  // Other authenticated users (consultant/lawyer) should only receive notifications
+  // Other authenticated users should only receive notifications
   // for customers assigned to them.
   const allowed = docsForCustomers.filter(d => userCanAccessCustomer(req.user, customerMap[d.customerId]));
   res.json(allowed.slice(0, 50));
@@ -1268,8 +1207,8 @@ app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
 
 
 app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
-  // Admin, manager (lenci), and intake users can dismiss pre-confirmation customer notifications
-  if (!isAdminUser(req.user) && !isManagerUser(req.user) && req.user?.role !== 'intake') {
+  // Admin and lawyers can dismiss pre-confirmation customer notifications
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     return res.status(403).json({ error: 'forbidden' });
   }
   const { id } = req.params;
@@ -1545,8 +1484,8 @@ app.delete('/api/admin/users/:username', verifyAuth, async (req, res) => {
 app.get('/api/admin/staff-names', verifyAuth, async (req, res) => {
   const users = await usersCol.find({}).project({ password: 0 }).toArray();
   const nameOf = (u) => String(u.consultantName || u.username || '').trim();
-  const clientLawyers = [...new Set(users.filter(u => u.role === 'consultant' || u.role === 'admin').map(nameOf).filter(Boolean))];
-  const intakeLawyers = [...new Set(users.filter(u => u.role === 'intake').map(nameOf).filter(Boolean))];
+  const clientLawyers = [...new Set(users.filter(u => u.role === 'lawyer' || u.role === 'admin').map(nameOf).filter(Boolean))];
+  const intakeLawyers = [...new Set(users.filter(u => u.role === 'lawyer' || u.role === 'admin').map(nameOf).filter(Boolean))];
   const allLawyers = [...new Set(users.map(nameOf).filter(Boolean))];
   res.json({ clientLawyers, intakeLawyers, allLawyers });
 });
@@ -1664,17 +1603,16 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   const requestedCustomerId = String(req.body?.customerId || "").trim();
   if (!requestedCustomerId) return res.status(400).json({ error: "customerId is required" });
 
-  // For manager/intake: cases link to pre-confirmation customers.
-  // For admin/consultant: cases link to confirmed clients.
-  // Exception: admin creating with caseScope='customer' links to pre-confirmation customers.
-  const isIntakeUser = req.user?.role === 'intake' || isManagerUser(req.user);
+  // For lawyers/admin: caseScope determines which collection to use.
+  // Exception: caseScope='customer' links to pre-confirmation customers.
+  const isIntakeUser = isLawyerUser(req.user);
   const adminWantsCustomerScope = isAdminUser(req.user) && String(req.body?.caseScope || '').trim() === 'customer';
-  const useCustomerCol = isIntakeUser || adminWantsCustomerScope;
+  const useCustomerCol = (isLawyerUser(req.user) && String(req.body?.caseScope || '').trim() === 'customer') || adminWantsCustomerScope;
   const customerSource = useCustomerCol ? customersCol : confirmedClientsCol;
   const customerScopeForCase = useCustomerCol ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
   const customer = await customerSource.findOne({ customerId: requestedCustomerId, ...customerScopeForCase });
   if (!customer) {
-    return res.status(400).json({ error: isIntakeUser ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
+    return res.status(400).json({ error: useCustomerCol ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
   }
 
   // CC- prefix for customer cases, CL- prefix for client cases
@@ -1686,10 +1624,10 @@ app.post("/api/cases", verifyAuth, async (req, res) => {
   // Strip internal routing hint before storing
   delete payload.caseScope;
   if (payload.assignedTo) payload.assignedTo = stripProfessionalTitle(payload.assignedTo);
-  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     payload.assignedTo = getUserLawyerName(req.user);
   }
-  // Enforce team boundaries: client cases → CLIENT team; customer cases → INTAKE team
+  // Enforce team boundaries: both client and customer cases → lawyer team
   const teamErrCreate = validateCaseTeamBoundary(caseTypeValue, payload.assignedTo);
   if (teamErrCreate) return res.status(400).json({ error: teamErrCreate });
   await casesCol.insertOne(payload);
@@ -1714,7 +1652,7 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
     return res.status(409).json({ error: 'conflict', latest: current });
   }
 
-  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
   }
   // Enforce team boundaries on reassignment
@@ -1724,12 +1662,12 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
     if (teamErrUpdate) return res.status(400).json({ error: teamErrUpdate });
   }
   if (update.customerId) {
-    const isIntakeUser2 = req.user?.role === 'intake' || isManagerUser(req.user);
-    const customerSource2 = isIntakeUser2 ? customersCol : confirmedClientsCol;
-    const customerScopeForCase2 = isIntakeUser2 ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
+    const isCustomerCase2 = current.caseType === 'customer';
+    const customerSource2 = isCustomerCase2 ? customersCol : confirmedClientsCol;
+    const customerScopeForCase2 = isCustomerCase2 ? buildCustomerScopeFilter(req.user) : buildClientScopeFilter(req.user);
     const targetCustomer = await customerSource2.findOne({ customerId: String(update.customerId).trim(), ...customerScopeForCase2 });
     if (!targetCustomer) {
-      return res.status(400).json({ error: isIntakeUser2 ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
+      return res.status(400).json({ error: isCustomerCase2 ? "Customer not found or not accessible" : "Case customerId must belong to a confirmed client you can access" });
     }
   }
   // Guarantee caseId stays consistent and create if missing to avoid 404 edits
@@ -2185,7 +2123,7 @@ app.get('/api/audit/logs', verifyAuth, requireRole('admin'), async (req, res) =>
 
 app.get('/api/team/summary', verifyAuth, requireRole('admin'), async (req, res) => {
   try {
-    const users = await usersCol.find({ role: { $in: ['consultant', 'manager', 'intake'] } }).project({ username: 1, consultantName: 1, role: 1 }).toArray();
+    const users = await usersCol.find({ role: { $in: ['lawyer'] } }).project({ username: 1, consultantName: 1, role: 1 }).toArray();
     const summaries = [];
     const now = new Date();
     const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -2242,7 +2180,7 @@ app.post('/api/meetings', verifyAuth, async (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
-  if (!isAdminUser(req.user) && !isManagerUser(req.user) && payload.assignedTo !== getUserLawyerName(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user) && payload.assignedTo !== getUserLawyerName(req.user)) {
     return res.status(403).json({ error: 'forbidden_assignee' });
   }
 
@@ -2274,7 +2212,7 @@ app.put('/api/meetings/:id', verifyAuth, async (req, res) => {
     update.endsAt = parsedEnds.toISOString();
   }
 
-  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     update.assignedTo = getUserLawyerName(req.user);
   }
 
@@ -2316,7 +2254,7 @@ app.get('/api/invoices', verifyAuth, async (req, res) => {
   const filter = {};
   if (req.query.caseId) filter.caseId = String(req.query.caseId);
   if (req.query.customerId) filter.customerId = String(req.query.customerId);
-  if (!isAdminUser(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     const lawyerName = getUserLawyerName(req.user);
     if (lawyerName) filter.assignedTo = lawyerName;
   }
@@ -2348,9 +2286,9 @@ app.post('/api/invoices', verifyAuth, async (req, res) => {
 
 app.put('/api/invoices/:id', verifyAuth, async (req, res) => {
   const id = String(req.params.id || '').trim();
-  // Scope: mirrors GET /api/invoices — admin/manager see all; consultant/intake only their own
+  // Scope: admin/lawyer see all
   const invoiceFilter = { invoiceId: id };
-  if (!isAdminUser(req.user) && !isManagerUser(req.user)) {
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
     const lawyerName = getUserLawyerName(req.user);
     if (lawyerName) invoiceFilter.assignedTo = lawyerName;
     else return res.status(403).json({ error: 'forbidden' });
@@ -2463,20 +2401,20 @@ app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
 });
 
 app.get('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
-  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const existing = await portalTokensCol.findOne({ customerId: String(req.params.customerId).trim() });
   res.json(existing || null);
 });
 
 app.delete('/api/portal/tokens/:customerId', verifyAuth, async (req, res) => {
-  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   await portalTokensCol.deleteMany({ customerId: String(req.params.customerId).trim() });
   res.json({ ok: true });
 });
 
-// Extend an existing portal link by N more days (admin only)
+// Extend an existing portal link by N more days
 app.patch('/api/portal/tokens/:customerId/extend', verifyAuth, async (req, res) => {
-  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) return res.status(403).json({ error: 'forbidden' });
   const customerId = String(req.params.customerId).trim();
   const extraDays = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
   const existing = await portalTokensCol.findOne({ customerId });
@@ -3036,7 +2974,7 @@ app.get('/api/admin/workload', verifyAuth, async (req, res) => {
   const [customers, clients, users] = await Promise.all([
     customersCol.find({}, { projection: { assignedTo: 1, status: 1 } }).toArray(),
     confirmedClientsCol.find({}, { projection: { assignedTo: 1, status: 1 } }).toArray(),
-    usersCol.find({ role: { $in: ['consultant', 'manager', 'admin'] } }, { projection: { username: 1, consultantName: 1, role: 1 } }).toArray(),
+    usersCol.find({ role: { $in: ['lawyer', 'admin'] } }, { projection: { username: 1, consultantName: 1, role: 1 } }).toArray(),
   ]);
   const map = {};
   for (const u of users) {

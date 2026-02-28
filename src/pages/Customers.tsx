@@ -14,6 +14,7 @@ import {
   getCustomerHistory,
   createMeeting,
   generatePortalToken,
+  getPortalToken,
   markPaymentDone,
   setInitialPaymentAmount,
 } from "@/lib/case-store";
@@ -29,7 +30,6 @@ import {
   ContactChannel,
   LeadStatus,
   ServiceType,
-  INTAKE_LAWYERS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +47,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, ShieldCheck } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, ShieldCheck, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -197,6 +197,7 @@ const Customers = () => {
   const [savingInitialPay, setSavingInitialPay] = useState(false);
   const [showIntakeSheet, setShowIntakeSheet] = useState(false);
   const [resetBotLoading, setResetBotLoading] = useState(false);
+  const [customerPortalToken, setCustomerPortalToken] = useState<{ token: string; expiresAt: string } | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS]);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [customerStatusLog, setCustomerStatusLog] = useState<CustomerHistoryRecord[]>([]);
@@ -248,6 +249,7 @@ const Customers = () => {
     if (!id) {
       setSelectedCustomer(null);
       setCustomerStatusLog([]);
+      setCustomerPortalToken(null);
       return;
     }
     const customer = customers.find((c) => c.customerId === id) || null;
@@ -260,6 +262,7 @@ const Customers = () => {
     } catch (e) {
       setCustomerDocuments([]);
     }
+    getPortalToken(id).then(setCustomerPortalToken).catch(() => setCustomerPortalToken(null));
   }, [customers]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
@@ -473,12 +476,12 @@ const Customers = () => {
         toast({ title: 'Service required', description: 'Please select at least one service.', variant: 'destructive' });
         return;
       }
-      // UI-level validation: intake/manager must choose a CLIENT_LAWYER when confirming
-      if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && !form.assignedTo) {
+      // Must choose a CLIENT_LAWYER when confirming to client
+      if (form.status === 'CLIENT' && !form.assignedTo) {
         toast({ title: 'Assign required', description: 'Please select someone to assign the confirmed client', variant: 'destructive' });
         return;
       }
-      if (form.status === 'CLIENT' && (user?.role === 'intake' || user?.role === 'manager') && form.assignedTo && !CLIENT_LAWYERS.includes(form.assignedTo)) {
+      if (form.status === 'CLIENT' && form.assignedTo && !CLIENT_LAWYERS.includes(form.assignedTo)) {
         toast({ title: 'Invalid assignee', description: 'Confirmed clients must be assigned to Kejdi or Albert', variant: 'destructive' });
         return;
       }
@@ -492,20 +495,6 @@ const Customers = () => {
         serviceDescription: form.serviceDescription || "",
         notes: form.notes ?? "",
       };
-      // Intake users cannot change assignment; managers can always assign
-      if (user?.role === 'intake') {
-        if (form.status === 'CLIENT') {
-          // keep assignedTo from form (already mapped above)
-        } else {
-          // If editing, preserve existing assignedTo; if creating, ensure empty
-          if (editingId) {
-            const orig = customers.find((x) => x.customerId === editingId);
-            payload.assignedTo = stripProfessionalTitle(orig?.assignedTo || "") || orig?.assignedTo || "";
-          } else {
-            payload.assignedTo = "";
-          }
-        }
-      }
       const { _id: _ignoredId, customerId: _ignoredCustomerId, ...rest } = payload as Record<string, unknown>;
       if (editingId) {
         const original = customers.find((x) => x.customerId === editingId);
@@ -600,8 +589,8 @@ const Customers = () => {
 
   const handleSetStatus = async (customerId: string, status: LeadStatus) => {
     try {
-      // Intake and manager must pick a consultant (Kejdi/Albert) when confirming to CLIENT
-      if ((user?.role === 'intake' || user?.role === 'manager') && status === 'CLIENT') {
+      // When setting CLIENT status, show assignment dialog
+      if ((user?.role === 'lawyer' || user?.role === 'admin') && status === 'CLIENT') {
         setConfirmAssignCustomerId(customerId);
         setShowConfirmAssign(true);
         return;
@@ -889,7 +878,7 @@ const Customers = () => {
                 <Button variant={sectionView === "on_hold" ? "default" : "outline"} size="sm" onClick={() => setSectionView("on_hold")}>On Hold</Button>
                 <Button variant={sectionView === "archived" ? "default" : "outline"} size="sm" onClick={() => setSectionView("archived")}>Archived</Button>
               </div>
-              {(user?.role === 'intake' || user?.role === 'manager' || user?.role === 'admin') && (
+              {(user?.role === 'lawyer' || user?.role === 'admin') && (
                 <Button onClick={openCreate} className="flex items-center gap-2" size="sm">
                   <Plus className="h-4 w-4" /> New Customer
                 </Button>
@@ -1284,17 +1273,17 @@ const Customers = () => {
             </div>
             <div className="space-y-2">
               <Label>Assigned Consultant</Label>
-              {/* Admin and manager can assign at any status; intake users cannot change assignment */}
-              {user?.role === 'admin' || user?.role === 'manager' || (user?.role === 'intake' && form.status === 'CLIENT') ? (
+              {/* Admin and lawyer can assign at any status */}
+              {(user?.role === 'lawyer' || user?.role === 'admin') ? (
                 <Select
                   value={form.assignedTo || UNASSIGNED_CONSULTANT}
                   onValueChange={(v) => setForm({ ...form, assignedTo: v === UNASSIGNED_CONSULTANT ? "" : v })}
                 >
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
-                    {user?.role !== 'intake' && <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>}
-                    {/* When confirming to CLIENT, only Kejdi/Albert; otherwise intake team */}
-                    {(form.status === 'CLIENT' ? CLIENT_LAWYERS : INTAKE_LAWYERS).map((l) => (
+                    <SelectItem value={UNASSIGNED_CONSULTANT}>Unassigned</SelectItem>
+                    {/* Both Kejdi and Albert handle all cases */}
+                    {CLIENT_LAWYERS.map((l) => (
                       <SelectItem key={l} value={l}>{l}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1315,9 +1304,7 @@ const Customers = () => {
                 value={form.status}
                 onValueChange={(v) => {
                   const newStatus = v as LeadStatus;
-                  // Reset assignedTo when intake users switch to/from CLIENT so wrong names don't carry over
-                  const shouldClearAssignment = user?.role === 'intake' && (newStatus === 'CLIENT' || form.status === 'CLIENT');
-                  setForm({ ...form, status: newStatus, ...(shouldClearAssignment ? { assignedTo: '' } : {}) });
+                  setForm({ ...form, status: newStatus });
                 }}
               >
                 <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
@@ -1466,6 +1453,30 @@ const Customers = () => {
                         {selectedCustomer.portalLastViewedAt && (
                           <div className="text-xs text-muted-foreground pl-5">Portal last viewed: {safeFormatDate(selectedCustomer.portalLastViewedAt)}</div>
                         )}
+                        {customerPortalToken && (
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <Copy className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <a
+                              href={`${window.location.href.split('#')[0]}#/portal/${customerPortalToken.token}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary underline truncate flex-1"
+                            >
+                              View Client Portal
+                            </a>
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:text-foreground px-1"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.href.split('#')[0]}#/portal/${customerPortalToken.token}`);
+                                toast({ title: "Copied", description: "Portal link copied to clipboard." });
+                              }}
+                            >
+                              copy
+                            </button>
+                            <span className="text-xs text-muted-foreground shrink-0">· exp {String(customerPortalToken.expiresAt).slice(0, 10)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusAccent[selectedCustomer.status]}`}>
                             {LEAD_STATUS_LABELS[selectedCustomer.status]}
@@ -1612,46 +1623,35 @@ const Customers = () => {
                         {/* Reset intake bot button – only for INTAKE / SEND_PROPOSAL stages */}
                         {(selectedCustomer.status === 'SEND_PROPOSAL' || selectedCustomer.status === 'INTAKE') && (
                         <div className="flex flex-wrap gap-2 pt-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs gap-1"
-                                disabled={resetBotLoading || !!selectedCustomer.intakeBotReset}
-                                onClick={async () => {
-                                  setResetBotLoading(true);
-                                  try {
-                                    const updated = await updateCustomer(selectedCustomer.customerId, {
-                                      intakeBotReset: true,
-                                      // Clear proposal data so the client portal shows a clean slate
-                                      proposalFields: null,
-                                      proposalSentAt: null,
-                                      proposalSnapshot: null,
-                                      proposalViewedAt: null,
-                                      // Revert status so the cycle starts fresh
-                                      status: "INTAKE",
-                                    });
-                                    setSelectedCustomer(updated);
-                                    setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-                                    toast({ title: "Intake form reset", description: "Proposal cleared. The client will be prompted to fill in the intake form again." });
-                                  } catch {
-                                    toast({ title: "Error", description: "Could not reset intake form.", variant: "destructive" });
-                                  } finally {
-                                    setResetBotLoading(false);
-                                  }
-                                }}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                {selectedCustomer.intakeBotReset ? "Reset Pending…" : "Reset Intake Form"}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {selectedCustomer.intakeBotReset
-                                ? "Waiting for client to re-submit the intake form"
-                                : "Force the client to fill in the intake form again (e.g. if they gave wrong answers)"}
-                            </TooltipContent>
-                          </Tooltip>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            disabled={resetBotLoading || !!selectedCustomer.intakeBotReset}
+                            onClick={async () => {
+                              setResetBotLoading(true);
+                              try {
+                                const updated = await updateCustomer(selectedCustomer.customerId, {
+                                  intakeBotReset: true,
+                                  proposalFields: null,
+                                  proposalSentAt: null,
+                                  proposalSnapshot: null,
+                                  proposalViewedAt: null,
+                                  status: "INTAKE",
+                                });
+                                setSelectedCustomer(updated);
+                                setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+                                toast({ title: "Intake form reset", description: "Proposal cleared. The client will be prompted to fill in the intake form again." });
+                              } catch {
+                                toast({ title: "Error", description: "Could not reset intake form.", variant: "destructive" });
+                              } finally {
+                                setResetBotLoading(false);
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            {selectedCustomer.intakeBotReset ? "Reset Pending…" : "Reset Intake Form"}
+                          </Button>
                         </div>
                         )}
                         </CardContent>

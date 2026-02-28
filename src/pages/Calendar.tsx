@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { createMeeting, deleteMeeting, getAllCustomers, getConfirmedClients, getMeetings, updateMeeting } from "@/lib/case-store";
-import { LAWYERS, INTAKE_LAWYERS, CLIENT_LAWYERS, Meeting } from "@/lib/types";
+import { LAWYERS, CLIENT_LAWYERS, Meeting } from "@/lib/types";
 import { formatDate, stripProfessionalTitle } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -190,17 +190,13 @@ const MeetingsCalendarPage = () => {
   });
 
   const isAdmin = user?.role === "admin";
-  const isAdminLike = isAdmin || user?.role === "manager";
+  const isAdminLike = isAdmin || user?.role === "lawyer";
 
   const selectedPersonTeam = form.customerId
     ? (customerIdSet.has(form.customerId) ? "customer" : clientIdSet.has(form.customerId) ? "client" : null)
     : null;
 
-  const meetingAssigneePicker = isAdmin
-    ? (selectedPersonTeam === "customer" ? INTAKE_LAWYERS
-      : selectedPersonTeam === "client" ? CLIENT_LAWYERS
-      : LAWYERS)
-    : user?.role === "manager" ? INTAKE_LAWYERS : [];
+  const meetingAssigneePicker = isAdminLike ? LAWYERS : [];
 
   const load = async () => {
     const [rows, customers, confirmed] = await Promise.all([
@@ -221,12 +217,10 @@ const MeetingsCalendarPage = () => {
   useEffect(() => { load().catch(() => {}); }, []);
 
   useEffect(() => {
-    if (!isAdmin || !form.customerId) return;
-    const allowedTeam = customerIdSet.has(form.customerId) ? INTAKE_LAWYERS
-      : clientIdSet.has(form.customerId) ? CLIENT_LAWYERS
-      : null;
-    if (allowedTeam && !allowedTeam.includes(form.assignedTo)) {
-      setForm((f) => ({ ...f, assignedTo: allowedTeam[0] }));
+    if (!isAdminLike || !form.customerId) return;
+    // All cases assigned to Kejdi/Albert regardless of customer vs client
+    if (!LAWYERS.includes(form.assignedTo)) {
+      setForm((f) => ({ ...f, assignedTo: LAWYERS[0] }));
     }
   }, [form.customerId, customerIdSet, clientIdSet]);
 

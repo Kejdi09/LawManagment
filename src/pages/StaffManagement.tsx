@@ -14,21 +14,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Trash2, Plus, KeyRound } from "lucide-react";
 
-const ROLES = ["admin", "manager", "consultant", "intake"] as const;
+const ROLES = ["admin", "lawyer"] as const;
 type Role = (typeof ROLES)[number];
 
 const ROLE_COLORS: Record<Role, string> = {
   admin: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  manager: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  consultant: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  intake: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  lawyer: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
 };
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Admin",
-  manager: "Manager",
-  consultant: "Consultant",
-  intake: "Intake",
+  lawyer: "Lawyer",
 };
 
 type FormMode = "create" | "edit" | "reset-password";
@@ -39,16 +35,14 @@ interface FormState {
   confirmPassword: string;
   role: Role;
   consultantName: string;
-  managerUsername: string;
 }
 
 const emptyForm: FormState = {
   username: "",
   password: "",
   confirmPassword: "",
-  role: "intake",
+  role: "lawyer",
   consultantName: "",
-  managerUsername: "",
 };
 
 const StaffManagement = () => {
@@ -90,7 +84,7 @@ const StaffManagement = () => {
   }
 
   function openEdit(s: StaffUser) {
-    setForm({ ...emptyForm, role: (s.role as Role) || "intake", consultantName: s.consultantName || "", managerUsername: s.managerUsername || "", username: s.username });
+    setForm({ ...emptyForm, role: (s.role as Role) || "lawyer", consultantName: s.consultantName || "", username: s.username });
     setEditTarget(s);
     setFormMode("edit");
     setFormOpen(true);
@@ -116,7 +110,6 @@ const StaffManagement = () => {
           password: form.password,
           role: form.role,
           consultantName: form.consultantName.trim() || form.username.trim(),
-          managerUsername: form.managerUsername || undefined,
         });
         toast({ title: `Staff member "${form.username}" created` });
         setFormOpen(false);
@@ -133,7 +126,6 @@ const StaffManagement = () => {
         await updateStaffUser(editTarget.username, {
           role: form.role,
           consultantName: form.consultantName.trim() || editTarget.username,
-          managerUsername: form.managerUsername || undefined,
         });
         toast({ title: "Staff member updated" });
         setFormOpen(false);
@@ -196,16 +188,14 @@ const StaffManagement = () => {
         </div>
 
         {/* Role guide */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {ROLES.map((r) => (
             <Card key={r} className="py-3">
               <CardContent className="p-3 pt-0 flex flex-col gap-1">
                 <span className={`inline-flex self-start rounded px-2 py-0.5 text-xs font-semibold ${ROLE_COLORS[r]}`}>{ROLE_LABELS[r]}</span>
                 <p className="text-xs text-muted-foreground mt-1">
                   {r === "admin" && "Full access. Manages staff, invoices, archives, reports."}
-                  {r === "manager" && "Oversees intake team. Views all leads, assigns tasks."}
-                  {r === "consultant" && "Handles confirmed clients, cases, proposals."}
-                  {r === "intake" && "Handles new leads, intake forms, proposals."}
+                  {r === "lawyer" && "Full access to customers, clients, cases, calendar, invoices. Cannot manage staff or view deleted records."}
                 </p>
               </CardContent>
             </Card>
@@ -227,7 +217,6 @@ const StaffManagement = () => {
                     <TableHead>Username</TableHead>
                     <TableHead>Display Name</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Manager</TableHead>
                     <TableHead>Added</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -242,7 +231,6 @@ const StaffManagement = () => {
                           {ROLE_LABELS[(s.role as Role)] || s.role}
                         </span>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{s.managerUsername || "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {s.createdAt ? new Date(s.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—"}
                       </TableCell>
@@ -303,13 +291,6 @@ const StaffManagement = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                {form.role === "intake" && (
-                  <div className="space-y-1.5">
-                    <Label>Manager Username</Label>
-                    <Input placeholder="e.g. lenci" value={form.managerUsername} onChange={(e) => setForm({ ...form, managerUsername: e.target.value.toLowerCase() })} />
-                    <p className="text-xs text-muted-foreground">Optional. Links this intake user to a manager.</p>
-                  </div>
-                )}
               </>
             )}
 
