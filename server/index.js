@@ -120,31 +120,40 @@ async function sendEmail({ to, subject, text, html }) {
     return;
   }
 
-  // ── Option 2: SMTP fallback (nodemailer) ──
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.warn('[email] Skipping — neither RESEND_API_KEY nor SMTP credentials configured.');
+  // ── Option 2: SMTP / Gmail (nodemailer) ──
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.warn('[email] Skipping — neither RESEND_API_KEY nor SMTP_USER/SMTP_PASS configured.');
     return;
   }
-  // Reuse a single transport across all calls — avoids a new TCP handshake + auth on each email.
-  // Recreate only if credentials have changed (restart required for config changes anyway).
-  if (!_smtpTransport || _smtpTransport._options_key !== `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`) {
-    const port = Number(SMTP_PORT) || 587;
-    _smtpTransport = nodemailer.createTransport({
-      host: SMTP_HOST, port,
-      secure: port === 465,
-      requireTLS: port !== 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { rejectUnauthorized: true },
-    });
-    _smtpTransport._options_key = `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`;
+  // Detect Gmail and use the nodemailer gmail service shortcut (handles OAuth2 quirks automatically)
+  const isGmail = (SMTP_HOST || '').toLowerCase().includes('gmail') || SMTP_USER.toLowerCase().endsWith('@gmail.com');
+  const optionsKey = `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`;
+  if (!_smtpTransport || _smtpTransport._options_key !== optionsKey) {
+    if (isGmail) {
+      _smtpTransport = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+      });
+    } else {
+      const port = Number(SMTP_PORT) || 587;
+      _smtpTransport = nodemailer.createTransport({
+        host: SMTP_HOST, port,
+        secure: port === 465,
+        requireTLS: port !== 465,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+        tls: { rejectUnauthorized: true },
+      });
+    }
+    _smtpTransport._options_key = optionsKey;
+    console.log(`[email] ${isGmail ? 'Gmail' : 'SMTP'} transport created for ${SMTP_USER}`);
   }
   try {
-    await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, ...(html ? { html } : {}) });
-    console.log(`[email] ✓ Sent via SMTP "${subject}" → ${to}`);
+    const info = await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, ...(html ? { html } : {}) });
+    console.log(`[email] ✓ Sent via ${isGmail ? 'Gmail' : 'SMTP'} "${subject}" → ${to} [${info.messageId}]`);
   } catch (e) {
-    console.error(`[email] ✗ SMTP failed "${subject}" → ${to}:`, e.message, e.code || '');
+    console.error(`[email] ✗ ${isGmail ? 'Gmail' : 'SMTP'} failed "${subject}" → ${to}: ${e.message} (code=${e.code || 'none'} response=${e.response || 'none'})`);
     // Reset transport on connection errors so the next call creates a fresh one
-    if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED') {
+    if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' || e.code === 'EAUTH') {
       _smtpTransport = null;
     }
   }
@@ -3550,7 +3559,7 @@ app.post('/api/register', async (req, res) => {
   await logAudit({ username: 'public', role: 'public', action: 'self_register', resource: 'customer', resourceId: customerId, details: { name: doc.name, email: normalEmail } });
   // Welcome email to new enquirer
   const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${rawToken}` : null;
-  sendEmail({
+  await sendEmail({
     to: normalEmail,
     subject: 'Thank You for Your Enquiry — DAFKU Law Firm',
     text: [
@@ -3579,9 +3588,33 @@ app.post('/api/register', async (req, res) => {
       <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
     `),
   });
+  console.log(`[register] ✓ New registration: ${doc.name} <${normalEmail}> | portal=${portalUrl || 'no APP_URL set'}`);
   res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
   } catch (regErr) {
     console.error('[/api/register] error:', regErr);
     res.status(500).json({ error: 'An unexpected error occurred. Please try again or contact us directly.' });
+  }
+});
+
+// ── Admin: send a test email to verify SMTP config ──────────────────────────────────
+// GET /api/admin/test-email?to=someone@example.com
+app.get('/api/admin/test-email', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const to = String(req.query.to || '').trim();
+  if (!to) return res.status(400).json({ error: 'Provide ?to=email address' });
+  const { RESEND_API_KEY, SMTP_USER, SMTP_PASS, SMTP_HOST } = process.env;
+  const config = RESEND_API_KEY
+    ? `Resend API (key set)`
+    : (SMTP_USER && SMTP_PASS ? `SMTP: ${SMTP_USER} @ ${SMTP_HOST || 'gmail'}` : 'NOT CONFIGURED');
+  try {
+    await sendEmail({
+      to,
+      subject: 'DAFKU Law Firm — Email Test',
+      text: `This is a test email sent from your server.\n\nConfig: ${config}\nTime: ${new Date().toISOString()}`,
+      html: buildHtmlEmail(`<p>This is a <strong>test email</strong> from your DAFKU Law Firm server.</p><div class="box"><p>Config: ${config}</p><p>Time: ${new Date().toISOString()}</p></div><p>If you received this, emails are working correctly.</p>`),
+    });
+    res.json({ ok: true, message: `Test email sent to ${to}`, config });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message, config });
   }
 });
