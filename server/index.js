@@ -18,11 +18,23 @@ dotenv.config();
 // Primary:  Set RESEND_API_KEY + SMTP_FROM + ADMIN_EMAIL  (uses Resend HTTP API — works on Render free tier)
 // Fallback: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL (nodemailer SMTP)
 const STATE_EMAIL_LABELS = {
-  NEW: 'New', IN_PROGRESS: 'In Progress', WAITING_CUSTOMER: 'Waiting — Your Input Needed',
-  WAITING_AUTHORITIES: 'Waiting — Authorities', FINALIZED: 'Completed', INTAKE: 'Under Review',
-  SEND_PROPOSAL: 'Proposal Sent', WAITING_RESPONSE_P: 'Waiting for Your Response',
-  DISCUSSING_Q: 'Under Discussion', SEND_CONTRACT: 'Contract Sent',
-  WAITING_RESPONSE_C: 'Waiting for Your Response',
+  NEW: 'New', IN_PROGRESS: 'In Progress',
+  WAITING_CUSTOMER: 'Awaiting Your Input',
+  WAITING_AUTHORITIES: 'Pending — Awaiting Authorities',
+  FINALIZED: 'Completed', INTAKE: 'Under Initial Review',
+  SEND_PROPOSAL: 'Proposal Sent',
+  WAITING_APPROVAL: 'Awaiting Your Approval',
+  WAITING_RESPONSE_P: 'Awaiting Your Response',
+  DISCUSSING_Q: 'Under Discussion',
+  SEND_CONTRACT: 'Service Agreement Sent',
+  WAITING_ACCEPTANCE: 'Awaiting Your Acceptance',
+  WAITING_RESPONSE_C: 'Awaiting Your Response',
+  AWAITING_PAYMENT: 'Payment Required',
+  SEND_RESPONSE: 'Final Response Issued',
+  CLIENT: 'Confirmed Client',
+  CONSULTATION_SCHEDULED: 'Consultation Scheduled',
+  ON_HOLD: 'On Hold',
+  ARCHIVED: 'Archived',
 };
 function logEmailConfig() {
   const { RESEND_API_KEY, SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL } = process.env;
@@ -39,23 +51,63 @@ logEmailConfig();
 // Reusable SMTP transport instance (created lazily, reset on connection errors)
 let _smtpTransport = null;
 
-async function sendEmail({ to, subject, text }) {
+// ── Professional HTML email wrapper ─────────────────────────────────────────
+function buildHtmlEmail(bodyHtml) {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;padding:0;background:#f0f2f5;font-family:Georgia,'Times New Roman',serif}
+  .w{max-width:600px;margin:32px auto;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .bar{height:4px;background:#c5a55a}
+  .hd{background:#1a2e4a;padding:28px 40px}
+  .hd .sub{color:#c5a55a;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin:0;font-weight:normal;font-family:Arial,sans-serif}
+  .hd .nm{color:#fff;font-size:22px;margin:5px 0 0;font-weight:normal;letter-spacing:1px}
+  .bd{padding:36px 40px;color:#2c2c2c;font-size:15px;line-height:1.8}
+  .bd p{margin:0 0 16px}
+  a.btn{display:inline-block;background:#1a2e4a;color:#fff !important;padding:13px 32px;text-decoration:none;border-radius:3px;font-size:14px;font-family:Arial,sans-serif;letter-spacing:.5px;margin:10px 0 18px}
+  .box{background:#f7f4ee;border-left:3px solid #c5a55a;padding:14px 18px;margin:20px 0;font-size:14px;color:#333;line-height:1.65}
+  .box p{margin:0 0 6px}.box p:last-child{margin:0}
+  hr{border:0;border-top:1px solid #eee;margin:28px 0}
+  .ft{background:#f7f7f7;border-top:1px solid #e8e8e8;padding:20px 40px;text-align:center}
+  .ft p{margin:0 0 5px;font-size:12px;color:#888;font-family:Arial,sans-serif;line-height:1.5}
+  .ft a{color:#999;text-decoration:none}
+  .sig{margin-top:28px;font-size:14px;color:#444;line-height:1.7}
+</style></head>
+<body><div class="w">
+  <div class="bar"></div>
+  <div class="hd"><p class="sub">Legal Services</p><p class="nm">DAFKU Law Firm</p></div>
+  <div class="bd">${bodyHtml}</div>
+  <div class="ft">
+    <p><strong>DAFKU Law Firm</strong> &bull; Tirana, Albania</p>
+    <p><a href="mailto:info@dafkulawfirm.al">info@dafkulawfirm.al</a> &bull; WhatsApp <a href="https://wa.me/355696952989">+355 69 69 52 989</a></p>
+    <p style="font-size:11px;color:#bbb;margin-top:10px">This communication is intended solely for the named recipient and may contain legally privileged or confidential information. Please do not reply directly to this email — contact us through your client portal or via WhatsApp.</p>
+  </div>
+</div></body></html>`;
+}
+
+async function sendEmail({ to, subject, text, html }) {
   if (!to) { console.warn(`[email] Skipping "${subject}" — no recipient address.`); return; }
 
   const { RESEND_API_KEY, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
   // ── Option 1: Resend HTTP API (recommended on Render — no SMTP port issues) ──
+  // NOTE: With Resend free tier (no verified domain), emails can only be sent to
+  // your own registered Resend email address. To send to any recipient, you must
+  // add and verify your sending domain in the Resend dashboard and set SMTP_FROM
+  // to an address on that domain (e.g. noreply@dafkulawfirm.al).
   if (RESEND_API_KEY) {
     try {
+      const payload = {
+        from: SMTP_FROM || 'DAFKU Law Firm <onboarding@resend.dev>',
+        to: [to],
+        subject,
+        text,
+      };
+      if (html) payload.html = html;
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: SMTP_FROM || 'DAFKU Law Firm <onboarding@resend.dev>',
-          to: [to],
-          subject,
-          text,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
@@ -88,7 +140,7 @@ async function sendEmail({ to, subject, text }) {
     _smtpTransport._options_key = `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`;
   }
   try {
-    await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
+    await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, ...(html ? { html } : {}) });
     console.log(`[email] ✓ Sent via SMTP "${subject}" → ${to}`);
   } catch (e) {
     console.error(`[email] ✗ SMTP failed "${subject}" → ${to}:`, e.message, e.code || '');
@@ -1109,16 +1161,23 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           '',
           'Your personalised service proposal from DAFKU Law Firm is now ready for your review.',
           '',
-          portalUrl
-            ? `You can view it at any time through your secure customer portal:\n${portalUrl}`
-            : 'Please contact us to access your customer portal.',
+          portalUrl ? `Please open your secure client portal to view the full proposal:\n${portalUrl}` : 'Please contact us to obtain access to your client portal and review your proposal.',
           '',
-          'The proposal outlines the scope of work, estimated timeline, required documents, and fees for the services requested.',
+          'The proposal sets out the full scope of services, estimated timeline, required documentation, and applicable fees.',
           '',
-          'If you have any questions, please reply to this email or reach us on WhatsApp: https://wa.me/355696952989',
+          'Please review it at your earliest convenience. For any questions, reach us on WhatsApp: +355 69 69 52 989',
           '',
-          `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+          `Yours sincerely,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
         ].join('\n'),
+        html: buildHtmlEmail(`
+          <p>Dear <strong>${current.name || 'Client'}</strong>,</p>
+          <p>We are pleased to inform you that your personalised service proposal from <strong>DAFKU Law Firm</strong> is now ready for your review.</p>
+          <p>The proposal sets out in full the scope of services, estimated timeline, required documentation, and applicable fees for your matter.</p>
+          ${portalUrl ? `<p><a href="${portalUrl}" class="btn">Review Your Proposal</a></p>` : '<p>Please contact our office to obtain access to your client portal and review your proposal.</p>'}
+          <hr>
+          <p>We invite you to review the proposal and advise us of your decision at your earliest convenience. Should you require any clarification or wish to discuss the terms, please do not hesitate to reach out.</p>
+          <div class="sig">Yours sincerely,<br><strong>${senderLabel}</strong><br>DAFKU Law Firm</div>
+        `),
       });
     }
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'proposal_sent', resource: 'customer', resourceId: id, details: { proposalSentAt: update.proposalSentAt } });
@@ -1175,19 +1234,27 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
         text: [
           `Dear ${current.name || 'Client'},`,
           '',
-          'Your Service Agreement with DAFKU Law Firm is now ready for your review and electronic acceptance.',
+          'Your Service Agreement with DAFKU Law Firm is now ready for your review and signature.',
           '',
-          portalUrl
-            ? `Please open the Contract tab in your secure customer portal to read and sign it:\n${portalUrl}`
-            : 'Please contact us to access your customer portal and open the Contract tab.',
+          portalUrl ? `Please open the Contract section of your secure client portal to read and sign the agreement:\n${portalUrl}` : 'Please contact us to access your client portal and proceed to the Contract section.',
           '',
           ...(paymentSection.length > 0 ? ['', ...paymentSection, ''] : []),
-          'To accept the agreement, type your full legal name in the signature field and confirm you have read the terms.',
+          'To sign, enter your full legal name in the designated signature field and confirm that you have read and agree to the terms.',
           '',
-          'If you have any questions before signing, please reply to this email or reach us on WhatsApp: https://wa.me/355696952989',
+          'Should you have any questions prior to signing, please do not hesitate to contact us on WhatsApp: +355 69 69 52 989',
           '',
-          `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+          `Yours sincerely,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
         ].join('\n'),
+        html: buildHtmlEmail(`
+          <p>Dear <strong>${current.name || 'Client'}</strong>,</p>
+          <p>We are writing to inform you that your <strong>Service Agreement</strong> with DAFKU Law Firm is now prepared and ready for your review and electronic signature.</p>
+          ${portalUrl ? `<p>Please access your secure client portal and navigate to the <strong>Contract</strong> section to read and sign the agreement:</p><p><a href="${portalUrl}" class="btn">Open Your Contract</a></p>` : '<p>Please contact our office to access your client portal and proceed to the Contract section.</p>'}
+          ${paymentSection.length > 0 ? `<div class="box"><p><strong>Payment Details</strong></p><p style="white-space:pre-line;font-size:13px">${paymentSection.join('\n')}</p></div>` : ''}
+          <hr>
+          <p>To sign, enter your full legal name in the designated signature field and confirm that you have read and accept the terms of the agreement.</p>
+          <p>Should you have any questions before signing, please contact us — we are happy to assist.</p>
+          <div class="sig">Yours sincerely,<br><strong>${senderLabel}</strong><br>DAFKU Law Firm</div>
+        `),
       });
     }
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'contract_sent', resource: 'customer', resourceId: id, details: { contractSentAt: update.contractSentAt } });
@@ -1806,7 +1873,21 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
     const clientRecord = cust || cli;
     if (clientRecord?.email) {
       const newStateLabel = STATE_EMAIL_LABELS[stateIn] || stateIn;
-      sendEmail({ to: clientRecord.email, subject: `Case update: ${theCase.title || id}`, text: `Dear ${clientRecord.name || 'Client'},\n\nYour case "${theCase.title || id}" has been updated.\n\nNew status: ${newStateLabel}\n\nVisit your customer portal for the latest details.` });
+      sendEmail({
+        to: clientRecord.email,
+        subject: `Case Update — ${theCase.title || 'Your Matter'} | DAFKU Law Firm`,
+        text: `Dear ${clientRecord.name || 'Client'},\n\nWe are writing to inform you that your matter at DAFKU Law Firm has been updated.\n\nMatter: ${theCase.title || id}\nNew status: ${newStateLabel}\n\nPlease visit your client portal for the latest information and any documents or actions required.\n\nFor any questions, reach us on WhatsApp: +355 69 69 52 989\n\nYours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        html: buildHtmlEmail(`
+          <p>Dear <strong>${clientRecord.name || 'Client'}</strong>,</p>
+          <p>We are writing to inform you that your matter with <strong>DAFKU Law Firm</strong> has been updated.</p>
+          <div class="box">
+            <p><strong>Matter:</strong> ${theCase.title || id}</p>
+            <p><strong>Status:</strong> ${newStateLabel}</p>
+          </div>
+          <p>Please log in to your client portal to view the latest information, any documents requiring your attention, or actions needed from your side.</p>
+          <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+        `),
+      });
     }
   }
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case-history', resourceId: historyId, details: { caseId: id, stateFrom, stateIn } });
@@ -1965,29 +2046,37 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
           .join(', ');
         sendEmail({
           to: customer.email,
-          subject: 'Reminder: Please Complete Your Payment — DAFKU Law Firm',
+          subject: 'Payment Reminder — Action Required | DAFKU Law Firm',
           text: [
             `Dear ${customer.name},`,
             '',
-            'This is a friendly reminder that your contract has been signed but your payment has not yet been completed.',
+            'We wish to draw your attention to the fact that your service agreement has been signed, however payment in respect of the agreed fees has not yet been received.',
             '',
-            customer.paymentAmountALL
-              ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL` +
-                (customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : '')
-              : '',
+            customer.paymentAmountALL ? `Amount outstanding: ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}` : '',
             methodsList ? `Accepted payment methods: ${methodsList}` : '',
-            customer.paymentNote ? `\nPayment note: ${customer.paymentNote}` : '',
+            customer.paymentNote ? `Payment note: ${customer.paymentNote}` : '',
             '',
-            portalUrl
-              ? `Please visit your portal to select a payment method and complete the process:\n${portalUrl}`
-              : 'Please visit your portal to complete the payment process.',
+            portalUrl ? `Please access your client portal to select a payment method and complete the payment:\n${portalUrl}` : 'Please contact us to arrange payment.',
             '',
-            'If you have already made the payment, please ignore this reminder — we will confirm receipt shortly.',
+            'If you have already arranged payment, kindly disregard this message — our team will confirm receipt as soon as possible.',
             '',
-            'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+            'For any queries, please contact us on WhatsApp: +355 69 69 52 989',
             '',
-            'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+            'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
           ].filter(l => l !== null && l !== undefined).join('\n'),
+          html: buildHtmlEmail(`
+            <p>Dear <strong>${customer.name}</strong>,</p>
+            <p>We wish to draw your attention to the fact that your <strong>Service Agreement</strong> with DAFKU Law Firm has been signed; however, payment in respect of the agreed fees has not yet been received.</p>
+            <div class="box">
+              ${customer.paymentAmountALL ? `<p><strong>Amount outstanding:</strong> ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}</p>` : ''}
+              ${methodsList ? `<p><strong>Accepted payment methods:</strong> ${methodsList}</p>` : ''}
+              ${customer.paymentNote ? `<p><strong>Note:</strong> ${customer.paymentNote}</p>` : ''}
+            </div>
+            ${portalUrl ? `<p>Please access your client portal to complete the payment process:</p><p><a href="${portalUrl}" class="btn">Complete Payment</a></p>` : '<p>Please contact our office to arrange payment at your earliest convenience.</p>'}
+            <hr>
+            <p>Should you have already arranged payment, please disregard this notice — our team will confirm receipt promptly.</p>
+            <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+          `),
         });
         await customersCol.updateOne(
           { customerId: customer.customerId },
@@ -2012,7 +2101,8 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
     app.use(express.static(distDir, { maxAge: '1h', etag: true }));
     // SPA fallback — HashRouter handles client-side routing, so only serve index.html
     // for paths that are not API endpoints or the server-rendered join form.
-    app.get('*', (req, res, next) => {
+    // Use regex instead of '*' — path-to-regexp v8+ (Express 5 router) no longer accepts bare wildcards.
+    app.get(/.*/, (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/join/')) return next();
       res.sendFile(path.join(distDir, 'index.html'));
     });
@@ -2472,26 +2562,40 @@ app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
     const portalUrl = `${process.env.APP_URL}/#/portal/${rawToken}`;
     sendEmail({
       to: person.email,
-      subject: 'Your DAFKU Law Firm Customer Portal Access',
+      subject: 'Your Client Portal — DAFKU Law Firm',
       text: [
         `Dear ${person.name || 'Client'},`,
         '',
-        'Your secure customer portal has been set up by the DAFKU Law Firm team.',
+        'Your secure personal client portal with DAFKU Law Firm has been set up and is ready for use.',
         '',
         `Access your portal here:\n${portalUrl}`,
         '',
-        'Through your portal you can:',
-        '  \u2022 Track your case status in real time',
-        '  \u2022 Review proposals and service agreements',
-        '  \u2022 View your invoices and payment status',
-        '  \u2022 Send messages directly to your lawyer',
+        'Through you portal you can:',
+        '  • Track your matter status in real time',
+        '  • Review proposals and service agreements',
+        '  • View your invoices and payment details',
+        '  • Communicate directly with your legal team',
         '',
-        `This link is valid until ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
+        `This access link is valid until ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
         '',
-        'If you have any questions, reach us on WhatsApp: https://wa.me/355696952989',
+        'For any assistance, contact us on WhatsApp: +355 69 69 52 989',
         '',
-        'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+        'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
       ].join('\n'),
+      html: buildHtmlEmail(`
+        <p>Dear <strong>${person.name || 'Client'}</strong>,</p>
+        <p>Your secure personal client portal with <strong>DAFKU Law Firm</strong> has been set up and is ready for use.</p>
+        <p>Through your portal, you can:</p>
+        <div class="box">
+          <p>✔&nbsp; Track your matter status in real time</p>
+          <p>✔&nbsp; Review proposals and service agreements</p>
+          <p>✔&nbsp; View invoices and payment details</p>
+          <p>✔&nbsp; Communicate directly with your legal team</p>
+        </div>
+        <p><a href="${portalUrl}" class="btn">Access Your Client Portal</a></p>
+        <p style="font-size:13px;color:#666">This access link is valid until <strong>${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>. Please keep it secure and do not share it with others.</p>
+        <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+      `),
     });
   }
   res.json({ token: rawToken, expiresAt });
@@ -2855,26 +2959,40 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
     const methodsList = (customer.paymentMethods || []).map(m => m === 'bank' ? 'Bank Transfer' : m === 'crypto' ? 'Crypto (USDT)' : 'Cash').join(', ');
     sendEmail({
       to: customer.email,
-      subject: 'Contract Signed — Please Complete Your Payment',
+      subject: 'Agreement Signed — Payment Required to Activate Your Account | DAFKU Law Firm',
       text: [
         `Dear ${customer.name},`,
         '',
-        'Thank you for signing your contract with DAFKU Law Firm.',
+        'Thank you for signing your Service Agreement with DAFKU Law Firm.',
         '',
-        'To complete your onboarding as a confirmed client, please make the required payment.',
+        'To complete your registration as a confirmed client, the outstanding fees must now be settled.',
         '',
-        customer.paymentAmountALL ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL` + (customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : '') : '',
+        customer.paymentAmountALL ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}` : '',
         methodsList ? `Accepted payment methods: ${methodsList}` : '',
-        customer.paymentNote ? `\nPayment note: ${customer.paymentNote}` : '',
+        customer.paymentNote ? `Payment note: ${customer.paymentNote}` : '',
         '',
-        portalUrl ? `Open your portal to select your payment method and view instructions:\n${portalUrl}` : 'Please visit your portal to see payment instructions.',
+        portalUrl ? `Please open your client portal to select a payment method and view payment instructions:\n${portalUrl}` : 'Please contact us to arrange payment.',
         '',
-        'Once we confirm receipt of payment, your account will be fully activated.',
+        'Once payment has been confirmed, your account will be fully activated and our team will commence work on your matter.',
         '',
-        'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+        'For any queries, contact us on WhatsApp: +355 69 69 52 989',
         '',
-        `Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
       ].filter(l => l !== null && l !== undefined).join('\n'),
+      html: buildHtmlEmail(`
+        <p>Dear <strong>${customer.name}</strong>,</p>
+        <p>Thank you for signing your <strong>Service Agreement</strong> with DAFKU Law Firm.</p>
+        <p>To complete your registration as a confirmed client, the outstanding fees must now be settled. Please find the payment details below.</p>
+        <div class="box">
+          ${customer.paymentAmountALL ? `<p><strong>Amount due:</strong> ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` <span style="color:#777">(approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)</span>` : ''}</p>` : ''}
+          ${methodsList ? `<p><strong>Payment methods:</strong> ${methodsList}</p>` : ''}
+          ${customer.paymentNote ? `<p><strong>Note:</strong> ${customer.paymentNote}</p>` : ''}
+        </div>
+        ${portalUrl ? `<p><a href="${portalUrl}" class="btn">View Payment Instructions</a></p>` : '<p>Please contact our office to arrange payment.</p>'}
+        <hr>
+        <p>Once payment has been confirmed by our team, your account will be fully activated and work on your matter will commence promptly.</p>
+        <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+      `),
     });
   }
 
@@ -3038,18 +3156,31 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
   if (clientRecord?.email) {
     sendEmail({
       to: clientRecord.email,
-      subject: 'Payment Confirmed — Welcome to DAFKU Law Firm!',
+      subject: 'Payment Confirmed — Welcome to DAFKU Law Firm',
       text: [
         `Dear ${clientRecord.name},`,
         '',
-        'We have confirmed receipt of your payment. You are now a fully confirmed client of DAFKU Law Firm.',
+        'We are delighted to confirm receipt of your payment. You are now a fully confirmed client of DAFKU Law Firm.',
         '',
-        'Our team will be in touch shortly to begin work on your matter.',
+        'Your matter has been formally opened and our team will be in contact shortly to discuss the next steps and begin work on your behalf.',
         '',
-        'Questions? Reach us on WhatsApp: https://wa.me/355696952989',
+        'You may continue to use your client portal to track progress and communicate with your legal team at any time.',
         '',
-        `Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        'We look forward to working with you.',
+        '',
+        'For any questions, contact us on WhatsApp: +355 69 69 52 989',
+        '',
+        'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
       ].join('\n'),
+      html: buildHtmlEmail(`
+        <p>Dear <strong>${clientRecord.name}</strong>,</p>
+        <p>We are delighted to confirm receipt of your payment. You are now a <strong>fully confirmed client</strong> of DAFKU Law Firm.</p>
+        <p>Your matter has been formally opened and a member of our team will be in contact with you shortly to discuss the next steps and begin work on your behalf.</p>
+        <p>You may continue to access your client portal at any time to track the progress of your matter and communicate directly with your legal team.</p>
+        <hr>
+        <p>We look forward to working with you and remain at your disposal for any questions.</p>
+        <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+      `),
     });
   }
 
@@ -3423,22 +3554,32 @@ app.post('/api/register', async (req, res) => {
   const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${rawToken}` : null;
   sendEmail({
     to: normalEmail,
-    subject: 'Thank you for contacting DAFKU Law Firm',
+    subject: 'Thank You for Your Enquiry — DAFKU Law Firm',
     text: [
       `Dear ${doc.name},`,
       '',
       'Thank you for reaching out to DAFKU Law Firm. We have received your enquiry and our team will review it shortly.',
       '',
-      'We have created a secure personal portal for you where you can track your enquiry status and communicate with our team.',
+      'We have created a secure personal client portal for you where you can track the status of your enquiry and communicate directly with our team.',
       '',
-      portalUrl ? `Access your customer portal here:\n${portalUrl}` : 'A portal link will be sent to you once your enquiry is reviewed.',
+      portalUrl ? `Access your client portal here:\n${portalUrl}` : 'A personalised portal link will be sent to you once your enquiry has been reviewed.',
       '',
-      'Our team will be in touch within 1-2 business days.',
+      'A member of our team will be in touch within 1–2 business days.',
       '',
-      'If you have urgent questions, reach us on WhatsApp: https://wa.me/355696952989',
+      'For any urgent matters, please contact us on WhatsApp: +355 69 69 52 989',
       '',
-      'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+      'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
     ].join('\n'),
+    html: buildHtmlEmail(`
+      <p>Dear <strong>${doc.name}</strong>,</p>
+      <p>Thank you for reaching out to <strong>DAFKU Law Firm</strong>. We have received your enquiry and our specialist team will review it at the earliest opportunity.</p>
+      <p>We have set up a secure personal client portal for you where you can track the progress of your matter and communicate directly with our team.</p>
+      ${portalUrl ? `<p><a href="${portalUrl}" class="btn">Access Your Client Portal</a></p>` : '<p>A personalised portal link will be sent to you once your enquiry has been reviewed.</p>'}
+      <hr>
+      <p>A member of our team will be in contact with you within <strong>1–2 business days</strong> to discuss your matter and the next steps.</p>
+      <p>For any urgent queries in the meantime, please do not hesitate to contact us on WhatsApp.</p>
+      <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
+    `),
   });
   res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
 });
