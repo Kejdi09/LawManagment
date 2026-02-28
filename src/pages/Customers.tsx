@@ -46,7 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, Bot } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -1445,25 +1445,6 @@ const Customers = () => {
                             </Button>
                           </div>
                         )}
-                        {/* Staff intake bot – fill intake form on behalf of client (only for INTAKE / SEND_PROPOSAL stages) */}
-                        {(selectedCustomer.status === 'SEND_PROPOSAL' || selectedCustomer.status === 'INTAKE') && (
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => setShowIntakeSheet(true)}
-                              >
-                                <Bot className="h-3.5 w-3.5" />
-                                Fill Intake Form
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Run the intake chatbot on behalf of this client to populate proposal fields</TooltipContent>
-                          </Tooltip>
-                        </div>
-                        )}
                         {/* Reset intake bot button – only for INTAKE / SEND_PROPOSAL stages */}
                         {(selectedCustomer.status === 'SEND_PROPOSAL' || selectedCustomer.status === 'INTAKE') && (
                         <div className="flex flex-wrap gap-2 pt-1">
@@ -1525,6 +1506,12 @@ const Customers = () => {
                           <div className="rounded-md border p-2 text-sm">
                             <div className="flex items-center gap-2 text-muted-foreground mb-1"><StickyNote className="h-3 w-3" />Notes</div>
                             <p>{selectedCustomer.notes}</p>
+                          </div>
+                        )}
+                        {selectedCustomer.message && (
+                          <div className="rounded-md border border-blue-200 bg-blue-50/40 dark:bg-blue-950/20 dark:border-blue-900 p-2 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground mb-1"><MessageSquare className="h-3 w-3" />Registration Message</div>
+                            <p className="whitespace-pre-wrap">{selectedCustomer.message}</p>
                           </div>
                         )}
                       </CardContent>

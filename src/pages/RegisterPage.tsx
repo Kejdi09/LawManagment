@@ -44,6 +44,9 @@ export default function RegisterPage() {
     setError(null);
     if (!form.name.trim()) { setError("Please enter your full name."); return; }
     if (!form.email.trim()) { setError("Please enter your email address."); return; }
+    if (!form.phone.trim()) { setError("Please enter your phone / WhatsApp number."); return; }
+    if (!form.nationality.trim()) { setError("Please enter your nationality."); return; }
+    if (form.services.length === 0) { setError("Please select at least one service you are interested in."); return; }
     setLoading(true);
     try {
       await submitRegistration({
@@ -152,7 +155,7 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="reg-phone">Phone / WhatsApp</Label>
+              <Label htmlFor="reg-phone">Phone / WhatsApp <span className="text-destructive">*</span></Label>
               <Input
                 id="reg-phone"
                 value={form.phone}
@@ -162,7 +165,7 @@ export default function RegisterPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="reg-nationality">Nationality</Label>
+              <Label htmlFor="reg-nationality">Nationality <span className="text-destructive">*</span></Label>
               <Input
                 id="reg-nationality"
                 value={form.nationality}
@@ -174,7 +177,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Services Interested In</Label>
+            <Label>Services Interested In <span className="text-destructive">*</span></Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {SERVICES.map(svc => (
                 <label

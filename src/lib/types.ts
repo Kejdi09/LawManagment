@@ -152,6 +152,10 @@ export interface Customer {
   contractViewedAt?: string;
   /** ISO timestamp of when the client accepted the contract */
   contractAcceptedAt?: string;
+  /** Message / note left by the client when self-registering */
+  message?: string | null;
+  /** Source of the record, e.g. 'self_register' */
+  source?: string;
 }
 
 export interface HistoryRecord {

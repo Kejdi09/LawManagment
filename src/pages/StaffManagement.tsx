@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "@/components/MainLayout";
 import { useAuth } from "@/lib/auth-context";
-import { getStaffUsers, createStaffUser, updateStaffUser, deleteStaffUser, StaffUser, getWorkload, WorkloadEntry } from "@/lib/case-store";
+import { getStaffUsers, createStaffUser, updateStaffUser, deleteStaffUser, StaffUser } from "@/lib/case-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Plus, KeyRound, BarChart2 } from "lucide-react";
+import { Pencil, Trash2, Plus, KeyRound } from "lucide-react";
 
 const ROLES = ["admin", "manager", "consultant", "intake"] as const;
 type Role = (typeof ROLES)[number];
@@ -63,13 +63,10 @@ const StaffManagement = () => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<StaffUser | null>(null);
   const [working, setWorking] = useState(false);
-  const [workload, setWorkload] = useState<WorkloadEntry[]>([]);
-  const [workloadLoading, setWorkloadLoading] = useState(false);
 
   useEffect(() => {
     if (user?.role !== "admin") { navigate("/"); return; }
     loadStaff();
-    loadWorkload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -82,18 +79,6 @@ const StaffManagement = () => {
       toast({ title: "Failed to load staff", variant: "destructive" });
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadWorkload() {
-    setWorkloadLoading(true);
-    try {
-      const data = await getWorkload();
-      setWorkload(data);
-    } catch {
-      // silently ignore — not critical
-    } finally {
-      setWorkloadLoading(false);
     }
   }
 
@@ -282,63 +267,6 @@ const StaffManagement = () => {
           </CardContent>
         </Card>
 
-        {/* Workload Overview */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Workload Overview</CardTitle>
-            </div>
-            <CardDescription>Active leads and confirmed clients assigned per team member.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {workloadLoading ? (
-              <p className="text-muted-foreground text-sm py-4 text-center">Loading…</p>
-            ) : workload.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-4 text-center">No workload data available.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead className="text-right">Leads</TableHead>
-                    <TableHead className="text-right">Clients</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Distribution</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workload.map((w) => {
-                    const maxTotal = Math.max(1, ...workload.map(x => x.total));
-                    const pct = Math.round((w.total / maxTotal) * 100);
-                    return (
-                      <TableRow key={w.username}>
-                        <TableCell>
-                          <div className="font-medium text-sm">{w.name}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{w.username}</div>
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${ROLE_COLORS[(w.role as Role)] || "bg-gray-100 text-gray-700"}` }>
-                            {ROLE_LABELS[(w.role as Role)] || w.role}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{w.leads}</TableCell>
-                        <TableCell className="text-right font-medium">{w.clients}</TableCell>
-                        <TableCell className="text-right font-bold">{w.total}</TableCell>
-                        <TableCell className="w-40">
-                          <div className="h-2 rounded-full bg-muted overflow-hidden">
-                            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Create / Edit / Reset-password dialog */}
