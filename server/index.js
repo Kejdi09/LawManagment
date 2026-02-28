@@ -14,8 +14,9 @@ import nodemailer from "nodemailer";
 
 dotenv.config();
 
-// ── Email notification helper (opt-in via env vars) ──────────────────────────────────────────────────────────────────────────────────
-// Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, and ADMIN_EMAIL in your .env to enable.
+// ── Email notification helper ─────────────────────────────────────────────────
+// Primary:  Set RESEND_API_KEY + SMTP_FROM + ADMIN_EMAIL  (uses Resend HTTP API — works on Render free tier)
+// Fallback: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL (nodemailer SMTP)
 const STATE_EMAIL_LABELS = {
   NEW: 'New', IN_PROGRESS: 'In Progress', WAITING_CUSTOMER: 'Waiting — Your Input Needed',
   WAITING_AUTHORITIES: 'Waiting — Authorities', FINALIZED: 'Completed', INTAKE: 'Under Review',
@@ -23,32 +24,57 @@ const STATE_EMAIL_LABELS = {
   DISCUSSING_Q: 'Under Discussion', SEND_CONTRACT: 'Contract Sent',
   WAITING_RESPONSE_C: 'Waiting for Your Response',
 };
-// Log SMTP config status at startup (after dotenv.config() is called)
 function logEmailConfig() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.warn('[email] SMTP NOT configured — emails disabled. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.');
+  const { RESEND_API_KEY, SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL } = process.env;
+  if (RESEND_API_KEY) {
+    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'} | ADMIN=${ADMIN_EMAIL || '(not set)'}`);
+  } else if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    console.log(`[email] SMTP configured: ${SMTP_USER}@${SMTP_HOST} | FROM=${SMTP_FROM || SMTP_USER} | ADMIN=${ADMIN_EMAIL || '(not set)'}`);
   } else {
-    console.log(`[email] SMTP configured: ${SMTP_USER}@${SMTP_HOST}:${SMTP_PORT || 587} | FROM=${SMTP_FROM || SMTP_USER} | ADMIN_EMAIL=${ADMIN_EMAIL || '(not set)'}`);
+    console.warn('[email] NOT configured — set RESEND_API_KEY (recommended) or SMTP_HOST/USER/PASS to enable emails.');
   }
 }
 logEmailConfig();
 
 async function sendEmail({ to, subject, text }) {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.warn('[email] Skipping — SMTP not configured.');
+  if (!to) { console.warn(`[email] Skipping "${subject}" — no recipient address.`); return; }
+
+  const { RESEND_API_KEY, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+
+  // ── Option 1: Resend HTTP API (recommended on Render — no SMTP port issues) ──
+  if (RESEND_API_KEY) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: SMTP_FROM || 'DAFKU Law Firm <onboarding@resend.dev>',
+          to: [to],
+          subject,
+          text,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        console.log(`[email] ✓ Sent via Resend "${subject}" → ${to}`);
+      } else {
+        console.error(`[email] ✗ Resend error "${subject}" → ${to}:`, JSON.stringify(data));
+      }
+    } catch (e) {
+      console.error(`[email] ✗ Resend fetch failed "${subject}" → ${to}:`, e.message);
+    }
     return;
   }
-  if (!to) {
-    console.warn(`[email] Skipping "${subject}" — no recipient address.`);
+
+  // ── Option 2: SMTP fallback (nodemailer) ──
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    console.warn('[email] Skipping — neither RESEND_API_KEY nor SMTP credentials configured.');
     return;
   }
   const port = Number(SMTP_PORT) || 587;
   try {
     const transport = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port,
+      host: SMTP_HOST, port,
       secure: port === 465,
       requireTLS: port !== 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
@@ -56,9 +82,9 @@ async function sendEmail({ to, subject, text }) {
     });
     await transport.verify();
     await transport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
-    console.log(`[email] ✓ Sent "${subject}" → ${to}`);
+    console.log(`[email] ✓ Sent via SMTP "${subject}" → ${to}`);
   } catch (e) {
-    console.error(`[email] ✗ Failed to send "${subject}" → ${to}:`, e.message, e.code || '');
+    console.error(`[email] ✗ SMTP failed "${subject}" → ${to}:`, e.message, e.code || '');
   }
 }
 
@@ -981,13 +1007,62 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     }
     if (current.email) {
       const senderLabel = getUserLawyerName(req.user) || 'the legal team';
+      const tokenDoc = await portalTokensCol.findOne({ customerId: id });
+      const portalUrl = tokenDoc
+        ? `${process.env.APP_URL || 'https://your-app.onrender.com'}/portal/${tokenDoc.token}`
+        : null;
       sendEmail({
         to: current.email,
-        subject: 'Your Service Proposal — DAFKU Law Firm',
-        text: `Dear ${current.name || 'Client'},\n\nYour personalised service proposal is now ready for you to review in your client portal.\n\nIf you have any questions, please reply to this email or reach us on WhatsApp: +355 69 69 52 989\n\nBest regards,\n${senderLabel}\nDAFKU Law Firm`,
+        subject: 'Your Service Proposal is Ready — DAFKU Law Firm',
+        text: [
+          `Dear ${current.name || 'Client'},`,
+          '',
+          'Your personalised service proposal from DAFKU Law Firm is now ready for your review.',
+          '',
+          portalUrl
+            ? `You can view it at any time through your secure client portal:\n${portalUrl}`
+            : 'Please log in to your client portal to view it.',
+          '',
+          'The proposal outlines the scope of work, estimated timeline, required documents, and fees for the services requested.',
+          '',
+          'If you have any questions, please reply to this email or reach us on WhatsApp: +355 69 69 52 989',
+          '',
+          `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        ].join('\n'),
       });
     }
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'proposal_sent', resource: 'customer', resourceId: id, details: { proposalSentAt: update.proposalSentAt } });
+  }
+
+  // Client email when contract is first sent
+  if (update.contractSentAt && !current.contractSentAt) {
+    if (current.email) {
+      const senderLabel = getUserLawyerName(req.user) || 'the legal team';
+      const tokenDoc = await portalTokensCol.findOne({ customerId: id });
+      const portalUrl = tokenDoc
+        ? `${process.env.APP_URL || 'https://your-app.onrender.com'}/portal/${tokenDoc.token}`
+        : null;
+      sendEmail({
+        to: current.email,
+        subject: 'Your Service Agreement is Ready to Sign — DAFKU Law Firm',
+        text: [
+          `Dear ${current.name || 'Client'},`,
+          '',
+          'Great news — your Service Agreement with DAFKU Law Firm is now ready for your review and electronic acceptance.',
+          '',
+          portalUrl
+            ? `Please open the Contract tab in your secure client portal to read and accept it:\n${portalUrl}`
+            : 'Please log in to your client portal and open the Contract tab to review it.',
+          '',
+          'To accept the agreement you will be asked to type your full legal name and confirm you have read the terms. This constitutes your electronic signature.',
+          '',
+          'If you have any questions before signing, please reply to this email or reach us on WhatsApp: +355 69 69 52 989',
+          '',
+          `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        ].join('\n'),
+      });
+    }
+    await logAudit({ username: req.user?.username, role: req.user?.role, action: 'contract_sent', resource: 'customer', resourceId: id, details: { contractSentAt: update.contractSentAt } });
   }
 
   // Track status history (guard: only when status is explicitly part of the update)
