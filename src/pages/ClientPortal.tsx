@@ -142,52 +142,58 @@ export default function ClientPortalPage() {
   const [contractResponding, setContractResponding] = useState(false);
   const [contractRespondDone, setContractRespondDone] = useState<"accepted" | null>(null);
   const contractPrintRef = useRef<HTMLDivElement>(null);
-  const [contractPdfGenerating, setContractPdfGenerating] = useState(false);
   // Tracks whether a new lawyer message has arrived since the client last opened the Messages tab
   const [unreadFromLawyer, setUnreadFromLawyer] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
   const proposalViewedRef = useRef(false);
   const portalPrintRef = useRef<HTMLDivElement>(null);
-  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [contractSignName, setContractSignName] = useState("");
+  const [contractSignAgreed, setContractSignAgreed] = useState(false);
 
-  async function handlePortalPrint() {
+  function handlePortalPrint() {
     const content = portalPrintRef.current;
-    if (!content || pdfGenerating) return;
-    setPdfGenerating(true);
-    try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-      const canvas = await html2canvas(content, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgData = canvas.toDataURL('image/png');
-      const imgW = pageW;
-      const imgH = (canvas.height * imgW) / canvas.width;
-      let posY = 0;
-      let remaining = imgH;
-      pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
-      remaining -= pageH;
-      while (remaining > 0) {
-        posY -= pageH;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
-        remaining -= pageH;
-      }
-      pdf.save(`Proposal - ${data?.client?.name ?? 'Client'}.pdf`);
-    } catch {
-      // silent fail
-    } finally {
-      setPdfGenerating(false);
-    }
+    if (!content) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Proposal — ${data?.client?.name ?? 'Client'}</title>
+      <meta charset="utf-8"/>
+      <style>
+        @page { margin: 20mm 16mm; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; margin: 0; padding: 0; }
+        section { page-break-inside: avoid; break-inside: avoid; }
+        table { page-break-inside: avoid; break-inside: avoid; }
+        @media print { body { font-size: 11px; } }
+      </style>
+    </head><body>${content.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
+
+  function handleContractPrint() {
+    const content = contractPrintRef.current;
+    if (!content) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Service Agreement — ${data?.client?.name ?? 'Client'}</title>
+      <meta charset="utf-8"/>
+      <style>
+        @page { margin: 20mm 16mm; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; margin: 0; padding: 0; }
+        section { page-break-inside: avoid; break-inside: avoid; }
+        h2, h3 { page-break-after: avoid; break-after: avoid; }
+        table { page-break-inside: avoid; break-inside: avoid; }
+        @media print { body { font-size: 11px; } }
+      </style>
+    </head><body>${content.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
   }
 
   // Load portal data
@@ -471,9 +477,9 @@ export default function ClientPortalPage() {
                 </div>
               )}
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={handlePortalPrint} disabled={pdfGenerating} className="gap-1.5">
+                <Button variant="outline" size="sm" onClick={handlePortalPrint} className="gap-1.5">
                   <FileDown className="h-4 w-4" />
-                  {pdfGenerating ? "Generating…" : "Save as PDF"}
+                  Save as PDF
                 </Button>
               </div>
               <ProposalRenderer
@@ -547,32 +553,9 @@ export default function ClientPortalPage() {
           {showContractTab && data.contractSnapshot && (
             <TabsContent value="contract" className="mt-0 space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" disabled={contractPdfGenerating} className="gap-1.5"
-                  onClick={async () => {
-                    const content = contractPrintRef.current;
-                    if (!content || contractPdfGenerating) return;
-                    setContractPdfGenerating(true);
-                    try {
-                      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-                        import('html2canvas'),
-                        import('jspdf'),
-                      ]);
-                      const canvas = await html2canvas(content, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-                      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                      const pageW = pdf.internal.pageSize.getWidth();
-                      const pageH = pdf.internal.pageSize.getHeight();
-                      const imgData = canvas.toDataURL('image/png');
-                      const imgW = pageW;
-                      const imgH = (canvas.height * imgW) / canvas.width;
-                      let posY = 0; let remaining = imgH;
-                      pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
-                      remaining -= pageH;
-                      while (remaining > 0) { posY -= pageH; pdf.addPage(); pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH); remaining -= pageH; }
-                      pdf.save(`Contract - ${data?.client?.name ?? 'Client'}.pdf`);
-                    } catch { /* silent fail */ } finally { setContractPdfGenerating(false); }
-                  }}>
+                <Button variant="outline" size="sm" onClick={handleContractPrint} className="gap-1.5">
                   <FileDown className="h-4 w-4" />
-                  {contractPdfGenerating ? "Generating…" : "Save as PDF"}
+                  Save as PDF
                 </Button>
               </div>
               <ProposalRenderer
@@ -581,6 +564,7 @@ export default function ClientPortalPage() {
                 clientId={data.client.customerId}
                 services={(data.client.services || []) as import("@/lib/types").ServiceType[]}
                 fields={data.contractSnapshot}
+                mode="contract"
               />
               <p className="text-xs text-muted-foreground text-center">
                 Questions about this contract?{" "}
@@ -602,9 +586,31 @@ export default function ClientPortalPage() {
                     <>
                       <p className="text-sm font-medium text-center mb-4">Ready to confirm?</p>
                       <div className="flex flex-col items-center gap-4">
+                        <div className="w-full max-w-sm space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Type your full legal name to confirm
+                            </label>
+                            <input
+                              className="w-full border rounded px-3 py-2 text-sm"
+                              placeholder={data.client.name}
+                              value={contractSignName}
+                              onChange={(e) => setContractSignName(e.target.value)}
+                            />
+                          </div>
+                          <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={contractSignAgreed}
+                              onChange={(e) => setContractSignAgreed(e.target.checked)}
+                              className="mt-0.5"
+                            />
+                            I have read and understood the full contract and agree to be legally bound by its terms.
+                          </label>
+                        </div>
                         <Button
                           className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                          disabled={contractResponding}
+                          disabled={contractResponding || !contractSignName.trim() || !contractSignAgreed}
                           onClick={async () => {
                             if (!token) return;
                             setContractResponding(true);

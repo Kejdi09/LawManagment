@@ -881,27 +881,16 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
       <title>Service Proposal — ${customer.name}</title>
       <meta charset="utf-8"/>
       <style>
+        @page { margin: 20mm 16mm; }
         *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: 'Georgia', serif; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }
-        .page { max-width: 800px; margin: 0 auto; padding: 48px 56px; }
-        h1 { font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
-        .cover-sub { text-align: center; font-size: 13px; color: #444; margin-bottom: 36px; }
-        .cover-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
-        .cover-block p { margin: 3px 0; font-size: 13px; }
-        .section-title { font-size: 15px; font-weight: bold; margin: 28px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-        .sub-title { font-size: 13px; font-weight: bold; margin: 14px 0 4px; }
-        p, li { font-size: 13px; line-height: 1.7; margin: 4px 0; }
-        ul { padding-left: 20px; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
-        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border: 1px solid #ccc; }
-        td { padding: 6px 10px; border: 1px solid #ddd; }
-        .total-row td { font-weight: bold; background: #f8f8f8; }
-        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 12px; font-size: 11px; color: #777; text-align: center; }
-        .office-grid { display: flex; gap: 20px; }
-        .office-grid > div { flex: 1; }
-        @media print { body { font-size: 12px; } .page { padding: 20px 28px; } }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; margin: 0; padding: 0; }
+        section { page-break-inside: avoid; break-inside: avoid; }
+        h2, h3 { page-break-after: avoid; break-after: avoid; }
+        table { page-break-inside: avoid; break-inside: avoid; }
+        .avoid-break { page-break-inside: avoid; break-inside: avoid; }
+        @media print { body { font-size: 11px; } }
       </style>
-    </head><body><div class="page">${content.innerHTML}</div></body></html>`);
+    </head><body>${content.innerHTML}</body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 500);

@@ -594,12 +594,12 @@ function buildTemplate(
 }
 
 // ---- Design tokens ----
-const NAVY = "#1b2e4b";
-const ACCENT = "#2563eb"; // blue-600
-const LIGHT_BG = "#f8fafc"; // slate-50
-const BORDER = "#e2e8f0"; // slate-200
-const TEXT_MAIN = "#0f172a"; // slate-900
-const TEXT_MUTED = "#64748b"; // slate-500
+const NAVY = "#0d1c2e";          // deep legal navy
+const ACCENT = "#a57c32";        // gold — law firm prestige
+const LIGHT_BG = "#f9f7f4";      // warm off-white
+const BORDER = "#ddd5c3";        // warm separator
+const TEXT_MAIN = "#111827";     // near-black
+const TEXT_MUTED = "#5a5570";    // muted purple-grey
 
 // ---- Sub-components ----
 
@@ -611,29 +611,27 @@ function SectionLabel({ number, title }: { number: string; title: string }) {
         alignItems: "center",
         gap: "10px",
         marginBottom: "14px",
-        paddingBottom: "8px",
-        borderBottom: `2px solid ${ACCENT}`,
+        paddingBottom: "10px",
+        borderBottom: `1px solid ${BORDER}`,
       }}
     >
+      <div style={{ width: "3px", height: "20px", background: ACCENT, borderRadius: "2px", flexShrink: 0 }} />
       <span
         style={{
-          background: ACCENT,
-          color: "#fff",
           fontSize: "10px",
           fontWeight: 700,
-          letterSpacing: "0.1em",
-          padding: "2px 8px",
-          borderRadius: "3px",
+          letterSpacing: "0.18em",
+          color: ACCENT,
           flexShrink: 0,
         }}
       >
-        {number}
+        {"\u00a7"}{number}
       </span>
       <span
         style={{
           fontSize: "11px",
           fontWeight: 700,
-          letterSpacing: "0.15em",
+          letterSpacing: "0.14em",
           textTransform: "uppercase",
           color: NAVY,
         }}
@@ -647,10 +645,10 @@ function SectionLabel({ number, title }: { number: string; title: string }) {
 function BulletItem({ text }: { text: string }) {
   return (
     <div style={{ display: "flex", gap: "10px", marginBottom: "5px" }}>
-      <span style={{ color: ACCENT, fontWeight: 700, flexShrink: 0, marginTop: "1px" }}>
-        &#8594;
+      <span style={{ color: ACCENT, fontWeight: 900, flexShrink: 0, marginTop: "3px", fontSize: "9px" }}>
+        &#9654;
       </span>
-      <span style={{ fontSize: "13px", color: TEXT_MAIN, lineHeight: "1.5" }}>{text}</span>
+      <span style={{ fontSize: "13px", color: TEXT_MAIN, lineHeight: "1.55" }}>{text}</span>
     </div>
   );
 }
@@ -736,6 +734,8 @@ interface ProposalRendererProps {
   services: ServiceType[];
   fields: Partial<ProposalFields>;
   innerRef?: React.RefObject<HTMLDivElement>;
+  /** "proposal" (default) shows proposal branding; "contract" shows agreement branding + signature block */
+  mode?: "proposal" | "contract";
 }
 
 // ---- Main component ----
@@ -746,6 +746,7 @@ export default function ProposalRenderer({
   services,
   fields,
   innerRef,
+  mode = "proposal",
 }: ProposalRendererProps) {
   const svcs = (services || []) as ServiceType[];
   const conditions = evaluateConditions(fields);
@@ -824,44 +825,48 @@ export default function ProposalRenderer({
         style={{
           background: NAVY,
           color: "#fff",
-          padding: "28px 40px 24px",
+          padding: "30px 44px 26px",
+          borderBottom: `3px solid ${ACCENT}`,
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
           <div>
             <div
               style={{
-                fontSize: "10px",
-                letterSpacing: "0.25em",
+                fontSize: "9px",
+                letterSpacing: "0.3em",
                 textTransform: "uppercase",
-                opacity: 0.7,
-                marginBottom: "4px",
+                color: ACCENT,
+                marginBottom: "6px",
+                fontWeight: 600,
               }}
             >
-              {usesRelocate ? "Relocate Albania" : "DAFKU Law Firm"}
+              {usesRelocate ? "Relocate Albania" : "DAFKU Law Firm"} &#8212; Legal Services
             </div>
             <div
               style={{
-                fontSize: "22px",
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                marginBottom: "2px",
+                fontSize: "24px",
+                fontWeight: 800,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                marginBottom: "4px",
+                lineHeight: 1.1,
               }}
             >
-              Service Proposal
+              {mode === "contract" ? "Service Agreement" : "Service Proposal"}
             </div>
-            <div style={{ fontSize: "12px", opacity: 0.75 }}>
-              {usesRelocate ? "info@relocateto.al" : "info@dafkulawfirm.al"}
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", marginTop: "4px" }}>
+              {usesRelocate ? "info@relocateto.al" : "info@dafkulawfirm.al"} &#8226; +355 69 69 52 989
             </div>
           </div>
-          <div style={{ textAlign: "right", fontSize: "12px", opacity: 0.8 }}>
-            <div style={{ marginBottom: "3px" }}>
-              <span style={{ opacity: 0.6 }}>Date: </span>
-              {displayDate}
+          <div style={{ textAlign: "right", fontSize: "11px", color: "rgba(255,255,255,0.75)", flexShrink: 0 }}>
+            <div style={{ marginBottom: "4px" }}>
+              <span style={{ opacity: 0.55, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>Date&#8194;</span>
+              <span style={{ color: "#fff", fontWeight: 600 }}>{displayDate}</span>
             </div>
             <div>
-              <span style={{ opacity: 0.6 }}>Ref: </span>
-              {clientId}
+              <span style={{ opacity: 0.55, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>Ref&#8194;</span>
+              <span style={{ fontFamily: "monospace", color: "rgba(255,255,255,0.85)" }}>{clientId}</span>
             </div>
           </div>
         </div>
@@ -933,7 +938,7 @@ export default function ProposalRenderer({
 
           <div style={{ padding: "32px 40px", borderBottom: `1px solid ${BORDER}` }}>
             {/* 1. Case Overview */}
-            <section style={{ marginBottom: "28px" }}>
+            <section style={{ marginBottom: "28px", pageBreakInside: "avoid", breakInside: "avoid" }}>
               <SectionLabel number="1" title="Case Overview" />
               {tpl.caseOverviewSections.map((sec, si) => (
                 <div key={si} style={{ marginBottom: si < tpl.caseOverviewSections.length - 1 ? "16px" : 0 }}>
@@ -999,7 +1004,7 @@ export default function ProposalRenderer({
             </section>
 
             {/* 2. Scope of Work */}
-            <section style={{ marginBottom: "28px" }}>
+            <section style={{ marginBottom: "28px", pageBreakInside: "avoid", breakInside: "avoid" }}>
               <SectionLabel number="2" title="Scope of Work" />
               {tpl.scopeIntro && (
                 <p
@@ -1022,7 +1027,7 @@ export default function ProposalRenderer({
 
             {/* 3. Process */}
             {tpl.processSteps.length > 0 && (
-              <section style={{ marginBottom: "28px" }}>
+              <section style={{ marginBottom: "28px", pageBreakInside: "avoid", breakInside: "avoid" }}>
                 <SectionLabel number="3" title="Process Overview" />
                 {tpl.processSteps.map((step) => {
                   globalStep += 1;
@@ -1041,7 +1046,7 @@ export default function ProposalRenderer({
 
             {/* 4. Required Documents */}
             {tpl.docSections.length > 0 && (
-              <section style={{ marginBottom: "28px" }}>
+              <section style={{ marginBottom: "28px", pageBreakInside: "avoid", breakInside: "avoid" }}>
                 <SectionLabel number="4" title="Required Documents" />
                 {tpl.docSections.map((sec, si) => (
                   <div key={si} style={{ marginBottom: si < tpl.docSections.length - 1 ? "16px" : 0 }}>
@@ -1069,7 +1074,7 @@ export default function ProposalRenderer({
 
             {/* 5. Timeline */}
             {tpl.timeline.length > 0 && (
-              <section style={{ marginBottom: "28px" }}>
+              <section style={{ marginBottom: "28px", pageBreakInside: "avoid", breakInside: "avoid" }}>
                 <SectionLabel number="5" title="Estimated Timeline" />
                 <div
                   style={{
@@ -1116,7 +1121,7 @@ export default function ProposalRenderer({
 
             {/* 6. Important Notes */}
             {tpl.disclaimers.length > 0 && (
-              <section>
+              <section style={{ pageBreakInside: "avoid", breakInside: "avoid" }}>
                 <SectionLabel number="6" title="Important Notes" />
                 {tpl.disclaimerIntro && (
                   <p
@@ -1406,13 +1411,63 @@ export default function ProposalRenderer({
         </div>
       </div>
 
+      {/* ===== SIGNATURE BLOCK (contract only) ===== */}
+      {mode === "contract" && (
+        <div
+          style={{
+            padding: "36px 44px",
+            borderBottom: `1px solid ${BORDER}`,
+            pageBreakInside: "avoid",
+            breakInside: "avoid",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+              paddingBottom: "10px",
+              borderBottom: `1px solid ${BORDER}`,
+            }}
+          >
+            <div style={{ width: "3px", height: "20px", background: ACCENT, borderRadius: "2px", flexShrink: 0 }} />
+            <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", color: ACCENT }}>ACCEPTANCE</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: NAVY }}>Agreement Signatures</span>
+          </div>
+          <p style={{ fontSize: "12px", color: TEXT_MUTED, marginBottom: "24px", lineHeight: 1.65 }}>
+            This Service Agreement is entered into between <strong style={{ color: TEXT_MAIN }}>DAFKU Law Firm</strong> (the &ldquo;Firm&rdquo;) and
+            <strong style={{ color: TEXT_MAIN }}> {clientName}</strong> (the &ldquo;Client&rdquo;). By accepting this agreement electronically
+            through the client portal, the Client confirms having read and understood all terms herein and
+            agrees to be legally bound by them.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
+            <div>
+              <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: TEXT_MUTED, marginBottom: "40px" }}>Client</div>
+              <div style={{ borderTop: `1px solid ${NAVY}`, paddingTop: "8px" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: TEXT_MAIN }}>{clientName}</div>
+                <div style={{ fontSize: "11px", color: TEXT_MUTED, marginTop: "3px" }}>Date: ____________________</div>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: TEXT_MUTED, marginBottom: "40px" }}>DAFKU Law Firm</div>
+              <div style={{ borderTop: `1px solid ${NAVY}`, paddingTop: "8px" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: TEXT_MAIN }}>Authorised Representative</div>
+                <div style={{ fontSize: "11px", color: TEXT_MUTED, marginTop: "3px" }}>Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== FOOTER ===== */}
       <div
         style={{
           background: NAVY,
-          color: "rgba(255,255,255,0.7)",
-          padding: "20px 40px",
-          fontSize: "11px",
+          borderTop: `3px solid ${ACCENT}`,
+          color: "rgba(255,255,255,0.65)",
+          padding: "18px 44px",
+          fontSize: "10px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -1421,16 +1476,18 @@ export default function ProposalRenderer({
         }}
       >
         <div>
-          <span style={{ color: "#fff", fontWeight: 600 }}>
-            DAFKU Law Firm &#8226; Relocate Albania
+          <span style={{ color: ACCENT, fontWeight: 700, letterSpacing: "0.08em" }}>
+            DAFKU LAW FIRM &#8226; RELOCATE ALBANIA
           </span>
           <br />
-          Tirana &#8226; Durres, Albania
+          <span style={{ marginTop: "3px", display: "block" }}>Tirana &#8226; Dur&#235;s, Albania</span>
         </div>
         <div style={{ textAlign: "right" }}>
           <div>info@dafkulawfirm.al &#8226; info@relocateto.al</div>
-          <div style={{ marginTop: "4px", fontStyle: "italic", opacity: 0.7 }}>
-            This proposal is confidential and valid for 30 days from the date of issue.
+          <div style={{ marginTop: "4px", fontStyle: "italic", color: "rgba(255,255,255,0.4)" }}>
+            {mode === "contract"
+              ? "This agreement is confidential. Acceptance constitutes a legally binding commitment."
+              : "This proposal is confidential and valid for 30 days from the date of issue."}
           </div>
         </div>
       </div>
