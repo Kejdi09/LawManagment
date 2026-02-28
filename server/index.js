@@ -1910,36 +1910,6 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
     cleanupStaleCases().catch((err) => console.error("cleanup failed", err));
   }, 60 * 60 * 1000);
 
-  // deadline reminder emails — runs every hour, sends once per day per case
-  setInterval(async () => {
-    try {
-      if (!process.env.ADMIN_EMAIL) return;
-      const now = new Date();
-      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const today = now.toISOString().slice(0, 10);
-      const approaching = await casesCol.find({
-        deadline: { $gte: now.toISOString(), $lte: in24h.toISOString() },
-        deadlineReminderSentDate: { $ne: today },
-        state: { $nin: ['archived', 'closed'] },
-      }).toArray();
-      if (approaching.length === 0) return;
-      const lines = approaching.map(
-        (c) =>
-          `• [${c.caseId}] ${c.title || '(untitled)'} — ${c.category || ''} — assigned: ${c.assignedTo || 'unassigned'} — deadline: ${(c.deadline || '').slice(0, 10)}`
-      );
-      sendEmail({
-        to: process.env.ADMIN_EMAIL,
-        subject: `⏰ ${approaching.length} case${approaching.length !== 1 ? 's' : ''} due in the next 24 hours`,
-        text: `The following cases have deadlines approaching in the next 24 hours:\n\n${lines.join('\n')}\n\nPlease log in to review and take action.`,
-      });
-      for (const c of approaching) {
-        await casesCol.updateOne({ caseId: c.caseId }, { $set: { deadlineReminderSentDate: today } });
-      }
-      console.log(`[deadline-reminder] sent reminder for ${approaching.length} case(s)`);
-    } catch (err) {
-      console.error('[deadline-reminder] error', err);
-    }
-  }, 60 * 60 * 1000);
   app.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);
   });
@@ -2569,8 +2539,6 @@ app.post('/api/portal/chat/:token', async (req, res) => {
   }
   const msg = { messageId: genShortId('PM'), customerId: tokenDoc.customerId, text: String(text).trim(), senderType: 'client', senderName: tokenDoc.clientName || 'Client', createdAt: new Date().toISOString(), readByLawyer: false };
   await portalMessagesCol.insertOne(msg);
-  // Notify lawyer via email
-  sendEmail({ to: process.env.ADMIN_EMAIL, subject: `New portal message from ${msg.senderName}`, text: `You have a new message from ${msg.senderName}:\n\n"${msg.text}"\n\nLog in to the admin panel to respond.` });
   res.status(201).json({ messageId: msg.messageId, text: msg.text, senderType: msg.senderType, senderName: msg.senderName, createdAt: msg.createdAt });
 });
 
@@ -2620,11 +2588,6 @@ app.post('/api/portal/:token/intake', async (req, res) => {
       changedByRole: 'client',
       changedByConsultant: null,
       changedByLawyer: null,
-    });
-    sendEmail({
-      to: process.env.ADMIN_EMAIL,
-      subject: `Intake form completed — ${currentRecord.name || tokenDoc.clientName}`,
-      text: `${currentRecord.name || tokenDoc.clientName} has completed their intake form via the client portal.\n\nStatus has been automatically advanced to "Send Proposal".\n\nLog in to the admin panel to review their information and prepare the proposal.`,
     });
   }
 
@@ -2693,11 +2656,6 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
         timestamp: now,
       });
     }
-    sendEmail({
-      to: process.env.ADMIN_EMAIL,
-      subject: `Proposal accepted — ${customer.name}`,
-      text: `${customer.name} has accepted the proposal via the client portal.\n\nStatus advanced to "Send Contract". Please prepare and send the contract.`,
-    });
     // Auto-draft invoice from proposal fee snapshot
     const snap = customer.proposalSnapshot || customer.proposalFields || {};
     const invAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
@@ -2751,11 +2709,6 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
       changedByRole: 'client',
       changedByConsultant: null,
       changedByLawyer: null,
-    });
-    sendEmail({
-      to: process.env.ADMIN_EMAIL,
-      subject: `Proposal revision requested — ${customer.name}`,
-      text: `${customer.name} has requested revisions to the proposal via the client portal.\n\nStatus changed to "Under Discussion".\n\nClient message:\n${note?.trim() || '(no message provided)'}\n\nPlease review the request in the Messages tab.`,
     });
     return res.json({ ok: true, status: 'DISCUSSING_Q' });
   }
@@ -2830,12 +2783,6 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
     readByStaff: false,
     readByClient: true,
     timestamp: now,
-  });
-
-  sendEmail({
-    to: process.env.ADMIN_EMAIL,
-    subject: `Contract accepted — ${customer.name}`,
-    text: `${customer.name} has accepted the contract via the client portal.\n\nElectronic signature name: "${signedByName || customer.name}"\nAccepted at: ${now}\n\nThey have been confirmed as a client and auto-assigned to ${assignedTo}.`,
   });
 
   // Welcome email to the newly confirmed client
@@ -3094,13 +3041,5 @@ app.post('/api/register', async (req, res) => {
       'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
     ].join('\n'),
   });
-  // Admin notification
-  if (process.env.ADMIN_EMAIL) {
-    sendEmail({
-      to: process.env.ADMIN_EMAIL,
-      subject: `\uD83D\uDCE9 New enquiry: ${doc.name}`,
-      text: `New self-registration received.\n\nName: ${doc.name}\nEmail: ${normalEmail}\nPhone: ${doc.phone || '\u2014'}\nNationality: ${doc.nationality || '\u2014'}\nServices: ${svcList.join(', ') || '\u2014'}\nMessage:\n${doc.message || '(none)'}\n\nCustomer ID: ${customerId}`,
-    });
-  }
   res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
 });

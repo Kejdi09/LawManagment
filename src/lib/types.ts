@@ -38,6 +38,8 @@ export interface Case {
 export interface ProposalFields {
   /** Title of the proposal, e.g. "Legal Assistance for Real Estate Investment in Albania" */
   proposalTitle?: string;
+  /** Employer / company name (used in work visa proposals) */
+  companyName?: string;
   /** Date shown on the proposal (ISO string) */
   proposalDate?: string;
   /** Short description of what/where, e.g. "residential house and garage located in Durrës, Albania" */
