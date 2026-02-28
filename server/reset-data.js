@@ -34,6 +34,9 @@ const OPERATIONAL_COLLECTIONS = [
   "meetings",
   "auditLogs",
   "documents",
+  "portalChat",
+  "portalTokens",
+  "invoices",
 ];
 
 async function deleteUploadedFiles() {
