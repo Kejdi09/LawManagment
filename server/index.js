@@ -3517,6 +3517,7 @@ app.post('/api/register', async (req, res) => {
   // Field length caps
   if (normalEmail.length > 254) return res.status(400).json({ error: 'Email address is too long.' });
   if (String(name).trim().length > 120) return res.status(400).json({ error: 'Name is too long.' });
+  try {
   // Duplicate check
   const [dupCust, dupClient] = await Promise.all([
     customersCol.findOne({ email: normalEmail }),
@@ -3582,4 +3583,8 @@ app.post('/api/register', async (req, res) => {
     `),
   });
   res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
+  } catch (regErr) {
+    console.error('[/api/register] error:', regErr);
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again or contact us directly.' });
+  }
 });
