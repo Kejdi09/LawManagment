@@ -1008,8 +1008,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     if (current.email) {
       const senderLabel = getUserLawyerName(req.user) || 'the legal team';
       const tokenDoc = await portalTokensCol.findOne({ customerId: id });
-      const portalUrl = tokenDoc
-        ? `${process.env.APP_URL || 'https://your-app.onrender.com'}/portal/${tokenDoc.token}`
+      const portalUrl = (tokenDoc && process.env.APP_URL)
+        ? `${process.env.APP_URL}/portal/${tokenDoc.token}`
         : null;
       sendEmail({
         to: current.email,
@@ -1020,8 +1020,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           'Your personalised service proposal from DAFKU Law Firm is now ready for your review.',
           '',
           portalUrl
-            ? `You can view it at any time through your secure client portal:\n${portalUrl}`
-            : 'Please log in to your client portal to view it.',
+            ? `You can view it at any time through your secure customer portal:\n${portalUrl}`
+            : 'Please contact us to access your customer portal.',
           '',
           'The proposal outlines the scope of work, estimated timeline, required documents, and fees for the services requested.',
           '',
@@ -1039,8 +1039,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     if (current.email) {
       const senderLabel = getUserLawyerName(req.user) || 'the legal team';
       const tokenDoc = await portalTokensCol.findOne({ customerId: id });
-      const portalUrl = tokenDoc
-        ? `${process.env.APP_URL || 'https://your-app.onrender.com'}/portal/${tokenDoc.token}`
+      const portalUrl = (tokenDoc && process.env.APP_URL)
+        ? `${process.env.APP_URL}/portal/${tokenDoc.token}`
         : null;
       sendEmail({
         to: current.email,
@@ -1051,8 +1051,8 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           'Great news — your Service Agreement with DAFKU Law Firm is now ready for your review and electronic acceptance.',
           '',
           portalUrl
-            ? `Please open the Contract tab in your secure client portal to read and accept it:\n${portalUrl}`
-            : 'Please log in to your client portal and open the Contract tab to review it.',
+            ? `Please open the Contract tab in your secure customer portal to read and accept it:\n${portalUrl}`
+            : 'Please contact us to access your customer portal and open the Contract tab.',
           '',
           'To accept the agreement you will be asked to type your full legal name and confirm you have read the terms. This constitutes your electronic signature.',
           '',
@@ -1734,7 +1734,7 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
     const clientRecord = cust || cli;
     if (clientRecord?.email) {
       const newStateLabel = STATE_EMAIL_LABELS[stateIn] || stateIn;
-      sendEmail({ to: clientRecord.email, subject: `Case update: ${theCase.title || id}`, text: `Dear ${clientRecord.name || 'Client'},\n\nYour case "${theCase.title || id}" has been updated.\n\nNew status: ${newStateLabel}\n\nVisit your client portal for the latest details.` });
+      sendEmail({ to: clientRecord.email, subject: `Case update: ${theCase.title || id}`, text: `Dear ${clientRecord.name || 'Client'},\n\nYour case "${theCase.title || id}" has been updated.\n\nNew status: ${newStateLabel}\n\nVisit your customer portal for the latest details.` });
     }
   }
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'create', resource: 'case-history', resourceId: historyId, details: { caseId: id, stateFrom, stateIn } });
@@ -2761,7 +2761,7 @@ app.post('/api/portal-chat/:customerId', verifyAuth, async (req, res) => {
   ]);
   const clientRecord = cust || cli;
   if (clientRecord?.email) {
-    sendEmail({ to: clientRecord.email, subject: 'New message from your lawyer', text: `Dear ${clientRecord.name || 'Client'},\n\nYour lawyer sent you a new message:\n\n"${msg.text}"\n\nVisit your client portal to reply.` });
+    sendEmail({ to: clientRecord.email, subject: 'New message from your lawyer', text: `Dear ${clientRecord.name || 'Client'},\n\nYour lawyer sent you a new message:\n\n"${msg.text}"\n\nVisit your customer portal to reply.` });
   }
   res.status(201).json(msg);
 });
