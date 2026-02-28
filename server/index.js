@@ -2787,6 +2787,35 @@ app.post('/api/portal/:token/respond-contract', async (req, res) => {
     text: `${customer.name} has accepted the contract via the client portal.\n\nElectronic signature name: "${signedByName || customer.name}"\nAccepted at: ${now}\n\nThey have been confirmed as a client and auto-assigned to ${assignedTo}.`,
   });
 
+  // Welcome email to the newly confirmed client
+  if (customer.email) {
+    const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${req.params.token}` : null;
+    sendEmail({
+      to: customer.email,
+      subject: 'Welcome to DAFKU Law Firm — You are now a confirmed client',
+      text: [
+        `Dear ${customer.name},`,
+        '',
+        'Congratulations — your contract has been signed and you are now a confirmed client of DAFKU Law Firm.',
+        '',
+        'Our team will be in touch shortly to begin work on your matter. In the meantime, here is what you can access through your secure client portal:',
+        '',
+        '  • Your signed contract',
+        '  • Invoices and payment status',
+        '  • Case progress updates',
+        '  • Secure messaging with our team',
+        '',
+        portalUrl
+          ? `Access your portal at any time here:\n${portalUrl}`
+          : 'Please use the portal link we sent you earlier to access your account.',
+        '',
+        'If you have any questions right now, you can reach us instantly on WhatsApp: https://wa.me/355696952989',
+        '',
+        `Best regards,\nDAFKU Law Firm Legal Team\ninfo@dafkulawfirm.al`,
+      ].join('\n'),
+    });
+  }
+
   return res.json({ ok: true, status: 'CLIENT', assignedTo });
 });
 
