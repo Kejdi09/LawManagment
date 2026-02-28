@@ -1042,19 +1042,57 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       const portalUrl = (tokenDoc && process.env.APP_URL)
         ? `${process.env.APP_URL}/portal/${tokenDoc.token}`
         : null;
+
+      // Build payment summary from proposal fee fields
+      const pf = current.proposalFields || {};
+      const fmtALL = (n) => n > 0 ? `${Number(n).toLocaleString('en-US')} ALL` : null;
+      const feeLines = [
+        pf.serviceFeeALL > 0  ? `  • Service Fee:      ${fmtALL(pf.serviceFeeALL)}` : null,
+        pf.poaFeeALL > 0      ? `  • Power of Attorney: ${fmtALL(pf.poaFeeALL)}` : null,
+        pf.translationFeeALL > 0 ? `  • Translation Fee:  ${fmtALL(pf.translationFeeALL)}` : null,
+        pf.otherFeesALL > 0   ? `  • Other Fees:       ${fmtALL(pf.otherFeesALL)}` : null,
+      ].filter(Boolean);
+      const totalALL = (Number(pf.serviceFeeALL)||0) + (Number(pf.poaFeeALL)||0) + (Number(pf.translationFeeALL)||0) + (Number(pf.otherFeesALL)||0);
+
+      // Also pull any invoices already created for this customer
+      const existingInvoices = await invoicesCol.find({ customerId: id }).toArray();
+      const invoiceLines = existingInvoices.map((inv, i) =>
+        `  ${i + 1}. ${inv.description} — ${Number(inv.amount).toLocaleString('en-US')} ${inv.currency || 'ALL'}` +
+        (inv.dueDate ? ` (due ${inv.dueDate.slice(0,10)})` : '') +
+        ` [${inv.status}]`
+      );
+
+      const paymentSection = [];
+      if (feeLines.length > 0) {
+        paymentSection.push('─────────────────────────────────');
+        paymentSection.push('PAYMENT SUMMARY');
+        paymentSection.push('─────────────────────────────────');
+        paymentSection.push(...feeLines);
+        if (totalALL > 0) paymentSection.push(`  ─────────────────────────────`);
+        if (totalALL > 0) paymentSection.push(`  TOTAL: ${totalALL.toLocaleString('en-US')} ALL`);
+        if (pf.paymentNote) paymentSection.push('', `  Note: ${pf.paymentNote}`);
+      }
+      if (invoiceLines.length > 0) {
+        paymentSection.push('');
+        paymentSection.push('INVOICES ISSUED');
+        paymentSection.push('─────────────────────────────────');
+        paymentSection.push(...invoiceLines);
+      }
+
       sendEmail({
         to: current.email,
         subject: 'Your Service Agreement is Ready to Sign — DAFKU Law Firm',
         text: [
           `Dear ${current.name || 'Client'},`,
           '',
-          'Great news — your Service Agreement with DAFKU Law Firm is now ready for your review and electronic acceptance.',
+          'Your Service Agreement with DAFKU Law Firm is now ready for your review and electronic acceptance.',
           '',
           portalUrl
-            ? `Please open the Contract tab in your secure customer portal to read and accept it:\n${portalUrl}`
+            ? `Please open the Contract tab in your secure customer portal to read and sign it:\n${portalUrl}`
             : 'Please contact us to access your customer portal and open the Contract tab.',
           '',
-          'To accept the agreement you will be asked to type your full legal name and confirm you have read the terms. This constitutes your electronic signature.',
+          ...(paymentSection.length > 0 ? ['', ...paymentSection, ''] : []),
+          'To accept the agreement, type your full legal name in the signature field and confirm you have read the terms.',
           '',
           'If you have any questions before signing, please reply to this email or reach us on WhatsApp: +355 69 69 52 989',
           '',
