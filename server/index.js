@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -172,23 +171,45 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) =>
 // Add explicit client URL if provided (useful in dev/prod env var)
 const CLIENT_URL = process.env.CLIENT_URL || (process.env.NODE_ENV === "development" ? "http://localhost:5173" : "");
 if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) allowedOrigins.push(CLIENT_URL);
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow non-browser (curl/postman) requests with no origin
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0) {
-        if (IS_PROD) return callback(new Error("CORS misconfigured: ALLOWED_ORIGINS is empty in production"));
-        return callback(null, true);
-      }
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("CORS not allowed"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+
+// Public routes that must be reachable from the React SPA on any origin
+// (e.g. Vercel frontend calling Render backend).
+// These endpoints have their own security (CSRF, rate-limit, portal tokens).
+const PUBLIC_CORS_PATHS = [/^\/api\/register$/, /^\/api\/portal/, /^\/join\//];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const isPublic = PUBLIC_CORS_PATHS.some((rx) => rx.test(req.path));
+
+  // Determine whether this origin is allowed
+  let allow = false;
+  if (!origin) {
+    allow = true; // curl / server-to-server — no Origin header
+  } else if (isPublic) {
+    allow = true; // public intake form & portal — open to all browsers
+  } else if (allowedOrigins.length === 0) {
+    allow = !IS_PROD; // dev: allow everything; prod: block until ALLOWED_ORIGINS is set
+  } else {
+    allow = allowedOrigins.includes(origin);
+  }
+
+  if (!allow) {
+    return res.status(403).json({ error: 'CORS not allowed for this origin.' });
+  }
+
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 

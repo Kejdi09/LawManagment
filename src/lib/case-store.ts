@@ -627,14 +627,34 @@ export async function submitRegistration(data: {
   message?: string;
 }): Promise<{ ok: boolean; message: string }> {
   const BASE = (import.meta.env.VITE_API_URL as string | undefined) || '';
-  const res = await fetch(`${BASE}/api/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Registration failed. Please try again.' }));
-    throw new Error(err.error || 'Registration failed.');
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch {
+    // fetch() itself threw — network unreachable, CORS blocked, or DNS failure.
+    // This means VITE_API_URL is wrong or CORS is misconfigured on the server.
+    const hint = BASE ? `Cannot reach ${BASE}. Check VITE_API_URL and ALLOWED_ORIGINS.` : 'Cannot reach the server. Ensure VITE_API_URL is set in Vercel environment variables.';
+    throw new Error(hint);
   }
-  return res.json();
+
+  // Read body as text first so we can safely attempt JSON parsing
+  const body = await res.text();
+  let json: { ok?: boolean; message?: string; error?: string } | null = null;
+  try { json = JSON.parse(body); } catch { /* not JSON */ }
+
+  if (!res.ok) {
+    // Server returned an error — use its message if available
+    throw new Error(json?.error || `Server error ${res.status}. Please try again.`);
+  }
+
+  if (!json) {
+    // Got a 2xx but the body wasn't JSON — likely hit the wrong URL (e.g. Vercel SPA)
+    throw new Error('Unexpected response from server. Check that VITE_API_URL points to your Render backend URL.');
+  }
+
+  return json as { ok: boolean; message: string };
 }
