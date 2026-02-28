@@ -8,14 +8,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 
 const SERVICES: { value: string; label: string }[] = [
-  { value: "visa_c", label: "Visa Type C (Short-Stay)" },
-  { value: "visa_d", label: "Visa Type D (Long-Stay)" },
-  { value: "residency_permit", label: "Residency Permit" },
+  { value: "residency_pensioner", label: "Residency Permit – Pensioner" },
+  { value: "visa_d", label: "Type D Visa & Residence Permit" },
   { value: "company_formation", label: "Company Formation" },
-  { value: "real_estate", label: "Real Estate" },
-  { value: "tax_consulting", label: "Tax Consulting" },
-  { value: "compliance", label: "Compliance & Regulatory" },
+  { value: "real_estate", label: "Real Estate Investment" },
 ];
+
+const CLIENT_TYPES = [
+  { value: "Individual", label: "Individual" },
+  { value: "Family", label: "Family" },
+  { value: "Company", label: "Company" },
+] as const;
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -23,6 +26,8 @@ export default function RegisterPage() {
     email: "",
     phone: "",
     nationality: "",
+    country: "",
+    clientType: "Individual" as "Individual" | "Family" | "Company",
     message: "",
     services: [] as string[],
   });
@@ -46,6 +51,7 @@ export default function RegisterPage() {
     if (!form.email.trim()) { setError("Please enter your email address."); return; }
     if (!form.phone.trim()) { setError("Please enter your phone / WhatsApp number."); return; }
     if (!form.nationality.trim()) { setError("Please enter your nationality."); return; }
+    if (!form.country.trim()) { setError("Please enter your country of residence."); return; }
     if (form.services.length === 0) { setError("Please select at least one service you are interested in."); return; }
     setLoading(true);
     try {
@@ -54,6 +60,8 @@ export default function RegisterPage() {
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
         nationality: form.nationality.trim() || undefined,
+        country: form.country.trim() || undefined,
+        clientType: form.clientType,
         services: form.services,
         message: form.message.trim() || undefined,
       });
@@ -173,6 +181,39 @@ export default function RegisterPage() {
                 placeholder="e.g. American"
                 disabled={loading}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-country">Country of Residence <span className="text-destructive">*</span></Label>
+              <Input
+                id="reg-country"
+                value={form.country}
+                onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                placeholder="e.g. Portugal"
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Client Type</Label>
+              <div className="flex gap-2">
+                {CLIENT_TYPES.map(ct => (
+                  <button
+                    key={ct.value}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, clientType: ct.value }))}
+                    disabled={loading}
+                    className={`flex-1 rounded-md border py-2 text-sm transition-colors ${
+                      form.clientType === ct.value
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    {ct.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

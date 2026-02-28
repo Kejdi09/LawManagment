@@ -36,6 +36,9 @@ function logEmailConfig() {
 }
 logEmailConfig();
 
+// Reusable SMTP transport instance (created lazily, reset on connection errors)
+let _smtpTransport = null;
+
 async function sendEmail({ to, subject, text }) {
   if (!to) { console.warn(`[email] Skipping "${subject}" — no recipient address.`); return; }
 
@@ -71,20 +74,28 @@ async function sendEmail({ to, subject, text }) {
     console.warn('[email] Skipping — neither RESEND_API_KEY nor SMTP credentials configured.');
     return;
   }
-  const port = Number(SMTP_PORT) || 587;
-  try {
-    const transport = nodemailer.createTransport({
+  // Reuse a single transport across all calls — avoids a new TCP handshake + auth on each email.
+  // Recreate only if credentials have changed (restart required for config changes anyway).
+  if (!_smtpTransport || _smtpTransport._options_key !== `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`) {
+    const port = Number(SMTP_PORT) || 587;
+    _smtpTransport = nodemailer.createTransport({
       host: SMTP_HOST, port,
       secure: port === 465,
       requireTLS: port !== 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
       tls: { rejectUnauthorized: true },
     });
-    await transport.verify();
-    await transport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
+    _smtpTransport._options_key = `${SMTP_HOST}:${SMTP_PORT}:${SMTP_USER}`;
+  }
+  try {
+    await _smtpTransport.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text });
     console.log(`[email] ✓ Sent via SMTP "${subject}" → ${to}`);
   } catch (e) {
     console.error(`[email] ✗ SMTP failed "${subject}" → ${to}:`, e.message, e.code || '');
+    // Reset transport on connection errors so the next call creates a fresh one
+    if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED') {
+      _smtpTransport = null;
+    }
   }
 }
 
@@ -252,9 +263,32 @@ async function seedIfEmpty() {
 async function cleanupStaleCases() {
   const now = Date.now();
   const cutoff = now - MAX_STALE_HOURS * 60 * 60 * 1000;
-  const stale = await casesCol.find({ state: { $in: STUCK_STATES }, lastStateChange: { $lt: new Date(cutoff).toISOString() } }).project({ caseId: 1 }).toArray();
+  const stale = await casesCol.find({ state: { $in: STUCK_STATES }, lastStateChange: { $lt: new Date(cutoff).toISOString() } }).toArray();
   if (!stale.length) return;
   const staleIds = stale.map((c) => c.caseId);
+  // Archive to deletedRecords before hard-delete so data is recoverable
+  const [staleHistory, staleNotes, staleTasks] = await Promise.all([
+    historyCol.find({ caseId: { $in: staleIds } }).toArray(),
+    notesCol.find({ caseId: { $in: staleIds } }).toArray(),
+    tasksCol.find({ caseId: { $in: staleIds } }).toArray(),
+  ]);
+  const archiveNow = new Date().toISOString();
+  for (const c of stale) {
+    await deletedRecordsCol.insertOne({
+      recordId: genShortId('DR'),
+      recordType: 'stale-case',
+      caseId: c.caseId,
+      customerId: c.customerId || null,
+      deletedAt: archiveNow,
+      deletedBy: 'system-cleanup',
+      snapshot: {
+        case: c,
+        history: staleHistory.filter(h => h.caseId === c.caseId),
+        notes: staleNotes.filter(n => n.caseId === c.caseId),
+        tasks: staleTasks.filter(t => t.caseId === c.caseId),
+      },
+    });
+  }
   await Promise.all([
     casesCol.deleteMany({ caseId: { $in: staleIds } }),
     historyCol.deleteMany({ caseId: { $in: staleIds } }),
@@ -271,6 +305,13 @@ const escapeRegex = (str = "") => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 8;
 const loginAttempts = new Map();
+// Prune expired login-attempt entries every 15 minutes to prevent unbounded growth
+setInterval(() => {
+  const cutoff = Date.now() - LOGIN_WINDOW_MS;
+  for (const [k, state] of loginAttempts) {
+    if (state.firstAttempt < cutoff) loginAttempts.delete(k);
+  }
+}, 15 * 60 * 1000).unref();
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -483,6 +524,9 @@ async function syncCustomerNotifications() {
           notesCol.deleteMany({ caseId: { $in: autoRelatedCaseIds } }),
           tasksCol.deleteMany({ caseId: { $in: autoRelatedCaseIds } }),
           customersCol.deleteOne({ customerId: customer.customerId }),
+          // Also purge portal tokens and messages so expired customers can't access the portal
+          portalTokensCol.deleteMany({ customerId: customer.customerId }),
+          portalMessagesCol.deleteMany({ customerId: customer.customerId }),
         ]);
         await logAudit({
           username: "system",
@@ -605,6 +649,12 @@ async function runDataMigrations() {
     meetingsCol.createIndex({ startsAt: 1 }),
     meetingsCol.createIndex({ assignedTo: 1 }),
     auditLogsCol.createIndex({ at: -1 }),
+    // Email indexes for duplicate-checking (registration) and lookups
+    customersCol.createIndex({ email: 1 }),
+    confirmedClientsCol.createIndex({ email: 1 }),
+    // Portal token indexes for fast token lookups and customer revocation
+    portalTokensCol.createIndex({ token: 1 }),
+    portalTokensCol.createIndex({ customerId: 1 }),
   ]);
 
   const [customers, confirmedClients, caseRows] = await Promise.all([
@@ -719,7 +769,7 @@ async function seedDemoUser() {
         { upsert: true }
       );
     }
-    console.log("Synced default users: admirim, albert, kejdi, lenci, kejdi1, kejdi2, kejdi3.");
+    console.log("Synced default users: admirim, albert, kejdi.");
   } catch (err) {
     console.error("Failed to seed demo user:", err);
   }
@@ -907,6 +957,67 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
   });
 });
 
+// ── Specific /customers/* routes must be defined BEFORE /customers/:id ─────────
+// Otherwise Express matches them as id="notifications" or id="awaiting-payment" etc.
+
+app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
+  // Refresh notifications before returning.
+  await syncCustomerNotifications();
+
+  // Load recent notifications then scope them by user access.
+  const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(200).toArray();
+
+  // Load referenced customers (non-confirmed) and restrict notifications to those
+  // customers. This prevents showing notifications for confirmed clients.
+  const customerIds = docs.map(d => d.customerId).filter(Boolean);
+  const customers = customerIds.length ? await customersCol.find({ customerId: { $in: customerIds } }).toArray() : [];
+  const customerMap = customers.reduce((m, c) => { m[c.customerId] = c; return m; }, {});
+  const docsForCustomers = docs.filter(d => Boolean(customerMap[d.customerId]));
+
+  // Admins see notifications for non-confirmed customers.
+  if (isAdminUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
+
+  // Lawyers see all customer notifications
+  if (isLawyerUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
+
+  // Other authenticated users should only receive notifications
+  // for customers assigned to them.
+  const allowed = docsForCustomers.filter(d => userCanAccessCustomer(req.user, customerMap[d.customerId]));
+  res.json(allowed.slice(0, 50));
+});
+
+app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
+  // Admin and lawyers can dismiss pre-confirmation customer notifications
+  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const { id } = req.params;
+  const notification = await customerNotificationsCol.findOne({ notificationId: id });
+  if (!notification) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  await customerNotificationsCol.deleteOne({ notificationId: id });
+  await logAudit({
+    username: req.user?.username || null,
+    role: req.user?.role || null,
+    action: 'delete',
+    resource: 'customerNotification',
+    resourceId: id,
+    details: { customerId: notification.customerId },
+  });
+  res.json({ ok: true });
+});
+
+// ── Admin: get customers awaiting payment (have selected a method) ──────────
+app.get('/api/customers/awaiting-payment', verifyAuth, async (req, res) => {
+  const docs = await customersCol.find({
+    status: 'AWAITING_PAYMENT',
+    paymentSelectedMethod: { $nin: [null, '', undefined] },
+  }).sort({ contractAcceptedAt: 1 }).toArray();
+  res.json(docs);
+});
+
+// ── Wildcard /customers/:id (must come after all specific /customers/* routes) ─
 app.get("/api/customers/:id", verifyAuth, async (req, res) => {
   // Apply scope filter for roles
   const customerScope = buildCustomerScopeFilter(req.user);
@@ -1082,6 +1193,27 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     await logAudit({ username: req.user?.username, role: req.user?.role, action: 'contract_sent', resource: 'customer', resourceId: id, details: { contractSentAt: update.contractSentAt } });
   }
 
+  // ── Pipeline pre-condition guards ──────────────────────────────────────────
+  // These prevent admins from skipping required pipeline steps via direct edit.
+  if (update.status !== undefined && update.status !== current.status) {
+    // Cannot advance to contract stage without a proposal having been sent
+    if (['SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(update.status)) {
+      if (!current.proposalSentAt && !current.proposalSnapshot) {
+        return res.status(400).json({
+          error: 'Cannot advance to contract stage: no proposal has been sent to this client yet. Send a proposal first.',
+        });
+      }
+    }
+    // Cannot confirm as CLIENT without the contract having been accepted
+    if (update.status === 'CLIENT') {
+      if (!current.contractSignedAt && !current.contractAcceptedAt) {
+        return res.status(400).json({
+          error: 'Cannot confirm as client: the contract must be accepted by the client first.',
+        });
+      }
+    }
+  }
+
   // Track status history (guard: only when status is explicitly part of the update)
   if (update.status !== undefined && current.status !== update.status) {
     const historyId = genShortId('CH');
@@ -1134,7 +1266,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     const pf = confirmedPayload.proposalFields || {};
     const totalAmt = (Number(pf.serviceFeeALL) || 0) + (Number(pf.poaFeeALL) || 0) + (Number(pf.translationFeeALL) || 0) + (Number(pf.otherFeesALL) || 0);
     if (totalAmt > 0) {
-      const SVC_LABELS = { visa_c: 'Visa C', visa_d: 'Visa D', residency_permit: 'Residency Permit', company_formation: 'Company Formation', real_estate: 'Real Estate', tax_consulting: 'Tax Consulting', compliance: 'Compliance' };
+      const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
       const svcNames = (confirmedPayload.services || []).map(s => SVC_LABELS[s] || s).join(', ');
       await invoicesCol.insertOne({
         invoiceId: genShortId('INV'),
@@ -1178,57 +1310,6 @@ app.get("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   res.json(doc);
 });
 
-app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
-  // Refresh notifications before returning.
-  await syncCustomerNotifications();
-
-  // Load recent notifications then scope them by user access.
-  const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(200).toArray();
-
-  // Load referenced customers (non-confirmed) and restrict notifications to those
-  // customers. This prevents showing notifications for confirmed clients.
-  const customerIds = docs.map(d => d.customerId).filter(Boolean);
-  const customers = customerIds.length ? await customersCol.find({ customerId: { $in: customerIds } }).toArray() : [];
-  const customerMap = customers.reduce((m, c) => { m[c.customerId] = c; return m; }, {});
-  const docsForCustomers = docs.filter(d => Boolean(customerMap[d.customerId]));
-
-  // Admins see notifications for non-confirmed customers.
-  if (isAdminUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
-
-  // Lawyers see all customer notifications
-  if (isLawyerUser(req.user)) return res.json(docsForCustomers.slice(0, 50));
-
-  // Other authenticated users should only receive notifications
-  // for customers assigned to them.
-  const allowed = docsForCustomers.filter(d => userCanAccessCustomer(req.user, customerMap[d.customerId]));
-  res.json(allowed.slice(0, 50));
-});
-
-
-
-app.delete("/api/customers/notifications/:id", verifyAuth, async (req, res) => {
-  // Admin and lawyers can dismiss pre-confirmation customer notifications
-  if (!isAdminUser(req.user) && !isLawyerUser(req.user)) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
-  const { id } = req.params;
-  const notification = await customerNotificationsCol.findOne({ notificationId: id });
-  if (!notification) {
-    return res.status(404).json({ error: 'not_found' });
-  }
-  await customerNotificationsCol.deleteOne({ notificationId: id });
-  await logAudit({
-    username: req.user?.username || null,
-    role: req.user?.role || null,
-    action: 'delete',
-    resource: 'customerNotification',
-    resourceId: id,
-    details: { customerId: notification.customerId },
-  });
-  res.json({ ok: true });
-});
-
-
 app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
   const { id } = req.params;
   const update = { ...req.body };
@@ -1245,7 +1326,7 @@ app.put("/api/confirmed-clients/:id", verifyAuth, async (req, res) => {
     if (lawyerName) update.assignedTo = lawyerName;
   }
 
-  if (current.status !== update.status) {
+  if (update.status !== undefined && current.status !== update.status) {
     const historyId = genShortId('CH');
     await customerHistoryCol.insertOne({
       historyId,
@@ -1678,7 +1759,7 @@ app.put("/api/cases/:id", verifyAuth, async (req, res) => {
     { $set: update },
     { returnDocument: "after", upsert: false }
   );
-  const doc = result.value || (await casesCol.findOne({ caseId: targetId }));
+  const doc = result || (await casesCol.findOne({ caseId: targetId }));
   await logAudit({ username: req.user?.username, role: req.user?.role, action: 'update', resource: 'case', resourceId: targetId, details: { update } });
   res.json(doc);
 });
@@ -1921,6 +2002,22 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
   // Run once on startup (catches any overdue on restart), then daily
   sendPaymentReminders().catch(() => {});
   setInterval(() => sendPaymentReminders().catch(() => {}), 24 * 60 * 60 * 1000);
+
+  // ── Serve built React frontend (full-stack single-service mode) ──────────────
+  // When `npm run build` has been run (e.g. on Render), the dist/ folder exists.
+  // Express serves it as static assets and falls back to index.html for the SPA.
+  // API routes defined earlier always take priority over the catch-all.
+  const distDir = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(distDir)) {
+    app.use(express.static(distDir, { maxAge: '1h', etag: true }));
+    // SPA fallback — HashRouter handles client-side routing, so only serve index.html
+    // for paths that are not API endpoints or the server-rendered join form.
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/join/')) return next();
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+    console.log(`[static] Serving React frontend from ${distDir}`);
+  }
 
   app.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);
@@ -2627,7 +2724,7 @@ app.post('/api/portal/:token/respond-proposal', portalActionLimiter, async (req,
     const snap = customer.proposalSnapshot || customer.proposalFields || {};
     const invAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
     if (invAmt > 0) {
-      const SVC_LABELS = { visa_c: 'Visa C', visa_d: 'Visa D', residency_permit: 'Residency Permit', residency_pensioner: 'Residency Permit (Pensioner)', company_formation: 'Company Formation', real_estate: 'Real Estate', tax_consulting: 'Tax Consulting', compliance: 'Compliance' };
+      const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
       const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
       await invoicesCol.insertOne({
         invoiceId: genShortId('INV'),
@@ -2819,15 +2916,6 @@ app.post('/api/portal/:token/select-payment', portalActionLimiter, async (req, r
   );
 
   res.json({ ok: true, method });
-});
-
-// ── Admin: get customers awaiting payment (have selected a method) ────────────
-app.get('/api/customers/awaiting-payment', verifyAuth, async (req, res) => {
-  const docs = await customersCol.find({
-    status: 'AWAITING_PAYMENT',
-    paymentSelectedMethod: { $nin: [null, '', undefined] },
-  }).sort({ contractAcceptedAt: 1 }).toArray();
-  res.json(docs);
 });
 
 // ── Admin: set initial payment amount ────────────────────────────────────────
@@ -3291,6 +3379,13 @@ app.post('/api/register', async (req, res) => {
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Full name is required.' });
   if (!email || !String(email).trim()) return res.status(400).json({ error: 'Email address is required.' });
   const normalEmail = String(email).toLowerCase().trim();
+  // Basic email format validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+  // Field length caps
+  if (normalEmail.length > 254) return res.status(400).json({ error: 'Email address is too long.' });
+  if (String(name).trim().length > 120) return res.status(400).json({ error: 'Name is too long.' });
   // Duplicate check
   const [dupCust, dupClient] = await Promise.all([
     customersCol.findOne({ email: normalEmail }),

@@ -621,6 +621,8 @@ export async function submitRegistration(data: {
   email: string;
   phone?: string;
   nationality?: string;
+  country?: string;
+  clientType?: string;
   services?: string[];
   message?: string;
 }): Promise<{ ok: boolean; message: string }> {

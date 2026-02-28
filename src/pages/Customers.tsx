@@ -154,6 +154,25 @@ function getNextWorkflowStatus(status: LeadStatus): LeadStatus | null {
   return WORKFLOW_SEQUENCE[index + 1] ?? null;
 }
 
+// ── Pipeline pre-condition guard (same rules enforced server-side) ──────────
+function checkPipelinePreConditions(
+  customer: Customer | undefined | null,
+  newStatus: LeadStatus,
+): string | null {
+  if (!customer) return null;
+  if (['SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(newStatus)) {
+    if (!customer.proposalSentAt && !customer.proposalSnapshot) {
+      return 'A proposal must be sent to the client before advancing to the contract stage.';
+    }
+  }
+  if (newStatus === 'CLIENT') {
+    if (!customer.contractSignedAt && !customer.contractAcceptedAt) {
+      return 'The client must accept the contract before being confirmed as a client.';
+    }
+  }
+  return null;
+}
+
 const Customers = () => {
   const [search, setSearch] = useState("");
   const [sectionView, setSectionView] = useState<"main" | "on_hold" | "archived">("main");
@@ -254,15 +273,15 @@ const Customers = () => {
     }
     const customer = customers.find((c) => c.customerId === id) || null;
     setSelectedCustomer(customer);
-    const history = await getCustomerHistory(id).catch(() => []);
-    setCustomerStatusLog(history);
-    try {
-      const docs = await getDocuments('customer', id);
-      setCustomerDocuments(docs);
-    } catch (e) {
-      setCustomerDocuments([]);
-    }
-    getPortalToken(id).then(setCustomerPortalToken).catch(() => setCustomerPortalToken(null));
+    // Fetch history, documents and portal token in parallel for speed
+    const [historyResult, docsResult, tokenResult] = await Promise.allSettled([
+      getCustomerHistory(id),
+      getDocuments('customer', id),
+      getPortalToken(id),
+    ]);
+    setCustomerStatusLog(historyResult.status === 'fulfilled' ? historyResult.value : []);
+    setCustomerDocuments(docsResult.status === 'fulfilled' ? docsResult.value : []);
+    setCustomerPortalToken(tokenResult.status === 'fulfilled' ? tokenResult.value : null);
   }, [customers]);
 
   useEffect(() => { loadCustomers(); }, [loadCustomers, tick]);
@@ -485,6 +504,17 @@ const Customers = () => {
         toast({ title: 'Invalid assignee', description: 'Confirmed clients must be assigned to Kejdi or Albert', variant: 'destructive' });
         return;
       }
+      // Pipeline pre-condition check when status changes
+      if (editingId && form.status) {
+        const original = customers.find((x) => x.customerId === editingId);
+        if (original && original.status !== (form.status as LeadStatus)) {
+          const pipelineError = checkPipelinePreConditions(original, form.status as LeadStatus);
+          if (pipelineError) {
+            toast({ title: 'Cannot change status', description: pipelineError, variant: 'destructive' });
+            return;
+          }
+        }
+      }
       const payload = {
         ...form,
         assignedTo: form.assignedTo === UNASSIGNED_CONSULTANT ? "" : (stripProfessionalTitle(form.assignedTo) || form.assignedTo),
@@ -521,8 +551,9 @@ const Customers = () => {
         resetForm();
         await updateCustomer(editingId.trim(), patched);
         toast({ title: "Updated", description: "Customer updated successfully" });
-        try { await loadCustomers(); } catch (e) { /* ignore reload errors */ }
-        try { if (selectedId) await loadCustomerDetail(selectedId); } catch (e) { /* ignore */ }
+        // Non-blocking background refresh
+        loadCustomers().catch(() => {});
+        if (selectedId) loadCustomerDetail(selectedId).catch(() => {});
         return;
       } else {
         // New customer: initialize statusHistory
@@ -605,13 +636,20 @@ const Customers = () => {
       }
 
       const current = customers.find((c) => c.customerId === customerId);
+      // Pipeline pre-condition check
+      const pipelineError = checkPipelinePreConditions(current, status);
+      if (pipelineError) {
+        toast({ title: 'Cannot update status', description: pipelineError, variant: 'destructive' });
+        return;
+      }
       // optimistic update
       setCustomers((prev) => prev.map((c) => (c.customerId === customerId ? { ...c, status } : c)));
       if (selectedCustomer?.customerId === customerId) setSelectedCustomer({ ...selectedCustomer, status });
       await updateCustomer(customerId, { status, expectedVersion: current?.version ?? 1 });
       toast({ title: 'Status updated' });
-      await loadCustomers();
-      if (selectedId) await loadCustomerDetail(selectedId);
+      // Non-blocking background refresh
+      loadCustomers().catch(() => {});
+      if (selectedId) loadCustomerDetail(selectedId).catch(() => {});
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unable to update status';
       if (/conflict/i.test(errorMessage)) {
@@ -619,7 +657,7 @@ const Customers = () => {
       } else {
         toast({ title: 'Update failed', description: errorMessage, variant: 'destructive' });
       }
-      await loadCustomers();
+      loadCustomers().catch(() => {});
     }
   };
 
@@ -678,6 +716,12 @@ const Customers = () => {
     }
     try {
       const current = customers.find((c) => c.customerId === confirmAssignCustomerId);
+      // Pipeline pre-condition check
+      const pipelineError = checkPipelinePreConditions(current, 'CLIENT');
+      if (pipelineError) {
+        toast({ title: 'Cannot confirm client', description: pipelineError, variant: 'destructive' });
+        return;
+      }
       await updateCustomer(confirmAssignCustomerId, {
         status: 'CLIENT',
         assignedTo: stripProfessionalTitle(confirmAssignSelected) || confirmAssignSelected,
@@ -686,13 +730,14 @@ const Customers = () => {
       toast({ title: 'Client confirmed', description: `Assigned to ${stripProfessionalTitle(confirmAssignSelected) || confirmAssignSelected}` });
       setShowConfirmAssign(false);
       setConfirmAssignCustomerId(null);
-      await loadCustomers();
-      if (selectedId) await loadCustomerDetail(selectedId);
+      // Non-blocking background refresh
+      loadCustomers().catch(() => {});
+      if (selectedId) loadCustomerDetail(selectedId).catch(() => {});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (/conflict/i.test(message)) {
         toast({ title: 'Confirm conflict', description: 'This customer was changed by another user. Reloaded latest data.', variant: 'destructive' });
-        await loadCustomers();
+        loadCustomers().catch(() => {});
       } else {
         toast({ title: 'Confirm failed', description: message, variant: 'destructive' });
       }
