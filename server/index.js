@@ -129,6 +129,48 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
+// ── Spam / flood protection ────────────────────────────────────────────────────
+// Factory: makeRateLimiter(max, windowMs, keyFn)
+//   Returns an Express middleware that allows at most `max` hits per `windowMs`
+//   milliseconds, keyed by keyFn(req). Responds 429 on excess.
+function makeRateLimiter(max, windowMs, keyFn) {
+  const store = new Map(); // key → [timestamps]
+  // Auto-purge old entries every 5 minutes to prevent unbounded memory growth
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [k, times] of store) {
+      const fresh = times.filter(t => t > cutoff);
+      if (fresh.length === 0) store.delete(k); else store.set(k, fresh);
+    }
+  }, 5 * 60 * 1000).unref();
+  return (req, res, next) => {
+    const key = keyFn(req);
+    const now = Date.now();
+    const times = (store.get(key) || []).filter(t => t > now - windowMs);
+    if (times.length >= max) {
+      const retryAfter = Math.ceil((times[0] + windowMs - now) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: 'Too many requests. Please slow down and try again shortly.' });
+    }
+    times.push(now);
+    store.set(key, times);
+    next();
+  };
+}
+
+// Helper: get real IP (Render/proxies set X-Forwarded-For)
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+}
+
+// Global limiter: 200 requests per minute per IP — protects every endpoint from floods
+app.use(makeRateLimiter(200, 60 * 1000, clientIp));
+
+// Specific limiters reused on portal endpoints (defined here, applied below)
+const portalChatLimiter    = makeRateLimiter(20, 60 * 60 * 1000, req => `chat:${req.params.token}`);   // 20 msgs/hr per token
+const portalActionLimiter  = makeRateLimiter(10, 60 * 60 * 1000, req => `action:${req.params.token}`); // 10 actions/hr per token
+// ─────────────────────────────────────────────────────────────────────────────
+
 // --- Simple user store for demo (replace with DB in production) ---
 // (removed demo USERS/login) Use DB-backed login defined later
 
@@ -2521,7 +2563,7 @@ app.get('/api/portal/chat/:token', async (req, res) => {
 });
 
 // Client sends a message (token-based, public)
-app.post('/api/portal/chat/:token', async (req, res) => {
+app.post('/api/portal/chat/:token', portalChatLimiter, async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'This link has expired. Contact your lawyer for a new link.' });
@@ -2543,7 +2585,7 @@ app.post('/api/portal/chat/:token', async (req, res) => {
 });
 
 // Save intake/proposal fields from portal (token-based, no auth required)
-app.post('/api/portal/:token/intake', async (req, res) => {
+app.post('/api/portal/:token/intake', portalActionLimiter, async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
@@ -2615,7 +2657,7 @@ app.post('/api/portal/:token/proposal-viewed', async (req, res) => {
 });
 
 // Client responds to proposal: accept → advance to SEND_CONTRACT; revision → post chat message
-app.post('/api/portal/:token/respond-proposal', async (req, res) => {
+app.post('/api/portal/:token/respond-proposal', portalActionLimiter, async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   const { action, note } = req.body; // action: 'accept' | 'revision'
@@ -2715,7 +2757,7 @@ app.post('/api/portal/:token/respond-proposal', async (req, res) => {
 });
 
 // Client responds to contract: accept → status CLIENT (auto-assigned to Kejdi or Albert)
-app.post('/api/portal/:token/respond-contract', async (req, res) => {
+app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
 
