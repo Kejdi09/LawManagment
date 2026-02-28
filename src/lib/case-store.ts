@@ -1,4 +1,4 @@
-import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, DeletedRecord, HistoryRecord, Invoice, Meeting, Note, PortalData, PortalMessage, PortalNote, SearchResult, TeamSummary } from "./types";
+import { AuditLogRecord, Case, CaseState, CaseTask, CommEntry, Customer, CustomerHistoryRecord, CustomerNotification, DeletedRecord, HistoryRecord, Invoice, InvoicePayment, Meeting, Note, PortalData, PortalMessage, PortalNote, SearchResult, TeamSummary } from "./types";
 
 export type PagedResult<T> = {
   items: T[];
@@ -585,4 +585,56 @@ export async function deleteStaffUser(username: string): Promise<void> {
 
 export async function getStaffNames(): Promise<StaffNames> {
   return api<StaffNames>('/api/admin/staff-names');
+}
+
+// ── Invoice Payments ──────────────────────────────────────────────────────────
+
+export async function recordInvoicePayment(
+  invoiceId: string,
+  payment: { amount: number; method: string; note?: string }
+): Promise<Invoice> {
+  return api<Invoice>(`/api/invoices/${invoiceId}/payments`, {
+    method: 'POST',
+    body: JSON.stringify(payment),
+  });
+}
+
+export async function deleteInvoicePayment(invoiceId: string, paymentId: string): Promise<void> {
+  await api(`/api/invoices/${invoiceId}/payments/${paymentId}`, { method: 'DELETE' });
+}
+
+// ── Staff Workload ────────────────────────────────────────────────────────────
+export interface WorkloadEntry {
+  username: string;
+  name: string;
+  role: string;
+  leads: number;
+  clients: number;
+  total: number;
+}
+
+export async function getWorkload(): Promise<WorkloadEntry[]> {
+  return api<WorkloadEntry[]>('/api/admin/workload');
+}
+
+// ── Public Self-Registration ──────────────────────────────────────────────────
+export async function submitRegistration(data: {
+  name: string;
+  email: string;
+  phone?: string;
+  nationality?: string;
+  services?: string[];
+  message?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const BASE = (import.meta.env.VITE_API_URL as string | undefined) || '';
+  const res = await fetch(`${BASE}/api/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Registration failed. Please try again.' }));
+    throw new Error(err.error || 'Registration failed.');
+  }
+  return res.json();
 }

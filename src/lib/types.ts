@@ -380,6 +380,15 @@ export interface CustomerNotification {
 
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
+export interface InvoicePayment {
+  paymentId: string;
+  amount: number;
+  method: string;
+  note?: string | null;
+  date: string;
+  recordedBy?: string | null;
+}
+
 export interface Invoice {
   invoiceId: string;
   caseId?: string | null;
@@ -392,6 +401,20 @@ export interface Invoice {
   createdAt: string;
   createdBy?: string | null;
   assignedTo?: string | null;
+  payments?: InvoicePayment[];
+  amountPaid?: number;
+}
+
+export interface PortalInvoice {
+  invoiceId: string;
+  description: string;
+  amount: number;
+  currency: string;
+  status: InvoiceStatus;
+  dueDate?: string | null;
+  createdAt: string;
+  payments: InvoicePayment[];
+  amountPaid: number;
 }
 
 export type CommChannel = "email" | "whatsapp" | "phone" | "inperson";
@@ -481,6 +504,7 @@ export interface PortalData {
   history: HistoryRecord[];
   portalNotes: PortalNote[];
   chatMessages: PortalMessage[];
+  invoices?: PortalInvoice[];
   expiresAt?: string;
   proposalSentAt?: string | null;
   proposalSnapshot?: ProposalFields | null;

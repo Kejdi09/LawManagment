@@ -15,7 +15,7 @@ import ContractRenderer from "@/components/ContractRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import {
   FileText, Clock, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown,
+  MessageSquare, CalendarClock, StickyNote, ClipboardList, ThumbsUp, PenLine, Bot, FileDown, Receipt,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -306,7 +306,8 @@ export default function ClientPortalPage() {
   const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot && data.client.status !== 'CLIENT';
   const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
-  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0);
+  const showInvoicesTab = !!(data.invoices && data.invoices.length > 0);
+  const tabCount = 3 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
   const defaultTab = showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   // Unread indicator: set when a new lawyer message arrives during this session, cleared when client opens Messages tab
   const hasNewMessages = unreadFromLawyer;
@@ -375,6 +376,11 @@ export default function ClientPortalPage() {
             <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
               <Bot className="h-3.5 w-3.5" /> FAQ
             </TabsTrigger>
+            {showInvoicesTab && (
+              <TabsTrigger value="invoices" className="flex items-center gap-1.5 text-xs">
+                <Receipt className="h-3.5 w-3.5" /> Invoices
+              </TabsTrigger>
+            )}
             <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs relative">
               <MessageSquare className="h-3.5 w-3.5" /> Messages
               {hasNewMessages && (
@@ -651,6 +657,76 @@ export default function ClientPortalPage() {
                   )}
                 </div>
               )}
+            </TabsContent>
+          )}
+
+          {/* ── INVOICES TAB ── */}
+          {showInvoicesTab && (
+            <TabsContent value="invoices" className="mt-0 space-y-3">
+              <div className="rounded-md border bg-primary/5 px-4 py-3 text-sm space-y-0.5">
+                <p className="font-semibold">Your Invoices</p>
+                <p className="text-xs text-muted-foreground">Below is a summary of all invoices associated with your account. Contact us with any questions.</p>
+              </div>
+              {(data.invoices || []).map((inv) => {
+                const paid = inv.amountPaid ?? 0;
+                const remaining = Math.max(0, inv.amount - paid);
+                const paidPct = inv.amount > 0 ? Math.min(100, (paid / inv.amount) * 100) : 0;
+                const statusColor = inv.status === 'paid'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                  : inv.status === 'overdue'
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                  : inv.status === 'cancelled'
+                  ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+                return (
+                  <Card key={inv.invoiceId}>
+                    <CardContent className="pt-4 pb-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm">{inv.description}</div>
+                          <div className="text-xs text-muted-foreground font-mono mt-0.5">{inv.invoiceId}</div>
+                          {inv.dueDate && (
+                            <div className="text-xs text-muted-foreground mt-0.5">Due: {new Date(inv.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-bold">{inv.currency} {inv.amount.toLocaleString()}</div>
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColor}`}>
+                            {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                      {paid > 0 && (
+                        <div className="space-y-1">
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${paidPct.toFixed(0)}%` }} />
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span className="text-green-600 dark:text-green-400">Paid: {inv.currency} {paid.toLocaleString()}</span>
+                            {remaining > 0 && <span className="text-amber-600">Remaining: {inv.currency} {remaining.toLocaleString()}</span>}
+                            {remaining === 0 && <span className="text-green-600">✔ Fully paid</span>}
+                          </div>
+                        </div>
+                      )}
+                      {inv.payments && inv.payments.length > 0 && (
+                        <div className="rounded-md bg-muted/40 border divide-y text-xs">
+                          {inv.payments.map((p) => (
+                            <div key={p.paymentId} className="flex items-center gap-2 px-3 py-1.5">
+                              <span className="font-medium">{inv.currency} {Number(p.amount).toLocaleString()}</span>
+                              <span className="text-muted-foreground">{p.method.replace('_', ' ')}</span>
+                              {p.note && <span className="text-muted-foreground">— {p.note}</span>}
+                              <span className="ml-auto text-muted-foreground">{p.date ? new Date(p.date).toLocaleDateString('en-GB') : ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                Questions about an invoice? Use the <strong>Messages</strong> tab or WhatsApp us.
+              </p>
             </TabsContent>
           )}
 

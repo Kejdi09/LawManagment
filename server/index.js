@@ -1025,7 +1025,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           '',
           'The proposal outlines the scope of work, estimated timeline, required documents, and fees for the services requested.',
           '',
-          'If you have any questions, please reply to this email or reach us on WhatsApp: +355 69 69 52 989',
+          'If you have any questions, please reply to this email or reach us on WhatsApp: https://wa.me/355696952989',
           '',
           `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
         ].join('\n'),
@@ -1094,7 +1094,7 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           ...(paymentSection.length > 0 ? ['', ...paymentSection, ''] : []),
           'To accept the agreement, type your full legal name in the signature field and confirm you have read the terms.',
           '',
-          'If you have any questions before signing, please reply to this email or reach us on WhatsApp: +355 69 69 52 989',
+          'If you have any questions before signing, please reply to this email or reach us on WhatsApp: https://wa.me/355696952989',
           '',
           `Best regards,\n${senderLabel}\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
         ].join('\n'),
@@ -2337,6 +2337,33 @@ app.post('/api/portal/tokens', verifyAuth, async (req, res) => {
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
   const doc = { token: rawToken, customerId: String(customerId).trim(), clientName: person.name, clientType: personType, createdAt: new Date().toISOString(), expiresAt, createdBy: req.user?.username };
   await portalTokensCol.insertOne(doc);
+  // Auto-email the portal link if the person has an email and APP_URL is configured
+  if (person.email && process.env.APP_URL) {
+    const portalUrl = `${process.env.APP_URL}/portal/${rawToken}`;
+    sendEmail({
+      to: person.email,
+      subject: 'Your DAFKU Law Firm Customer Portal Access',
+      text: [
+        `Dear ${person.name || 'Client'},`,
+        '',
+        'Your secure customer portal has been set up by the DAFKU Law Firm team.',
+        '',
+        `Access your portal here:\n${portalUrl}`,
+        '',
+        'Through your portal you can:',
+        '  \u2022 Track your case status in real time',
+        '  \u2022 Review proposals and service agreements',
+        '  \u2022 View your invoices and payment status',
+        '  \u2022 Send messages directly to your lawyer',
+        '',
+        `This link is valid until ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
+        '',
+        'If you have any questions, reach us on WhatsApp: https://wa.me/355696952989',
+        '',
+        'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+      ].join('\n'),
+    });
+  }
   res.json({ token: rawToken, expiresAt });
 });
 
@@ -2408,10 +2435,11 @@ app.get('/api/portal/:token', async (req, res) => {
   const caseTypeFilter = isConfirmedClient ? 'client' : 'customer';
   const cases = await casesCol.find({ customerId: tokenDoc.customerId, caseType: caseTypeFilter }).sort({ lastStateChange: -1 }).toArray();
   const caseIds = cases.map(c => c.caseId);
-  const [history, portalNotes, chatMessages] = await Promise.all([
+  const [history, portalNotes, chatMessages, invoices] = await Promise.all([
     caseIds.length ? historyCol.find({ caseId: { $in: caseIds } }).sort({ date: -1 }).toArray() : [],
     portalNotesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
     portalMessagesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: 1 }).toArray(),
+    invoicesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
   ]);
   res.json({
     client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status, proposalFields: client.proposalFields || null },
@@ -2429,6 +2457,17 @@ app.get('/api/portal/:token', async (req, res) => {
     history,
     portalNotes: portalNotes.map(n => ({ noteId: n.noteId, text: n.text, createdAt: n.createdAt, createdBy: n.createdBy })),
     chatMessages: chatMessages.map(m => ({ messageId: m.messageId, text: m.text, senderType: m.senderType, senderName: m.senderName, createdAt: m.createdAt, readByLawyer: m.readByLawyer })),
+    invoices: invoices.map(inv => ({
+      invoiceId: inv.invoiceId,
+      description: inv.description,
+      amount: inv.amount,
+      currency: inv.currency,
+      status: inv.status,
+      dueDate: inv.dueDate || null,
+      createdAt: inv.createdAt,
+      payments: inv.payments || [],
+      amountPaid: inv.amountPaid || 0,
+    })),
     expiresAt: tokenDoc.expiresAt,
     linkExpired: false,
     proposalSentAt: client.proposalSentAt || null,
@@ -2853,4 +2892,135 @@ app.get('/api/admin/deleted-chats', verifyAuth, async (req, res) => {
   const filter = q ? { customerName: { $regex: q, $options: 'i' } } : {};
   const chats = await deletedChatsCol.find(filter).sort({ deletedAt: -1 }).toArray();
   res.json(chats);
+});
+
+// ── Staff Workload ────────────────────────────────────────────────────────────
+app.get('/api/admin/workload', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const [customers, clients, users] = await Promise.all([
+    customersCol.find({}, { projection: { assignedTo: 1, status: 1 } }).toArray(),
+    confirmedClientsCol.find({}, { projection: { assignedTo: 1, status: 1 } }).toArray(),
+    usersCol.find({ role: { $in: ['consultant', 'manager', 'admin'] } }, { projection: { username: 1, consultantName: 1, role: 1 } }).toArray(),
+  ]);
+  const map = {};
+  for (const u of users) {
+    map[u.username] = { username: u.username, name: u.consultantName || u.username, role: u.role, leads: 0, clients: 0, total: 0 };
+  }
+  for (const c of customers) {
+    if (c.assignedTo && map[c.assignedTo]) { map[c.assignedTo].leads++; map[c.assignedTo].total++; }
+  }
+  for (const c of clients) {
+    if (c.assignedTo && map[c.assignedTo]) { map[c.assignedTo].clients++; map[c.assignedTo].total++; }
+  }
+  res.json(Object.values(map).sort((a, b) => b.total - a.total));
+});
+
+// ── Invoice Payments ──────────────────────────────────────────────────────────
+app.post('/api/invoices/:id/payments', verifyAuth, async (req, res) => {
+  const inv = await invoicesCol.findOne({ invoiceId: String(req.params.id) });
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const paymentAmt = Number(req.body?.amount);
+  if (!paymentAmt || paymentAmt <= 0) return res.status(400).json({ error: 'amount must be > 0' });
+  const payment = {
+    paymentId: genShortId('PAY'),
+    amount: paymentAmt,
+    method: req.body?.method || 'bank_transfer',
+    note: req.body?.note?.trim() || null,
+    date: new Date().toISOString(),
+    recordedBy: req.user?.username || null,
+  };
+  const existingPayments = inv.payments || [];
+  const allPayments = [...existingPayments, payment];
+  const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0);
+  const newStatus = totalPaid >= inv.amount ? 'paid' : inv.status === 'paid' ? 'pending' : inv.status;
+  await invoicesCol.updateOne(
+    { invoiceId: String(req.params.id) },
+    { $push: { payments: payment }, $set: { amountPaid: totalPaid, status: newStatus } }
+  );
+  const updated = await invoicesCol.findOne({ invoiceId: String(req.params.id) });
+  await logAudit({ username: req.user?.username, role: req.user?.role, action: 'payment_recorded', resource: 'invoice', resourceId: String(req.params.id), details: { amount: paymentAmt, totalPaid, newStatus } });
+  res.json(updated);
+});
+
+app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (req, res) => {
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
+  const inv = await invoicesCol.findOne({ invoiceId: String(req.params.invoiceId) });
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const remaining = (inv.payments || []).filter(p => p.paymentId !== String(req.params.paymentId));
+  const totalPaid = remaining.reduce((s, p) => s + Number(p.amount), 0);
+  const newStatus = totalPaid >= inv.amount ? 'paid' : inv.status === 'paid' ? 'pending' : inv.status;
+  await invoicesCol.updateOne(
+    { invoiceId: String(req.params.invoiceId) },
+    { $set: { payments: remaining, amountPaid: totalPaid, status: newStatus } }
+  );
+  res.json({ ok: true });
+});
+
+// ── Public Self-Registration ──────────────────────────────────────────────────
+app.post('/api/register', async (req, res) => {
+  const { name, email, phone, nationality, services, message } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Full name is required.' });
+  if (!email || !String(email).trim()) return res.status(400).json({ error: 'Email address is required.' });
+  const normalEmail = String(email).toLowerCase().trim();
+  // Duplicate check
+  const [dupCust, dupClient] = await Promise.all([
+    customersCol.findOne({ email: normalEmail }),
+    confirmedClientsCol.findOne({ email: normalEmail }),
+  ]);
+  if (dupCust || dupClient) {
+    return res.status(409).json({ error: 'An account with this email already exists. Please contact us directly or use your existing portal link.' });
+  }
+  const customerId = genShortId('CUS');
+  const now = new Date().toISOString();
+  const svcList = Array.isArray(services) ? services : (services ? [String(services)] : []);
+  const doc = {
+    customerId,
+    name: String(name).trim(),
+    email: normalEmail,
+    phone: phone ? String(phone).trim() : null,
+    nationality: nationality ? String(nationality).trim() : null,
+    services: svcList,
+    message: message ? String(message).trim() : null,
+    status: 'INTAKE',
+    createdAt: now,
+    updatedAt: now,
+    source: 'self_register',
+    version: 1,
+  };
+  await customersCol.insertOne(doc);
+  // Auto-generate portal token valid for 30 days
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await portalTokensCol.insertOne({ token: rawToken, customerId, clientName: doc.name, clientType: 'customer', createdAt: now, expiresAt, createdBy: 'self_register' });
+  await logAudit({ username: 'public', role: 'public', action: 'self_register', resource: 'customer', resourceId: customerId, details: { name: doc.name, email: normalEmail } });
+  // Welcome email to new enquirer
+  const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/portal/${rawToken}` : null;
+  sendEmail({
+    to: normalEmail,
+    subject: 'Thank you for contacting DAFKU Law Firm',
+    text: [
+      `Dear ${doc.name},`,
+      '',
+      'Thank you for reaching out to DAFKU Law Firm. We have received your enquiry and our team will review it shortly.',
+      '',
+      'We have created a secure personal portal for you where you can track your enquiry status and communicate with our team.',
+      '',
+      portalUrl ? `Access your customer portal here:\n${portalUrl}` : 'A portal link will be sent to you once your enquiry is reviewed.',
+      '',
+      'Our team will be in touch within 1-2 business days.',
+      '',
+      'If you have urgent questions, reach us on WhatsApp: https://wa.me/355696952989',
+      '',
+      'Best regards,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+    ].join('\n'),
+  });
+  // Admin notification
+  if (process.env.ADMIN_EMAIL) {
+    sendEmail({
+      to: process.env.ADMIN_EMAIL,
+      subject: `\uD83D\uDCE9 New enquiry: ${doc.name}`,
+      text: `New self-registration received.\n\nName: ${doc.name}\nEmail: ${normalEmail}\nPhone: ${doc.phone || '\u2014'}\nNationality: ${doc.nationality || '\u2014'}\nServices: ${svcList.join(', ') || '\u2014'}\nMessage:\n${doc.message || '(none)'}\n\nCustomer ID: ${customerId}`,
+    });
+  }
+  res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
 });
