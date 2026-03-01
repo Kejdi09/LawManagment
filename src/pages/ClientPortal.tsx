@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 import { getPortalData, savePortalIntakeFields, markProposalViewed, respondToProposal, respondToContract, selectPortalPaymentMethod } from "@/lib/case-store";
 import { PortalData, ServiceType, SERVICE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -161,46 +164,35 @@ export default function ClientPortalPage() {
   function handlePortalPrint() {
     const content = portalPrintRef.current;
     if (!content) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head>
-      <title>Proposal — ${data?.client?.name ?? 'Client'}</title>
-      <meta charset="utf-8"/>
-      <style>
-        @page { margin: 20mm 16mm; }
-        *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; margin: 0; padding: 0; }
-        section { page-break-inside: avoid; break-inside: avoid; }
-        table { page-break-inside: avoid; break-inside: avoid; }
-        @media print { body { font-size: 11px; } }
-      </style>
-    </head><body>${content.innerHTML}</body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 500);
+    const name = data?.client?.name ?? 'Client';
+    html2pdf()
+      .set({
+        margin: [15, 12, 15, 12],
+        filename: `DAFKU-Proposal-${name}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      })
+      .from(content)
+      .save();
   }
 
   function handleContractPrint() {
     const content = contractPrintRef.current;
     if (!content) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head>
-      <title>Service Agreement — ${data?.client?.name ?? 'Client'}</title>
-      <meta charset="utf-8"/>
-      <style>
-        @page { margin: 20mm 16mm; }
-        *, *::before, *::after { box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; margin: 0; padding: 0; }
-        section { page-break-inside: avoid; break-inside: avoid; }
-        h2, h3 { page-break-after: avoid; break-after: avoid; }
-        table { page-break-inside: avoid; break-inside: avoid; }
-        @media print { body { font-size: 11px; } }
-      </style>
-    </head><body>${content.innerHTML}</body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 500);
+    const name = data?.client?.name ?? 'Client';
+    html2pdf()
+      .set({
+        margin: [15, 12, 15, 12],
+        filename: `DAFKU-ServiceAgreement-${name}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      })
+      .from(content)
+      .save();
   }
 
   // Load portal data

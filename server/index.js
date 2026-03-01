@@ -1210,42 +1210,6 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
         ? `${process.env.APP_URL}/#/portal/${tokenDoc.token}`
         : null;
 
-      // Build payment summary from proposal fee fields
-      const pf = current.proposalFields || {};
-      const fmtALL = (n) => n > 0 ? `${Number(n).toLocaleString('en-US')} ALL` : null;
-      const feeLines = [
-        pf.serviceFeeALL > 0  ? `  • Service Fee:      ${fmtALL(pf.serviceFeeALL)}` : null,
-        pf.poaFeeALL > 0      ? `  • Power of Attorney: ${fmtALL(pf.poaFeeALL)}` : null,
-        pf.translationFeeALL > 0 ? `  • Translation Fee:  ${fmtALL(pf.translationFeeALL)}` : null,
-        pf.otherFeesALL > 0   ? `  • Other Fees:       ${fmtALL(pf.otherFeesALL)}` : null,
-      ].filter(Boolean);
-      const totalALL = (Number(pf.serviceFeeALL)||0) + (Number(pf.poaFeeALL)||0) + (Number(pf.translationFeeALL)||0) + (Number(pf.otherFeesALL)||0);
-
-      // Also pull any invoices already created for this customer
-      const existingInvoices = await invoicesCol.find({ customerId: id }).toArray();
-      const invoiceLines = existingInvoices.map((inv, i) =>
-        `  ${i + 1}. ${inv.description} — ${Number(inv.amount).toLocaleString('en-US')} ${inv.currency || 'ALL'}` +
-        (inv.dueDate ? ` (due ${inv.dueDate.slice(0,10)})` : '') +
-        ` [${inv.status}]`
-      );
-
-      const paymentSection = [];
-      if (feeLines.length > 0) {
-        paymentSection.push('─────────────────────────────────');
-        paymentSection.push('PAYMENT SUMMARY');
-        paymentSection.push('─────────────────────────────────');
-        paymentSection.push(...feeLines);
-        if (totalALL > 0) paymentSection.push(`  ─────────────────────────────`);
-        if (totalALL > 0) paymentSection.push(`  TOTAL: ${totalALL.toLocaleString('en-US')} ALL`);
-        if (pf.paymentNote) paymentSection.push('', `  Note: ${pf.paymentNote}`);
-      }
-      if (invoiceLines.length > 0) {
-        paymentSection.push('');
-        paymentSection.push('INVOICES ISSUED');
-        paymentSection.push('─────────────────────────────────');
-        paymentSection.push(...invoiceLines);
-      }
-
       sendEmail({
         to: current.email,
         subject: 'Your Service Agreement is Ready to Sign — DAFKU Law Firm',
@@ -1256,7 +1220,6 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           '',
           portalUrl ? `Please open the Contract section of your secure client portal to read and sign the agreement:\n${portalUrl}` : 'Please contact us to access your client portal and proceed to the Contract section.',
           '',
-          ...(paymentSection.length > 0 ? ['', ...paymentSection, ''] : []),
           'To sign, enter your full legal name in the designated signature field and confirm that you have read and agree to the terms.',
           '',
           'Should you have any questions prior to signing, please do not hesitate to contact us on WhatsApp: +355 69 69 52 989',
@@ -1267,7 +1230,6 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           <p>Dear <strong>${current.name || 'Client'}</strong>,</p>
           <p>We are writing to inform you that your <strong>Service Agreement</strong> with DAFKU Law Firm is now prepared and ready for your review and electronic signature.</p>
           ${portalUrl ? `<p>Please access your secure client portal and navigate to the <strong>Contract</strong> section to read and sign the agreement:</p><p><a href="${portalUrl}" class="btn">Open Your Contract</a></p>` : '<p>Please contact our office to access your client portal and proceed to the Contract section.</p>'}
-          ${paymentSection.length > 0 ? `<div class="box"><p><strong>Payment Details</strong></p><p style="white-space:pre-line;font-size:13px">${paymentSection.join('\n')}</p></div>` : ''}
           <hr>
           <p>To sign, enter your full legal name in the designated signature field and confirm that you have read and accept the terms of the agreement.</p>
           <p>Should you have any questions before signing, please contact us — we are happy to assist.</p>
@@ -2090,9 +2052,6 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
         const portalUrl = portalToken && process.env.APP_URL
           ? `${process.env.APP_URL}/#/portal/${portalToken.token}`
           : null;
-        const methodsList = (customer.paymentMethods || [])
-          .map(m => m === 'bank' ? 'Bank Transfer' : m === 'crypto' ? 'Crypto (USDT)' : 'Cash')
-          .join(', ');
         sendEmail({
           to: customer.email,
           subject: 'Payment Reminder — Action Required | DAFKU Law Firm',
@@ -2101,8 +2060,6 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
             '',
             'We wish to draw your attention to the fact that your service agreement has been signed, however payment in respect of the agreed fees has not yet been received.',
             '',
-            customer.paymentAmountALL ? `Amount outstanding: ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}` : '',
-            methodsList ? `Accepted payment methods: ${methodsList}` : '',
             customer.paymentNote ? `Payment note: ${customer.paymentNote}` : '',
             '',
             portalUrl ? `Please access your client portal to select a payment method and complete the payment:\n${portalUrl}` : 'Please contact us to arrange payment.',
@@ -2115,12 +2072,8 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
           ].filter(l => l !== null && l !== undefined).join('\n'),
           html: buildHtmlEmail(`
             <p>Dear <strong>${customer.name}</strong>,</p>
-            <p>We wish to draw your attention to the fact that your <strong>Service Agreement</strong> with DAFKU Law Firm has been signed; however, payment in respect of the agreed fees has not yet been received.</p>
-            <div class="box">
-              ${customer.paymentAmountALL ? `<p><strong>Amount outstanding:</strong> ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}</p>` : ''}
-              ${methodsList ? `<p><strong>Accepted payment methods:</strong> ${methodsList}</p>` : ''}
-              ${customer.paymentNote ? `<p><strong>Note:</strong> ${customer.paymentNote}</p>` : ''}
-            </div>
+            <p>We wish to draw your attention to the fact that your <strong>Service Agreement</strong> with DAFKU Law Firm has been signed; however, payment has not yet been received.</p>
+            ${customer.paymentNote ? `<div class="box"><p><strong>Note:</strong> ${customer.paymentNote}</p></div>` : ''}
             ${portalUrl ? `<p>Please access your client portal to complete the payment process:</p><p><a href="${portalUrl}" class="btn">Complete Payment</a></p>` : '<p>Please contact our office to arrange payment at your earliest convenience.</p>'}
             <hr>
             <p>Should you have already arranged payment, please disregard this notice — our team will confirm receipt promptly.</p>
@@ -3026,19 +2979,16 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
   // Welcome email telling client to complete payment
   if (customer.email) {
     const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${req.params.token}` : null;
-    const methodsList = (customer.paymentMethods || []).map(m => m === 'bank' ? 'Bank Transfer' : m === 'crypto' ? 'Crypto (USDT)' : 'Cash').join(', ');
-    sendEmail({
+      sendEmail({
       to: customer.email,
-      subject: 'Agreement Signed — Payment Required to Activate Your Account | DAFKU Law Firm',
+      subject: 'Agreement Signed — Next Steps to Activate Your Account | DAFKU Law Firm',
       text: [
         `Dear ${customer.name},`,
         '',
         'Thank you for signing your Service Agreement with DAFKU Law Firm.',
         '',
-        'To complete your registration as a confirmed client, the outstanding fees must now be settled.',
+        'To complete your registration as a confirmed client, please proceed to the Payment section of your client portal.',
         '',
-        customer.paymentAmountALL ? `Amount due: ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` (approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)` : ''}` : '',
-        methodsList ? `Accepted payment methods: ${methodsList}` : '',
         customer.paymentNote ? `Payment note: ${customer.paymentNote}` : '',
         '',
         portalUrl ? `Please open your client portal to select a payment method and view payment instructions:\n${portalUrl}` : 'Please contact us to arrange payment.',
@@ -3052,12 +3002,8 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
       html: buildHtmlEmail(`
         <p>Dear <strong>${customer.name}</strong>,</p>
         <p>Thank you for signing your <strong>Service Agreement</strong> with DAFKU Law Firm.</p>
-        <p>To complete your registration as a confirmed client, the outstanding fees must now be settled. Please find the payment details below.</p>
-        <div class="box">
-          ${customer.paymentAmountALL ? `<p><strong>Amount due:</strong> ${customer.paymentAmountALL.toLocaleString()} ALL${customer.paymentAmountEUR ? ` <span style="color:#777">(approx. ${customer.paymentAmountEUR.toFixed(2)} EUR)</span>` : ''}</p>` : ''}
-          ${methodsList ? `<p><strong>Payment methods:</strong> ${methodsList}</p>` : ''}
-          ${customer.paymentNote ? `<p><strong>Note:</strong> ${customer.paymentNote}</p>` : ''}
-        </div>
+        <p>To complete your registration as a confirmed client, please proceed to the <strong>Payment</strong> section of your client portal using the link below.</p>
+        ${customer.paymentNote ? `<div class="box"><p><strong>Note:</strong> ${customer.paymentNote}</p></div>` : ''}
         ${portalUrl ? `<p><a href="${portalUrl}" class="btn">View Payment Instructions</a></p>` : '<p>Please contact our office to arrange payment.</p>'}
         <hr>
         <p>Once payment has been confirmed by our team, your account will be fully activated and work on your matter will commence promptly.</p>
