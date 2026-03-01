@@ -3066,6 +3066,27 @@ app.put('/api/customers/:customerId/initial-payment-amount', verifyAuth, async (
     return res.status(409).json({ error: 'Cannot change initial payment amount after the customer has confirmed their payment intent.' });
   }
 
+  // 80% cap against stored paymentAmountALL (if available)
+  if (existing.paymentAmountALL && existing.paymentAmountALL > 0) {
+    const EUR_RATE = 0.01037032;
+    const USD_RATE = 0.01212463;
+    const GBP_RATE = 0.00902409;
+    const amountInALL = currency === 'ALL' ? amount
+      : currency === 'EUR' ? amount / EUR_RATE
+      : currency === 'USD' ? amount / USD_RATE
+      : currency === 'GBP' ? amount / GBP_RATE
+      : amount;
+    const maxALL = existing.paymentAmountALL * 0.8;
+    if (amountInALL > maxALL) {
+      const maxInCurrency = currency === 'ALL' ? maxALL
+        : currency === 'EUR' ? maxALL * EUR_RATE
+        : currency === 'USD' ? maxALL * USD_RATE
+        : currency === 'GBP' ? maxALL * GBP_RATE
+        : maxALL;
+      return res.status(400).json({ error: `Initial payment cannot exceed 80% of total (max ${maxInCurrency.toFixed(2)} ${currency}).` });
+    }
+  }
+
   const r = await customersCol.findOneAndUpdate(
     { customerId },
     { $set: { initialPaymentAmount: amount, initialPaymentCurrency: currency } },

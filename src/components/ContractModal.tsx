@@ -141,6 +141,16 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
       toast({ title: "Initial payment required", description: "Please enter the initial payment amount before sending the contract.", variant: "destructive" });
       return;
     }
+    // 80% cap
+    const initNum = Number(initialPayAmount);
+    const maxInCurrency = initialPayCurrency === 'ALL' ? totalALL * 0.8
+      : initialPayCurrency === 'EUR' ? totalEUR * 0.8
+      : initialPayCurrency === 'USD' ? totalALL * USD_RATE * 0.8
+      : totalALL * GBP_RATE * 0.8;
+    if (initNum > maxInCurrency) {
+      toast({ title: "Initial payment too high", description: `Initial payment cannot exceed 80% of the total (max ${maxInCurrency.toFixed(2)} ${initialPayCurrency}).`, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const initAmt = initialPayAmount && Number(initialPayAmount) > 0 ? Number(initialPayAmount) : null;
@@ -405,32 +415,53 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
 
               {/* Initial payment amount */}
               <div className="md:col-span-2 space-y-1">
-                <Label>
-                  Initial Payment Required <span className="text-destructive">*</span>
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={initialPayAmount}
-                    onChange={(e) => setInitialPayAmount(e.target.value)}
-                    placeholder="e.g. 500"
-                    className={`flex-1 ${!initialPayAmount || Number(initialPayAmount) <= 0 ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                  />
-                  <select
-                    value={initialPayCurrency}
-                    onChange={(e) => setInitialPayCurrency(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm bg-background w-24"
-                  >
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                    <option value="ALL">ALL</option>
-                    <option value="GBP">GBP</option>
-                  </select>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  The initial deposit the client must pay immediately after signing. Shown in the client portal and recorded against their invoice.
-                </p>
+                {(() => {
+                  const initNum = Number(initialPayAmount);
+                  const maxInCurrency = initialPayCurrency === 'ALL' ? totalALL * 0.8
+                    : initialPayCurrency === 'EUR' ? totalEUR * 0.8
+                    : initialPayCurrency === 'USD' ? totalALL * USD_RATE * 0.8
+                    : totalALL * GBP_RATE * 0.8;
+                  const isOver = !!initialPayAmount && initNum > maxInCurrency;
+                  const isEmpty = !initialPayAmount || initNum <= 0;
+                  return (
+                    <>
+                      <Label>
+                        Initial Payment Required <span className="text-destructive">*</span>
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxInCurrency}
+                          value={initialPayAmount}
+                          onChange={(e) => setInitialPayAmount(e.target.value)}
+                          placeholder={`e.g. ${(maxInCurrency * 0.5).toFixed(0)}`}
+                          className={`flex-1 ${isEmpty || isOver ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                        />
+                        <select
+                          value={initialPayCurrency}
+                          onChange={(e) => setInitialPayCurrency(e.target.value)}
+                          className="border rounded-md px-3 py-2 text-sm bg-background w-24"
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                          <option value="ALL">ALL</option>
+                          <option value="GBP">GBP</option>
+                        </select>
+                      </div>
+                      {isOver ? (
+                        <p className="text-xs text-destructive">
+                          Exceeds 80% limit — max allowed: <strong>{maxInCurrency.toFixed(2)} {initialPayCurrency}</strong>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Max 80% of contract total: <strong>{maxInCurrency.toFixed(initialPayCurrency === 'ALL' ? 0 : 2)} {initialPayCurrency}</strong>.
+                          This amount will be deducted from the client's invoice when confirmed.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
