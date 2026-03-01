@@ -1,4 +1,5 @@
-import { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, lazy, useState, useEffect, useCallback, useRef, Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,6 +21,34 @@ const Invoices = lazy(() => import("./pages/Invoices"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const StaffManagement = lazy(() => import("./pages/StaffManagement"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-sm text-muted-foreground p-8 text-center">
+          <p className="text-destructive font-medium">Something went wrong loading this page.</p>
+          <p className="text-xs opacity-70 max-w-sm break-all">{this.state.error?.message}</p>
+          <button
+            className="text-xs underline"
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+          >Reload page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const queryClient = new QueryClient();
 
@@ -116,6 +145,7 @@ const App = () => (
           <HashRouter>
             <SessionTimeoutWatcher />
             <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>}>
+              <ErrorBoundary>
               <Routes>
                 <Route path="/login" element={<LoginRoute />} />
                 <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
@@ -131,6 +161,7 @@ const App = () => (
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </ErrorBoundary>
             </Suspense>
           </HashRouter>
         </AuthProvider>

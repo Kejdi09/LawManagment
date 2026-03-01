@@ -290,29 +290,104 @@ export default function InvoicesPage() {
               {awaitingCustomers.map((c) => {
                 const customerInvoices = invoices.filter((i) => i.customerId === c.customerId && i.status !== 'cancelled');
                 const methodLabel = c.paymentSelectedMethod === 'bank' ? '🏦 Bank Transfer' : c.paymentSelectedMethod === 'crypto' ? '💎 Crypto (USDT)' : '💵 Cash';
+                const snap = c.proposalSnapshot ?? c.contractSnapshot;
+                const feeItems: Array<{ label: string; amount: number }> = [];
+                if (snap) {
+                  if (snap.consultationFeeALL && snap.consultationFeeALL > 0) feeItems.push({ label: 'Consultation', amount: snap.consultationFeeALL });
+                  if (snap.serviceFeeALL && snap.serviceFeeALL > 0) feeItems.push({ label: 'Service Fee', amount: snap.serviceFeeALL });
+                  if (snap.poaFeeALL && snap.poaFeeALL > 0) feeItems.push({ label: 'Power of Attorney', amount: snap.poaFeeALL });
+                  if (snap.translationFeeALL && snap.translationFeeALL > 0) feeItems.push({ label: 'Translation / Notarisation', amount: snap.translationFeeALL });
+                  if (snap.otherFeesALL && snap.otherFeesALL > 0) feeItems.push({ label: 'Other Fees', amount: snap.otherFeesALL });
+                }
+                const totalALL = c.paymentAmountALL ?? feeItems.reduce((s, f) => s + f.amount, 0);
+                const initAmt = c.initialPaymentAmount;
+                const initInALL = initAmt && c.initialPaymentCurrency === 'ALL' ? initAmt
+                  : initAmt && c.initialPaymentCurrency === 'EUR' && c.paymentAmountALL && c.paymentAmountEUR && c.paymentAmountEUR > 0
+                  ? (initAmt / c.paymentAmountEUR) * c.paymentAmountALL
+                  : null;
+                const initPct = totalALL > 0 && initInALL ? Math.min(100, (initInALL / totalALL) * 100) : null;
                 return (
-                  <div key={c.customerId} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0 space-y-0.5">
-                      <div className="font-medium text-sm">{c.name}</div>
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>Method: <strong>{methodLabel}</strong></span>
-                        {c.paymentAmountALL && <span>Total: <strong>{c.paymentAmountALL.toLocaleString()} ALL{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong></span>}
-                        {c.initialPaymentAmount && <span>Initial: <strong>{c.initialPaymentAmount.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}</strong></span>}
-                        {customerInvoices.length > 0 && <span>{customerInvoices.length} invoice{customerInvoices.length > 1 ? 's' : ''}</span>}
+                  <div key={c.customerId} className="px-4 py-3 space-y-2">
+                    {/* Header row: name + meta + confirm button */}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="font-medium text-sm">{c.name}</div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {c.assignedTo && <span>👤 {c.assignedTo}</span>}
+                          {c.contractAcceptedAt && (
+                            <span>📅 Signed {new Date(c.contractAcceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          )}
+                          {c.contractSignedByName && <span>✍️ {c.contractSignedByName}</span>}
+                          {customerInvoices.length > 0 && <span>🧾 {customerInvoices.length} invoice{customerInvoices.length > 1 ? 's' : ''}</span>}
+                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white shrink-0"
+                        onClick={() => {
+                          setConfirmCustomer(c);
+                          setConfirmInitialAmt(c.initialPaymentAmount ? String(c.initialPaymentAmount) : c.paymentAmountEUR ? String(c.paymentAmountEUR) : "");
+                          setConfirmCurrency(c.initialPaymentCurrency ?? (c.paymentAmountEUR ? "EUR" : "ALL"));
+                          setConfirmInvoiceId(customerInvoices[0]?.invoiceId ?? "");
+                        }}
+                      >
+                        <Check className="h-3 w-3 mr-1" />Confirm Payment
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => {
-                        setConfirmCustomer(c);
-                        setConfirmInitialAmt(c.initialPaymentAmount ? String(c.initialPaymentAmount) : c.paymentAmountEUR ? String(c.paymentAmountEUR) : "");
-                        setConfirmCurrency(c.initialPaymentCurrency ?? (c.paymentAmountEUR ? "EUR" : "ALL"));
-                        setConfirmInvoiceId(customerInvoices[0]?.invoiceId ?? "");
-                      }}
-                    >
-                      <Check className="h-3 w-3 mr-1" />Confirm Payment
-                    </Button>
+
+                    {/* Fee breakdown with % bars */}
+                    {feeItems.length > 0 && (
+                      <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-1.5">
+                        {feeItems.map((fee, idx) => {
+                          const pct = totalALL > 0 ? (fee.amount / totalALL) * 100 : 0;
+                          return (
+                            <div key={idx} className="space-y-0.5">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">{fee.label}</span>
+                                <span className="font-medium tabular-nums">{fee.amount.toLocaleString()} ALL{pct > 0 ? <span className="text-muted-foreground"> ({pct.toFixed(0)}%)</span> : ''}</span>
+                              </div>
+                              <div className="h-1 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-blue-400 dark:bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div className="flex justify-between text-xs pt-1 border-t font-semibold">
+                          <span>Total</span>
+                          <span className="tabular-nums">
+                            {totalALL.toLocaleString()} ALL{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fallback if no breakdown available */}
+                    {feeItems.length === 0 && (c.paymentAmountALL || c.paymentAmountEUR) && (
+                      <div className="text-xs text-muted-foreground">
+                        Total: <strong>{c.paymentAmountALL ? `${c.paymentAmountALL.toLocaleString()} ALL` : ''}{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong>
+                      </div>
+                    )}
+
+                    {/* Payment method + initial amount */}
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      <span className="text-muted-foreground">Method: <strong className="text-foreground">{methodLabel}</strong></span>
+                      {initAmt && (
+                        <span className="text-muted-foreground">Initial required: <strong className="text-amber-600 dark:text-amber-400">{initAmt.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}</strong></span>
+                      )}
+                    </div>
+
+                    {/* Initial payment % of total progress bar */}
+                    {initPct !== null && (
+                      <div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${initPct}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+                          <span>Initial payment = {initPct.toFixed(0)}% of total</span>
+                          <span className="tabular-nums">{initInALL!.toLocaleString()} / {totalALL.toLocaleString()} ALL</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
