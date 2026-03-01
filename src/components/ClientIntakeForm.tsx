@@ -282,6 +282,8 @@ interface ClientIntakeFormProps {
   onComplete: (fields: Partial<ProposalFields>) => Promise<void>;
   /** Pre-filled data from a previous save */
   savedFields?: Partial<ProposalFields>;
+  /** True when the server already has a submitted intake (persists across refresh) */
+  alreadySubmitted?: boolean;
 }
 
 export default function ClientIntakeForm({
@@ -289,6 +291,7 @@ export default function ClientIntakeForm({
   clientName,
   onComplete,
   savedFields,
+  alreadySubmitted = false,
 }: ClientIntakeFormProps) {
   const svcs = (services || []) as ServiceType[];
   const isPensioner = svcs.includes("residency_pensioner");
@@ -319,7 +322,7 @@ export default function ClientIntakeForm({
     return f;
   });
 
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(alreadySubmitted);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

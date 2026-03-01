@@ -457,6 +457,7 @@ export default function ClientPortalPage() {
                 services={data.client.services || []}
                 clientName={data.client.name}
                 savedFields={data.client.proposalFields}
+                alreadySubmitted={!!data.client.intakeLastSubmittedAt}
                 onComplete={async (fields) => {
                   if (!token) return;
                   try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
