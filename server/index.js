@@ -1274,22 +1274,50 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
   }
 
   // ── Pipeline pre-condition guards ──────────────────────────────────────────
-  // These prevent admins from skipping required pipeline steps via direct edit.
+  // These prevent admins from skipping required pipeline steps via direct edit
+  // and from moving a status backwards.
+  const PIPELINE_ORDER = [
+    'INTAKE', 'SEND_PROPOSAL', 'WAITING_APPROVAL', 'DISCUSSING_Q',
+    'SEND_CONTRACT', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT',
+  ];
+  const SIDE_STATUSES = ['ARCHIVED', 'ON_HOLD', 'CONSULTATION_SCHEDULED', 'CONSULTATION_DONE'];
   if (update.status !== undefined && update.status !== current.status) {
-    // Cannot advance to contract stage without a proposal having been sent
-    if (['SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(update.status)) {
-      if (!current.proposalSentAt && !current.proposalSnapshot) {
-        return res.status(400).json({
-          error: 'Cannot advance to contract stage: no proposal has been sent to this client yet. Send a proposal first.',
-        });
-      }
+    const currentIdx = PIPELINE_ORDER.indexOf(current.status);
+    const newIdx = PIPELINE_ORDER.indexOf(update.status);
+    const bothInPipeline = currentIdx !== -1 && newIdx !== -1;
+
+    // Block backward movement in the pipeline
+    if (bothInPipeline && newIdx < currentIdx) {
+      return res.status(400).json({
+        error: 'Status cannot be moved backwards — the pipeline is one-directional.',
+      });
     }
-    // Cannot confirm as CLIENT without the contract having been accepted
-    if (update.status === 'CLIENT') {
-      if (!current.contractSignedAt && !current.contractAcceptedAt) {
-        return res.status(400).json({
-          error: 'Cannot confirm as client: the contract must be accepted by the client first.',
-        });
+
+    // Pre-condition checks (skip for side-status transitions)
+    if (!SIDE_STATUSES.includes(update.status)) {
+      // WAITING_APPROVAL / DISCUSSING_Q / SEND_CONTRACT / WAITING_ACCEPTANCE require a proposal
+      if (['WAITING_APPROVAL', 'DISCUSSING_Q', 'SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(update.status)) {
+        if (!current.proposalSentAt && !current.proposalSnapshot) {
+          return res.status(400).json({
+            error: 'Cannot advance: a proposal must be sent to the client first.',
+          });
+        }
+      }
+      // WAITING_ACCEPTANCE / AWAITING_PAYMENT require a contract to have been sent
+      if (['WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(update.status)) {
+        if (!current.contractSentAt && !current.contractSnapshot) {
+          return res.status(400).json({
+            error: 'Cannot advance: a contract must be sent to the client first.',
+          });
+        }
+      }
+      // AWAITING_PAYMENT / SEND_RESPONSE / CLIENT require the contract to be signed/accepted
+      if (['AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT'].includes(update.status)) {
+        if (!current.contractSignedAt && !current.contractAcceptedAt) {
+          return res.status(400).json({
+            error: 'Cannot advance: the contract must be signed/accepted by the client first.',
+          });
+        }
       }
     }
   }

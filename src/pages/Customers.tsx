@@ -155,19 +155,44 @@ function getNextWorkflowStatus(status: LeadStatus): LeadStatus | null {
 }
 
 // ── Pipeline pre-condition guard (same rules enforced server-side) ──────────
+const PIPELINE_ORDER_LIST: LeadStatus[] = [
+  'INTAKE', 'SEND_PROPOSAL', 'WAITING_APPROVAL', 'DISCUSSING_Q',
+  'SEND_CONTRACT', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT',
+];
+const SIDE_STATUS_LIST: LeadStatus[] = ['ARCHIVED', 'ON_HOLD', 'CONSULTATION_SCHEDULED', 'CONSULTATION_DONE'];
+
 function checkPipelinePreConditions(
   customer: Customer | undefined | null,
   newStatus: LeadStatus,
 ): string | null {
   if (!customer) return null;
-  if (['SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(newStatus)) {
-    if (!customer.proposalSentAt && !customer.proposalSnapshot) {
-      return 'A proposal must be sent to the client before advancing to the contract stage.';
-    }
+  const currentIdx = PIPELINE_ORDER_LIST.indexOf(customer.status as LeadStatus);
+  const newIdx = PIPELINE_ORDER_LIST.indexOf(newStatus);
+  const bothInPipeline = currentIdx !== -1 && newIdx !== -1;
+
+  // Block backward movement
+  if (bothInPipeline && newIdx < currentIdx) {
+    return 'Status cannot be moved backwards — the pipeline is one-directional.';
   }
-  if (newStatus === 'CLIENT') {
-    if (!customer.contractSignedAt && !customer.contractAcceptedAt) {
-      return 'The client must accept the contract before being confirmed as a client.';
+
+  if (!SIDE_STATUS_LIST.includes(newStatus)) {
+    // Requires a sent proposal
+    if (['WAITING_APPROVAL', 'DISCUSSING_Q', 'SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(newStatus)) {
+      if (!customer.proposalSentAt && !customer.proposalSnapshot) {
+        return 'A proposal must be sent to the client before advancing to this stage.';
+      }
+    }
+    // Requires a sent contract
+    if (['WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(newStatus)) {
+      if (!customer.contractSentAt && !customer.contractSnapshot) {
+        return 'A contract must be sent to the client before advancing to this stage.';
+      }
+    }
+    // Requires contract signed/accepted
+    if (['AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT'].includes(newStatus)) {
+      if (!customer.contractSignedAt && !customer.contractAcceptedAt) {
+        return 'The client must sign/accept the contract before advancing to this stage.';
+      }
     }
   }
   return null;
@@ -424,8 +449,16 @@ const Customers = () => {
   const serviceEntries = PROPOSAL_SERVICES.map((key) => [key, SERVICE_LABELS[key]] as [string, string]);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
   const statusEntriesBase = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
-  // Allow intake users to choose CLIENT via the form, but we'll require assignment when they do.
-  const statusEntries = statusEntriesBase;
+  // When editing an existing customer, only show statuses that pass pipeline guards
+  const editingCustomerForFilter = editingId ? customers.find(c => c.customerId === editingId) ?? null : null;
+  const statusEntries = statusEntriesBase.filter(([key]) => {
+    const status = key as LeadStatus;
+    // Always keep the customer's current status so the form value is valid
+    if (editingCustomerForFilter && status === editingCustomerForFilter.status) return true;
+    // Remove any status that would violate pipeline rules (backward moves or missing pre-conditions)
+    if (editingCustomerForFilter && checkPipelinePreConditions(editingCustomerForFilter, status) !== null) return false;
+    return true;
+  });
 
   const resetForm = () => {
     setEditingId(null);
