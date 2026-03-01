@@ -3415,7 +3415,15 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
         </div>
         <div class="field">
           <label for="f-email">Email Address<span>*</span></label>
-          <input id="f-email" name="email" type="email" placeholder="you@example.com" autocomplete="email"/>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <input id="f-email" name="email" type="email" placeholder="you@example.com" autocomplete="email" style="flex:1"/>
+            <button type="button" id="sendCodeBtn" style="padding:10px 14px;background:#7c3aed22;border:1px solid #7c3aed55;border-radius:8px;color:#c4b5fd;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s" onclick="handleSendCode()">Send Code</button>
+          </div>
+          <div id="codeRow" style="display:none;margin-top:8px">
+            <label for="f-code" style="font-size:12px;color:#71717a;display:block;margin-bottom:5px">Enter the 6-digit code sent to your email</label>
+            <input id="f-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="width:120px;letter-spacing:6px;text-align:center;font-family:monospace;font-size:18px"/>
+          </div>
+          <div id="codeMsg" style="font-size:12px;margin-top:4px"></div>
         </div>
         <div class="field">
           <label for="f-phone">Phone / WhatsApp<span>*</span></label>
@@ -3483,6 +3491,7 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
 </main>
 <script>
 let clientType='Individual';
+let codeSentTo='';
 document.querySelectorAll('#typeGrid .type-card').forEach(card=>{
   card.addEventListener('click',()=>{
     clientType=card.dataset.val;
@@ -3502,6 +3511,27 @@ document.querySelectorAll('#svcGrid input[type="checkbox"]').forEach(cb=>{
     tags.innerHTML=[...selected].map(v=>'<span class="tag">'+SVC_LABELS[v]+'</span>').join('');
   });
 });
+async function handleSendCode(){
+  const email=document.getElementById('f-email').value.trim();
+  const codeMsg=document.getElementById('codeMsg');
+  const btn=document.getElementById('sendCodeBtn');
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){
+    codeMsg.style.color='#fca5a5';codeMsg.textContent='Please enter a valid email address first.';return;
+  }
+  btn.disabled=true;btn.textContent='Sending…';codeMsg.textContent='';
+  try{
+    const r=await fetch('/api/send-verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){codeMsg.style.color='#fca5a5';codeMsg.textContent=d.error||'Failed to send code.';btn.disabled=false;btn.textContent='Send Code';return;}
+    codeSentTo=email;
+    document.getElementById('codeRow').style.display='block';
+    document.getElementById('f-code').focus();
+    codeMsg.style.color='#4ade80';codeMsg.textContent='Code sent! Check your email (also check spam).';
+    btn.textContent='Resend';btn.disabled=false;
+  }catch(err){
+    codeMsg.style.color='#fca5a5';codeMsg.textContent='Could not send code: '+err.message;btn.disabled=false;btn.textContent='Send Code';
+  }
+}
 document.getElementById('regForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const errBox=document.getElementById('errBox');
@@ -3513,15 +3543,18 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
   const nationality=document.getElementById('f-nat').value.trim();
   const country=document.getElementById('f-country').value.trim();
   const message=document.getElementById('f-msg').value.trim();
+  const verifyCode=document.getElementById('f-code').value.trim();
   if(!name){errBox.textContent='Please enter your full name.';errBox.style.display='block';return;}
   if(!email){errBox.textContent='Please enter your email address.';errBox.style.display='block';return;}
   if(!phone){errBox.textContent='Please enter your phone / WhatsApp number.';errBox.style.display='block';return;}
   if(!nationality){errBox.textContent='Please enter your nationality.';errBox.style.display='block';return;}
   if(!country){errBox.textContent='Please enter your country of residence.';errBox.style.display='block';return;}
   if(selected.size===0){errBox.textContent='Please select at least one service you are interested in.';errBox.style.display='block';return;}
-  btn.disabled=true;btn.textContent='Submitting…';
+  if(!codeSentTo){errBox.textContent='Please click \u201cSend Code\u201d to verify your email address first.';errBox.style.display='block';return;}
+  if(!verifyCode||verifyCode.length<6){errBox.textContent='Please enter the 6-digit verification code sent to your email.';errBox.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Submitting\u2026';
   try{
-    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined})});
+    const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined,verifyCode})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){errBox.textContent=d.error||'Submission failed ('+r.status+'). Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
     document.getElementById('form-section').style.display='none';
