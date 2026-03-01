@@ -3566,9 +3566,11 @@ app.post('/api/register', async (req, res) => {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   await portalTokensCol.insertOne({ token: rawToken, customerId, clientName: doc.name, clientType: 'customer', createdAt: nowIso, expiresAt, createdBy: 'self_register' });
   await logAudit({ username: 'public', role: 'public', action: 'self_register', resource: 'customer', resourceId: customerId, details: { name: doc.name, email: normalEmail } });
-  // Welcome email to new enquirer
+  // Respond immediately — send welcome email in the background so SMTP delays never block the HTTP response
   const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${rawToken}` : null;
-  await sendEmail({
+  console.log(`[register] ✓ New registration: ${doc.name} <${normalEmail}> | portal=${portalUrl || 'no APP_URL set'}`);
+  res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
+  sendEmail({
     to: normalEmail,
     subject: 'Thank You for Your Enquiry — DAFKU Law Firm',
     text: [
@@ -3596,9 +3598,7 @@ app.post('/api/register', async (req, res) => {
       <p>For any urgent queries in the meantime, please do not hesitate to contact us on WhatsApp.</p>
       <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
     `),
-  });
-  console.log(`[register] ✓ New registration: ${doc.name} <${normalEmail}> | portal=${portalUrl || 'no APP_URL set'}`);
-  res.status(201).json({ ok: true, message: 'Registration successful. Check your email for your portal link.' });
+  }).catch(e => console.error('[register] background email error:', e.message));
   } catch (regErr) {
     console.error('[/api/register] error:', regErr);
     res.status(500).json({ error: 'An unexpected error occurred. Please try again or contact us directly.' });
