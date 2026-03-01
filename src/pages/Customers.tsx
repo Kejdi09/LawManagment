@@ -1722,7 +1722,7 @@ const Customers = () => {
                                   proposalSnapshot: null,
                                   proposalViewedAt: null,
                                   intakeLastSubmittedAt: null,
-                                  status: "INTAKE",
+                                  status: "SEND_PROPOSAL",
                                 });
                                 setSelectedCustomer(updated);
                                 setCustomers((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));

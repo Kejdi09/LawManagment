@@ -248,7 +248,7 @@ export default function ClientPortalPage() {
     );
   }
 
-  const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
+  const showIntakeTab = data.client.status === "SEND_PROPOSAL";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
   const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
   const showPaymentTab = data.client.status === 'AWAITING_PAYMENT';
@@ -425,6 +425,33 @@ export default function ClientPortalPage() {
                 </div>
                 <p className="text-xs text-muted-foreground pt-2 border-t border-violet-200 dark:border-violet-800">
                   No action needed right now — you will be notified by email when your intake form is ready. For urgent matters, reach us on WhatsApp: <strong>+355 69 69 52 989</strong>
+                </p>
+              </div>
+            )}
+
+            {data.client.status === 'INTAKE' && (
+              <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-800 px-4 py-4 space-y-3">
+                <p className="font-semibold text-violet-900 dark:text-violet-200">🔍 Your enquiry is being reviewed</p>
+                <div className="space-y-2.5 text-sm text-violet-800 dark:text-violet-300">
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">1.</span>
+                    <div><strong>Enquiry received ✔</strong> — We have received your enquiry and our team is currently reviewing your details.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">2.</span>
+                    <div><strong>Intake form — coming soon</strong> — Once our review is complete, we will unlock a short intake form here in your portal. It only takes a few minutes and lets us prepare a tailored proposal for you.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">3.</span>
+                    <div><strong>Personalised proposal</strong> — After you complete the intake form, we will prepare a proposal specific to your needs and present it here for your review.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">4.</span>
+                    <div><strong>Review, sign &amp; proceed</strong> — You will be able to review, accept, and sign your service agreement directly through this portal — no office visit needed.</div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground pt-2 border-t border-violet-200 dark:border-violet-800">
+                  Please wait — your intake form will appear in a new tab here once our team is ready. For urgent matters, contact us on WhatsApp: <strong>+355 69 69 52 989</strong>
                 </p>
               </div>
             )}
