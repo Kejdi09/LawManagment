@@ -137,6 +137,10 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
       toast({ title: "Payment methods required", description: "Please select at least one accepted payment method.", variant: "destructive" });
       return;
     }
+    if (!initialPayAmount || Number(initialPayAmount) <= 0) {
+      toast({ title: "Initial payment required", description: "Please enter the initial payment amount before sending the contract.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const initAmt = initialPayAmount && Number(initialPayAmount) > 0 ? Number(initialPayAmount) : null;
@@ -402,8 +406,7 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
               {/* Initial payment amount */}
               <div className="md:col-span-2 space-y-1">
                 <Label>
-                  Initial Payment Required{" "}
-                  <span className="text-muted-foreground font-normal text-xs">(optional — upfront deposit)</span>
+                  Initial Payment Required <span className="text-destructive">*</span>
                 </Label>
                 <div className="flex gap-2">
                   <Input
@@ -412,7 +415,7 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
                     value={initialPayAmount}
                     onChange={(e) => setInitialPayAmount(e.target.value)}
                     placeholder="e.g. 500"
-                    className="flex-1"
+                    className={`flex-1 ${!initialPayAmount || Number(initialPayAmount) <= 0 ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                   />
                   <select
                     value={initialPayCurrency}
@@ -426,7 +429,7 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
                   </select>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The initial deposit the client must pay immediately after signing. This amount will be highlighted in the client portal and auto-added to their invoices. Leave blank if not required.
+                  The initial deposit the client must pay immediately after signing. Shown in the client portal and recorded against their invoice.
                 </p>
               </div>
             </div>
