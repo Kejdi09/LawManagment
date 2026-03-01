@@ -3421,7 +3421,7 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
           <label for="f-email">Email Address<span>*</span></label>
           <div style="display:flex;gap:8px;align-items:flex-start">
             <input id="f-email" name="email" type="email" placeholder="you@example.com" autocomplete="email" style="flex:1"/>
-            <button type="button" id="sendCodeBtn" style="padding:10px 14px;background:#7c3aed22;border:1px solid #7c3aed55;border-radius:8px;color:#c4b5fd;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s" onclick="handleSendCode()">Send Code</button>
+            <button type="button" id="sendCodeBtn" disabled style="padding:10px 14px;background:#7c3aed22;border:1px solid #7c3aed55;border-radius:8px;color:#c4b5fd;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s;opacity:.55" onclick="handleSendCode()">Send Code</button>
           </div>
           <div id="codeRow" style="display:none;margin-top:8px">
             <label for="f-code" style="font-size:12px;color:#71717a;display:block;margin-bottom:5px">Enter the 6-digit code sent to your email</label>
@@ -3497,6 +3497,24 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
 let clientType='Individual';
 let codeSentTo=sessionStorage.getItem('dafku_verify_email')||'';
 if(codeSentTo){document.getElementById('codeRow').style.display='block';document.getElementById('f-email').value=codeSentTo;}
+const SVC_LABELS={residency_pensioner:'Residency Permit \u2013 Pensioner',visa_d:'Type D Visa & Residence Permit',company_formation:'Company Formation',real_estate:'Real Estate Investment'};
+const selected=new Set();
+function checkSendCodeEnabled(){
+  const email=document.getElementById('f-email').value.trim();
+  const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+  const nameOk=document.getElementById('f-name').value.trim().length>0;
+  const phoneOk=document.getElementById('f-phone').value.trim().length>0;
+  const natOk=document.getElementById('f-nat').value.trim().length>0;
+  const countryOk=document.getElementById('f-country').value.trim().length>0;
+  const svcOk=selected.size>0;
+  const btn=document.getElementById('sendCodeBtn');
+  const ok=emailOk&&nameOk&&phoneOk&&natOk&&countryOk&&svcOk;
+  btn.disabled=!ok;btn.style.opacity=ok?'1':'.55';btn.style.cursor=ok?'pointer':'not-allowed';
+}
+['f-name','f-email','f-phone','f-nat','f-country'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',checkSendCodeEnabled);
+});
+checkSendCodeEnabled();
 document.querySelectorAll('#typeGrid .type-card').forEach(card=>{
   card.addEventListener('click',()=>{
     clientType=card.dataset.val;
@@ -3504,8 +3522,6 @@ document.querySelectorAll('#typeGrid .type-card').forEach(card=>{
     card.classList.add('selected');
   });
 });
-const SVC_LABELS={residency_pensioner:'Residency Permit \u2013 Pensioner',visa_d:'Type D Visa & Residence Permit',company_formation:'Company Formation',real_estate:'Real Estate Investment'};
-const selected=new Set();
 document.querySelectorAll('#svcGrid input[type="checkbox"]').forEach(cb=>{
   cb.addEventListener('change',()=>{
     const val=cb.value;
@@ -3514,6 +3530,7 @@ document.querySelectorAll('#svcGrid input[type="checkbox"]').forEach(cb=>{
     else{selected.delete(val);lbl.classList.remove('checked');}
     const tags=document.getElementById('svcTags');
     tags.innerHTML=[...selected].map(v=>'<span class="tag">'+SVC_LABELS[v]+'</span>').join('');
+    checkSendCodeEnabled();
   });
 });
 async function handleSendCode(){
@@ -3581,6 +3598,12 @@ app.post('/api/send-verify-code', async (req, res) => {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
   if (email.length > 254) return res.status(400).json({ error: 'Email address is too long.' });
+
+  // Check if email is already registered
+  const existingCustomer = await customersCol.findOne({ email }, { projection: { _id: 1 } });
+  if (existingCustomer) {
+    return res.status(409).json({ error: 'An account with this email address already exists. Please contact us if you need help.' });
+  }
 
   // Rate limit by IP: max 5 requests per hour
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';

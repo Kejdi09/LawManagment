@@ -47,6 +47,13 @@ export default function RegisterPage() {
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim());
   const emailChanged = form.email.trim().toLowerCase() !== codeSentTo.toLowerCase();
+  const canSendCode =
+    emailValid &&
+    form.name.trim().length > 0 &&
+    form.phone.trim().length > 0 &&
+    form.nationality.trim().length > 0 &&
+    form.country.trim().length > 0 &&
+    form.services.length > 0;
 
   async function handleSendCode() {
     setCodeError(null);
@@ -200,7 +207,7 @@ export default function RegisterPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={!emailValid || sendingCode || loading}
+                  disabled={!canSendCode || sendingCode || loading}
                   onClick={handleSendCode}
                   className="shrink-0 text-xs px-3"
                 >
