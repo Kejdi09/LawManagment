@@ -91,6 +91,12 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
     customer.paymentMethods ?? ['bank', 'cash']
   );
   const [paymentNote, setPaymentNote] = useState(customer.paymentNote ?? '');
+  const [initialPayAmount, setInitialPayAmount] = useState<string>(
+    customer.initialPaymentAmount ? String(customer.initialPaymentAmount) : ''
+  );
+  const [initialPayCurrency, setInitialPayCurrency] = useState<string>(
+    customer.initialPaymentCurrency ?? 'EUR'
+  );
 
   function togglePaymentMethod(method: 'bank' | 'crypto' | 'cash') {
     setPaymentMethods(prev =>
@@ -133,6 +139,7 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
     }
     setSaving(true);
     try {
+      const initAmt = initialPayAmount && Number(initialPayAmount) > 0 ? Number(initialPayAmount) : null;
       const updated = await updateCustomer(customer.customerId, {
         contractSentAt: new Date().toISOString(),
         contractSnapshot: fields,
@@ -141,6 +148,8 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
         paymentAmountEUR: Math.round(totalEUR * 100) / 100,
         paymentMethods,
         paymentNote: paymentNote.trim() || null,
+        initialPaymentAmount: initAmt,
+        initialPaymentCurrency: initAmt ? initialPayCurrency : null,
         // Reset any previous payment selection/done state when re-sending
         paymentSelectedMethod: null,
         paymentDoneAt: null,
@@ -388,6 +397,37 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
                   placeholder="e.g. Please complete payment within 5 business days of signing. Reference your name on the transfer."
                   rows={2}
                 />
+              </div>
+
+              {/* Initial payment amount */}
+              <div className="md:col-span-2 space-y-1">
+                <Label>
+                  Initial Payment Required{" "}
+                  <span className="text-muted-foreground font-normal text-xs">(optional — upfront deposit)</span>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={initialPayAmount}
+                    onChange={(e) => setInitialPayAmount(e.target.value)}
+                    placeholder="e.g. 500"
+                    className="flex-1"
+                  />
+                  <select
+                    value={initialPayCurrency}
+                    onChange={(e) => setInitialPayCurrency(e.target.value)}
+                    className="border rounded-md px-3 py-2 text-sm bg-background w-24"
+                  >
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                    <option value="ALL">ALL</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The initial deposit the client must pay immediately after signing. This amount will be highlighted in the client portal and auto-added to their invoices. Leave blank if not required.
+                </p>
               </div>
             </div>
 

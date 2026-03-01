@@ -593,6 +593,36 @@ export default function ClientPortalPage() {
                   )}
                   {!contractRespondDone && (
                     <>
+                      {/* ── Initial payment commitment notice ── */}
+                      {data.initialPaymentAmount && (
+                        <div className="mx-auto max-w-lg mb-5">
+                          <div className="relative overflow-hidden rounded-xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 via-amber-50 to-orange-50 dark:from-amber-950/60 dark:via-amber-900/40 dark:to-orange-950/50 dark:border-amber-500 px-5 py-4 shadow-sm">
+                            <div className="absolute top-0 right-0 w-24 h-24 opacity-5 dark:opacity-10">
+                              <CreditCard className="w-full h-full text-amber-500" />
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="shrink-0 mt-0.5 bg-amber-400 dark:bg-amber-500 text-white rounded-full p-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <p className="font-bold text-sm text-amber-900 dark:text-amber-200 tracking-wide">
+                                  Initial Payment Required After Signing
+                                </p>
+                                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                                  By accepting and signing this agreement, you confirm your commitment to make the agreed initial payment of{" "}
+                                  <span className="font-bold text-base text-amber-900 dark:text-amber-100">
+                                    {data.initialPaymentAmount.toLocaleString()} {data.initialPaymentCurrency ?? "EUR"}
+                                  </span>{" "}
+                                  to activate your client account and allow us to begin work on your matter.
+                                </p>
+                                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                  Our team will reach out with payment instructions immediately after you sign. The remaining balance will be settled at a later stage as outlined in the agreement.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       <p className="text-sm font-medium text-center mb-4">Ready to confirm?</p>
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-full max-w-sm space-y-3">
@@ -637,6 +667,8 @@ export default function ClientPortalPage() {
                             try {
                               await respondToContract(token, contractSignName.trim());
                               setContractRespondDone("accepted");
+                              // Re-fetch portal data immediately to get the auto-created invoice
+                              getPortalData(token).then((d) => setData(d)).catch(() => {});
                             } finally {
                               setContractResponding(false);
                             }

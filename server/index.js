@@ -2966,6 +2966,27 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
     changedByLawyer: assignedTo,
   });
 
+  // Auto-create initial payment invoice if admin set an initialPaymentAmount
+  if (customer.initialPaymentAmount && customer.initialPaymentAmount > 0) {
+    const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
+    const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
+    await invoicesCol.insertOne({
+      invoiceId: genShortId('INV'),
+      customerId: customer.customerId,
+      caseId: null,
+      description: `Initial Payment — ${svcNames ? svcNames + ' — ' : ''}${customer.name || customer.customerId}`,
+      amount: customer.initialPaymentAmount,
+      currency: customer.initialPaymentCurrency || 'EUR',
+      status: 'pending',
+      dueDate: null,
+      createdAt: now,
+      createdBy: 'system',
+      assignedTo: assignedTo || null,
+      autoCreated: true,
+      source: 'contract_acceptance',
+    });
+  }
+
   // Welcome email telling client to complete payment
   if (customer.email) {
     const portalUrl = process.env.APP_URL ? `${process.env.APP_URL}/#/portal/${req.params.token}` : null;
