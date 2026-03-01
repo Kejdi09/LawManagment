@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, ChevronDown } from "lucide-react";
+import { CheckCircle2, Loader2, ChevronDown, PlusCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,8 +73,12 @@ const BUDGET_RANGES: { label: string; value: number }[] = [
 
 const PREVIOUS_REFUSALS_OPTIONS = [
   "None — I have never been refused a visa or residence permit",
-  "Yes — I will provide details in the Messages tab",
+  "Yes — I will provide details when contacted by the team",
 ];
+
+const PROPERTY_COMPLETION_YEARS: string[] = Array.from(
+  { length: 8 }, (_, i) => String(new Date().getFullYear() + i)
+);
 
 const COMPANY_TYPES = [
   "SH.P.K. (Limited Liability Company)",
@@ -165,6 +169,17 @@ function Field({
 }
 
 // ── types ─────────────────────────────────────────────────────────────────
+type Dependent = {
+  name: string;
+  nationality: string;
+  occupation: string;
+  occupationOther: string;
+};
+
+function emptyDependent(): Dependent {
+  return { name: "", nationality: "", occupation: "", occupationOther: "" };
+}
+
 type IntakeFormData = {
   // ─ Personal / shared ─
   nationality: string;
@@ -174,17 +189,14 @@ type IntakeFormData = {
   occupationOther: string;
   relocationMotive: string;
   previousRefusals: string;     // pensioner + visa_d
-  // ─ Dependent (pensioner) ─
-  hasDependent: boolean;
-  dependentName: string;
-  dependentNationality: string;
-  dependentOccupation: string;
-  dependentOccupationOther: string;
+  // ─ Dependents (pensioner) — supports multiple ─
+  dependents: Dependent[];
   // ─ Employment (visa_d) ─
   employerName: string;
   // ─ Real estate ─
   propertyType: string;
   propertyLocation: string;
+  propertyCompletionYear: string;   // only when off-plan
   budgetRange: number | "";
   // ─ Company formation ─
   companyActivityDescription: string;
@@ -203,14 +215,11 @@ function emptyForm(): IntakeFormData {
     occupationOther: "",
     relocationMotive: "",
     previousRefusals: "",
-    hasDependent: false,
-    dependentName: "",
-    dependentNationality: "",
-    dependentOccupation: "",
-    dependentOccupationOther: "",
+    dependents: [],
     employerName: "",
     propertyType: "",
     propertyLocation: "",
+    propertyCompletionYear: "",
     budgetRange: "",
     companyActivityDescription: "",
     companyNameIdeas: "",
@@ -218,6 +227,15 @@ function emptyForm(): IntakeFormData {
     numberOfShareholders: "",
     shareCapitalALL: "",
   };
+}
+
+const OFF_PLAN_KEYWORDS = ["off-plan", "under construction", "off plan"];
+function isOffPlanType(propertyType: string): boolean {
+  const lower = propertyType.toLowerCase();
+  return OFF_PLAN_KEYWORDS.some(k => lower.includes(k));
+}
+function isMoveInReadyType(propertyType: string): boolean {
+  return propertyType.toLowerCase().includes("ready to move");
 }
 
 function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<ProposalFields> {
@@ -237,11 +255,16 @@ function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<Pr
   };
 
   if (isRealEstate) {
+    const offPlan = isOffPlanType(form.propertyType);
+    const moveInReady = isMoveInReadyType(form.propertyType);
     const desc = [form.propertyType, form.propertyLocation].filter(Boolean).join(", ");
     return {
       ...shared,
       propertyDescription: desc,
       transactionValueEUR: form.budgetRange !== "" ? Number(form.budgetRange) : undefined,
+      isOffPlan: offPlan || undefined,
+      isMoveInReady: moveInReady || undefined,
+      propertyCompletionYear: offPlan && form.propertyCompletionYear ? form.propertyCompletionYear : undefined,
     };
   }
 
@@ -249,13 +272,21 @@ function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<Pr
 
   if (isPensioner) {
     base.previousRefusals = form.previousRefusals || undefined;
-    Object.assign(base, {
-      dependentName: form.hasDependent ? form.dependentName : "",
-      dependentNationality: form.hasDependent ? form.dependentNationality : "",
-      dependentOccupation: form.hasDependent
-        ? (form.dependentOccupation === "Other" ? form.dependentOccupationOther : form.dependentOccupation)
-        : "",
-    });
+    const firstDep = form.dependents[0];
+    base.dependentName = firstDep ? firstDep.name : "";
+    base.dependentNationality = firstDep ? firstDep.nationality : "";
+    base.dependentOccupation = firstDep
+      ? (firstDep.occupation === "Other" ? firstDep.occupationOther : firstDep.occupation)
+      : "";
+    if (form.dependents.length > 0) {
+      base.dependents = form.dependents
+        .filter(d => d.name.trim())
+        .map(d => ({
+          name: d.name.trim(),
+          nationality: d.nationality,
+          occupation: d.occupation === "Other" ? d.occupationOther : d.occupation,
+        }));
+    }
   }
 
   if (isEmployment) {
@@ -278,8 +309,8 @@ function toProposalFields(form: IntakeFormData, svcs: ServiceType[]): Partial<Pr
 interface ClientIntakeFormProps {
   services: ServiceType[];
   clientName: string;
-  /** Called when submitted with the mapped ProposalFields */
-  onComplete: (fields: Partial<ProposalFields>) => Promise<void>;
+  /** Called when submitted with the mapped ProposalFields and raw snapshot */
+  onComplete: (fields: Partial<ProposalFields>, rawSnapshot: Record<string, unknown>) => Promise<void>;
   /** Pre-filled data from a previous save */
   savedFields?: Partial<ProposalFields>;
   /** True when the server already has a submitted intake (persists across refresh) */
@@ -308,16 +339,29 @@ export default function ClientIntakeForm({
       f.occupation = savedFields.employmentType || "";
       f.relocationMotive = savedFields.purposeOfStay || "";
       f.previousRefusals = savedFields.previousRefusals || "";
-      f.dependentName = savedFields.dependentName || "";
-      f.dependentNationality = savedFields.dependentNationality || "";
-      f.dependentOccupation = savedFields.dependentOccupation || "";
-      f.hasDependent = !!(savedFields.dependentName);
       f.companyActivityDescription = savedFields.businessActivity || "";
       f.companyType = savedFields.companyType || "";
       f.numberOfShareholders = savedFields.numberOfShareholders ?? "";
       f.shareCapitalALL = savedFields.shareCapitalALL ?? "";
+      f.propertyCompletionYear = savedFields.propertyCompletionYear || "";
       if (savedFields.propertyDescription) f.propertyType = savedFields.propertyDescription;
       if (savedFields.transactionValueEUR) f.budgetRange = savedFields.transactionValueEUR;
+      // Restore dependents from new array or fall back to single legacy field
+      if (Array.isArray(savedFields.dependents) && savedFields.dependents.length > 0) {
+        f.dependents = savedFields.dependents.map(d => ({
+          name: d.name || "",
+          nationality: d.nationality || "",
+          occupation: d.occupation || "",
+          occupationOther: "",
+        }));
+      } else if (savedFields.dependentName) {
+        f.dependents = [{
+          name: savedFields.dependentName,
+          nationality: savedFields.dependentNationality || "",
+          occupation: savedFields.dependentOccupation || "",
+          occupationOther: "",
+        }];
+      }
     }
     return f;
   });
@@ -335,14 +379,19 @@ export default function ClientIntakeForm({
     if (!form.occupation) return "Please select your occupation type.";
     if (form.occupation === "Other" && !form.occupationOther.trim())
       return "Please describe your occupation.";
-    if (isPensioner && form.hasDependent) {
-      if (!form.dependentName.trim()) return "Please enter the dependent's full name.";
-      if (!form.dependentNationality) return "Please select the dependent's nationality.";
-      if (!form.dependentOccupation) return "Please select the dependent's occupation.";
+    if (isPensioner) {
+      for (let i = 0; i < form.dependents.length; i++) {
+        const d = form.dependents[i];
+        if (!d.name.trim()) return `Please enter the full name for dependent ${i + 1}.`;
+        if (!d.nationality) return `Please select the nationality for dependent ${i + 1}.`;
+        if (!d.occupation) return `Please select the occupation for dependent ${i + 1}.`;
+      }
     }
     if (isRealEstate) {
       if (!form.propertyType) return "Please select the type of property.";
       if (!form.budgetRange) return "Please select an approximate budget range.";
+      if (isOffPlanType(form.propertyType) && !form.propertyCompletionYear)
+        return "Please select the expected handover / completion year.";
     }
     return null;
   }
@@ -355,7 +404,8 @@ export default function ClientIntakeForm({
     setSaving(true);
     try {
       const fields = toProposalFields(form, svcs);
-      await onComplete(fields);
+      const rawSnapshot: Record<string, unknown> = { ...form, submittedAt: new Date().toISOString() };
+      await onComplete(fields, rawSnapshot);
       setSubmitted(true);
     } catch {
       setError("Failed to save your answers. Please try again.");
@@ -375,7 +425,7 @@ export default function ClientIntakeForm({
           </p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Questions? Use the <strong>Messages</strong> tab to chat with us directly.
+          Questions? Contact us on <strong>WhatsApp: +355 69 69 52 989</strong> or email info@dafkulawfirm.al
         </p>
       </div>
     );
@@ -445,7 +495,7 @@ export default function ClientIntakeForm({
         )}
       </div>
 
-      {/* ── PENSIONER: RELOCATION + DEPENDENT ── */}
+      {/* ── PENSIONER: RELOCATION + DEPENDENTS ── */}
       {isPensioner && (
         <div className="space-y-4">
           <p className="text-sm font-semibold border-b pb-1">Residency Permit — Pensioner</p>
@@ -453,55 +503,77 @@ export default function ClientIntakeForm({
             Your relocation motive is: <strong>Pensioner</strong> (Residence Permit for Pensioner).
           </p>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.hasDependent}
-                onChange={(e) => set("hasDependent", e.target.checked)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <span className="text-sm">I have a spouse / family member joining me (Family Reunification)</span>
-            </Label>
-          </div>
-
-          {form.hasDependent && (
-            <div className="rounded-md border bg-muted/30 p-4 space-y-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dependent Details</p>
-              <Field
-                id="dependentName"
-                label="Dependent Full Name"
-                value={form.dependentName}
-                onChange={(v) => set("dependentName", v)}
-                placeholder="e.g. Amanda Kerri Norris"
-              />
-              <Select
-                id="dependentNationality"
-                label="Dependent Nationality"
-                value={form.dependentNationality}
-                onChange={(v) => set("dependentNationality", v)}
-                options={NATIONALITIES}
-                placeholder="— Select nationality —"
-              />
-              <Select
-                id="dependentOccupation"
-                label="Dependent Occupation"
-                value={form.dependentOccupation}
-                onChange={(v) => set("dependentOccupation", v)}
-                options={OCCUPATIONS_GENERAL}
-                placeholder="— Select occupation —"
-              />
-              {form.dependentOccupation === "Other" && (
-                <Field
-                  id="dependentOccupationOther"
-                  label="Describe dependent's occupation"
-                  value={form.dependentOccupationOther}
-                  onChange={(v) => set("dependentOccupationOther", v)}
-                  placeholder="e.g. Teacher, Engineer…"
-                />
-              )}
+          {/* Dependent list */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">
+                Family members / dependants joining you
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Family Reunification)</span>
+              </Label>
+              <button
+                type="button"
+                onClick={() => set("dependents", [...form.dependents, emptyDependent()])}
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <PlusCircle className="h-3.5 w-3.5" /> Add dependent
+              </button>
             </div>
-          )}
+
+            {form.dependents.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">
+                No dependants added. Click &ldquo;Add dependent&rdquo; for each family member joining you.
+              </p>
+            )}
+
+            {form.dependents.map((dep, idx) => (
+              <div key={idx} className="rounded-md border bg-muted/30 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Dependent {idx + 1}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => set("dependents", form.dependents.filter((_, i) => i !== idx))}
+                    className="flex items-center gap-1 text-xs text-destructive hover:underline"
+                  >
+                    <Trash2 className="h-3 w-3" /> Remove
+                  </button>
+                </div>
+                <Field
+                  id={`depName${idx}`}
+                  label="Full Name"
+                  value={dep.name}
+                  onChange={(v) => set("dependents", form.dependents.map((d, i) => i === idx ? { ...d, name: v } : d))}
+                  placeholder="e.g. Amanda Kerri Norris"
+                />
+                <Select
+                  id={`depNat${idx}`}
+                  label="Nationality"
+                  value={dep.nationality}
+                  onChange={(v) => set("dependents", form.dependents.map((d, i) => i === idx ? { ...d, nationality: v } : d))}
+                  options={NATIONALITIES}
+                  placeholder="— Select nationality —"
+                />
+                <Select
+                  id={`depOcc${idx}`}
+                  label="Occupation"
+                  value={dep.occupation}
+                  onChange={(v) => set("dependents", form.dependents.map((d, i) => i === idx ? { ...d, occupation: v } : d))}
+                  options={OCCUPATIONS_GENERAL}
+                  placeholder="— Select occupation —"
+                />
+                {dep.occupation === "Other" && (
+                  <Field
+                    id={`depOccOther${idx}`}
+                    label="Describe occupation"
+                    value={dep.occupationOther}
+                    onChange={(v) => set("dependents", form.dependents.map((d, i) => i === idx ? { ...d, occupationOther: v } : d))}
+                    placeholder="e.g. Teacher, Engineer…"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
           <Select
             id="previousRefusals"
@@ -633,6 +705,17 @@ export default function ClientIntakeForm({
             onChange={(v) => set("propertyLocation", v)}
             placeholder="e.g. Golem, Tiranë, Sarandë, Durrës…"
           />
+
+          {isOffPlanType(form.propertyType) && (
+            <Select
+              id="propertyCompletionYear"
+              label="Expected handover / completion year"
+              value={form.propertyCompletionYear}
+              onChange={(v) => set("propertyCompletionYear", v)}
+              options={PROPERTY_COMPLETION_YEARS}
+              placeholder="— Select year —"
+            />
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="budgetRange">Approximate Budget</Label>

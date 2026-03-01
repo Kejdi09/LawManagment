@@ -469,11 +469,15 @@ export async function deletePortalNote(customerId: string, noteId: string): Prom
   await api(`/api/portal-notes/${customerId}/${noteId}`, { method: "DELETE" });
 }
 
-export async function savePortalIntakeFields(token: string, fields: Partial<import("./types").ProposalFields>): Promise<void> {
+export async function savePortalIntakeFields(
+  token: string,
+  fields: Partial<import("./types").ProposalFields>,
+  rawSnapshot?: Record<string, unknown>
+): Promise<void> {
   const res = await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/intake`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ proposalFields: fields }),
+    body: JSON.stringify({ proposalFields: fields, intakeRawSnapshot: rawSnapshot }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));

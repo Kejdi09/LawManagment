@@ -80,12 +80,14 @@ export interface ProposalFields {
   /** Previous visa/residency refusals: "none" or details */
   previousRefusals?: string;
   // ── Dependent (spouse / family member for Pensioner / Family Reunification) ──
-  /** Full name of the accompanying dependent / spouse */
+  /** Full name of the accompanying dependent / spouse (first dependent, for backward compat) */
   dependentName?: string;
-  /** Nationality of the dependent */
+  /** Nationality of the dependent (first dependent, for backward compat) */
   dependentNationality?: string;
-  /** Occupation / status of the dependent */
+  /** Occupation / status of the dependent (first dependent, for backward compat) */
   dependentOccupation?: string;
+  /** All dependents — supports multiple family members */
+  dependents?: Array<{ name: string; nationality: string; occupation: string }>
   // ── Company Formation specific ──
   /** Legal form of the company: SH.P.K., SH.A., branch, representative office, other */
   companyType?: string;
@@ -101,6 +103,8 @@ export interface ProposalFields {
   // ── Real Estate specific ──
   /** True when the property is off-plan / under construction (adds monitoring retainer section) */
   isOffPlan?: boolean;
+  /** True when the property is ready to move in (adds post-acquisition monitoring fee note) */
+  isMoveInReady?: boolean;
   /** Expected construction completion year, e.g. "2027" (used when isOffPlan is true) */
   propertyCompletionYear?: string;
 }
@@ -138,6 +142,8 @@ export interface Customer {
   proposalExpiresAt?: string;
   /** ISO timestamp of when the client last submitted the intake form via the portal */
   intakeLastSubmittedAt?: string;
+  /** Raw snapshot of the intake form answers at submission time (for audit / dispute purposes) */
+  intakeRawSnapshot?: Record<string, unknown>;
   /** Nationality – synced from proposalFields for convenience */
   nationality?: string;
   /** Country of origin / current residence */

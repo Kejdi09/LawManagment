@@ -64,7 +64,7 @@ const FAQS: FaqEntry[] = [
     keywords: ["contact", "phone", "whatsapp", "email", "reach", "call", "speak"],
     question: "How can I contact you?",
     answer:
-      "You can reach us through any of the following channels:\n\n📞 Phone / WhatsApp: +355 69 69 52 989\n✉️ Email: info@relocatetoalbania.com / info@dafkulawfirm.al\n🌐 Website: www.dafkulawfirm.al | www.relocatetoalbania.com\n\n🏢 Office in Tirana: Gjergj Fishta Blvd, F.G.P Bld., Ent. nr. 2, Office 5, 1001, Tirana\n🏢 Office in Durrës: Rruga Aleksandër Goga, Lagja 11, 2001, Durrës\n\nYou can also use the Messages tab in this portal to send us a direct message — your lawyer will respond as soon as possible.",
+      "You can reach us through any of the following channels:\n\n📞 Phone / WhatsApp: +355 69 69 52 989\n✉️ Email: info@relocatetoalbania.com / info@dafkulawfirm.al\n🌐 Website: www.dafkulawfirm.al | www.relocatetoalbania.com\n\n🏢 Office in Tirana: Gjergj Fishta Blvd, F.G.P Bld., Ent. nr. 2, Office 5, 1001, Tirana\n🏢 Office in Durrës: Rruga Aleksandër Goga, Lagja 11, 2001, Durrës\n\nFor case-specific questions, contact us directly on WhatsApp: +355 69 69 52 989 or email info@dafkulawfirm.al",
   },
   {
     keywords: ["albania", "why", "benefit", "advantage", "tax", "good", "move"],

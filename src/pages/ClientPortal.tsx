@@ -606,7 +606,7 @@ export default function ClientPortalPage() {
                 </p>
                 <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex flex-col gap-1">
                   <span className="font-medium text-foreground">Have a question first?</span>
-                  <span>Use the <strong>Messages</strong> tab to chat with us directly before filling in the form — we're happy to clarify anything.</span>
+                  <span>Reach us on <strong>WhatsApp: +355 69 69 52 989</strong> before filling in the form — we're happy to clarify anything.</span>
                 </div>
               </div>
               <ClientIntakeForm
@@ -614,9 +614,9 @@ export default function ClientPortalPage() {
                 clientName={data.client.name}
                 savedFields={data.client.proposalFields}
                 alreadySubmitted={!!data.intakeLastSubmittedAt && !data.intakeBotReset}
-                onComplete={async (fields) => {
+                onComplete={async (fields, rawSnapshot) => {
                   if (!token) return;
-                  try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
+                  try { await savePortalIntakeFields(token, fields, rawSnapshot); } catch { /* non-blocking */ }
                 }}
               />
               <p className="text-xs text-muted-foreground text-center">

@@ -17,14 +17,20 @@ export interface Conditions {
   has_spouse: boolean;
   /** True when the real-estate property is off-plan / under construction */
   is_off_plan: boolean;
+  /** True when the property is ready to move in (adds post-acquisition monitoring note) */
+  is_move_in_ready: boolean;
 }
 
 export function evaluateConditions(fields: Partial<ProposalFields>): Conditions {
+  // Check new multi-dependent array first, then fall back to legacy single-dependent field
+  const hasArrayDeps = Array.isArray(fields.dependents) && fields.dependents.length > 0 &&
+    fields.dependents.some(d => d.name?.trim().length > 0);
   const depRaw = (fields.dependentName ?? '').trim();
-  const hasRealDependent = depRaw.length > 0 && !/^(none|skip|n\/a|no|-)$/i.test(depRaw);
+  const hasLegacyDep = depRaw.length > 0 && !/^(none|skip|n\/a|no|-)$/i.test(depRaw);
   return {
-    has_spouse: hasRealDependent,
+    has_spouse: hasArrayDeps || hasLegacyDep,
     is_off_plan: !!fields.isOffPlan,
+    is_move_in_ready: !!fields.isMoveInReady,
   };
 }
 

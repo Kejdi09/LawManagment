@@ -2940,7 +2940,7 @@ app.post('/api/portal/:token/intake', portalActionLimiter, async (req, res) => {
   const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
   if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
   if (new Date(tokenDoc.expiresAt) < new Date()) return res.status(410).json({ error: 'Link expired' });
-  const { proposalFields } = req.body;
+  const { proposalFields, intakeRawSnapshot } = req.body;
   if (!proposalFields || typeof proposalFields !== 'object') return res.status(400).json({ error: 'proposalFields required' });
 
   // Fetch current record to check status for auto-advance
@@ -2948,6 +2948,7 @@ app.post('/api/portal/:token/intake', portalActionLimiter, async (req, res) => {
     || await confirmedClientsCol.findOne({ customerId: tokenDoc.customerId });
 
   const setFields = { proposalFields, intakeBotReset: false, intakeLastSubmittedAt: new Date().toISOString() };
+  if (intakeRawSnapshot && typeof intakeRawSnapshot === 'object') setFields.intakeRawSnapshot = intakeRawSnapshot;
   if (proposalFields.nationality) setFields.nationality = proposalFields.nationality;
   if (proposalFields.country) setFields.country = proposalFields.country;
 
@@ -3372,11 +3373,33 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
       : { customerId, status: { $ne: 'cancelled' } };
     const inv = await invoicesCol.findOne(invFilter, { sort: { createdAt: -1 } });
     if (inv) {
+      // Convert initial payment amount to the invoice's currency to avoid currency mismatch
+      let amountInInvCurrency = initialPaymentAmount;
+      const payCurrency = (initialPaymentCurrency || 'ALL').toUpperCase();
+      const invCurrency = (inv.currency || 'ALL').toUpperCase();
+      if (payCurrency !== invCurrency) {
+        // Use the customer's stored ALL<->EUR conversion rate (derived from paymentAmountALL / paymentAmountEUR)
+        const storedALL = Number(preCheck.paymentAmountALL) || 0;
+        const storedEUR = Number(preCheck.paymentAmountEUR) || 0;
+        const eurToAll = storedALL > 0 && storedEUR > 0 ? storedALL / storedEUR : 110; // fallback: 1 EUR ≈ 110 ALL
+        if (invCurrency === 'ALL' && payCurrency === 'EUR') {
+          amountInInvCurrency = Math.round(initialPaymentAmount * eurToAll);
+        } else if (invCurrency === 'EUR' && payCurrency === 'ALL') {
+          amountInInvCurrency = Math.round((initialPaymentAmount / eurToAll) * 100) / 100;
+        } else if (invCurrency === 'ALL' && payCurrency === 'USD') {
+          amountInInvCurrency = Math.round(initialPaymentAmount * eurToAll * 0.93); // approx USD→ALL via EUR
+        }
+        // For other mismatches leave as-is (best effort)
+      }
       const payment = {
         paymentId: genShortId('PAY'),
-        amount: initialPaymentAmount,
+        amount: amountInInvCurrency,
+        originalAmount: initialPaymentAmount,
+        originalCurrency: payCurrency,
         method: preCheck.paymentSelectedMethod || 'bank_transfer',
-        note: 'Initial payment (confirmed by admin)',
+        note: payCurrency !== invCurrency
+          ? `Initial payment — ${initialPaymentAmount} ${payCurrency} ≈ ${amountInInvCurrency} ${invCurrency} (confirmed by admin)`
+          : 'Initial payment (confirmed by admin)',
         date: now,
         recordedBy: req.user?.username || 'admin',
       };

@@ -66,11 +66,21 @@ function buildPensioner(
   fields: Partial<ProposalFields>,
   c: Conditions
 ): TemplateData {
-  const dep = c.has_spouse;
+  // Build dependents list: prefer new array; fall back to legacy single-dep fields
+  const deps: Array<{ name: string; nationality: string; occupation: string }> =
+    Array.isArray(fields.dependents) && fields.dependents.some(d => d.name?.trim())
+      ? fields.dependents.filter(d => d.name?.trim())
+      : c.has_spouse && fields.dependentName
+      ? [{ name: fields.dependentName, nationality: fields.dependentNationality || "", occupation: fields.dependentOccupation || "" }]
+      : [];
+
+  const hasDeps = deps.length > 0;
+  const multiDeps = deps.length > 1;
+
   return {
     svcKey: "residency_pensioner",
-    serviceTitle: dep
-      ? "Residence Permit for Pensioner + Family Reunification"
+    serviceTitle: hasDeps
+      ? `Residence Permit for Pensioner + Family Reunification${multiDeps ? ` (×${deps.length})` : ""}`
       : "Residence Permit for Pensioner",
     contactBar: "relocate",
     caseOverviewSections: [
@@ -83,19 +93,15 @@ function buildPensioner(
           { label: "Application Type", value: "Residency Permit (Pensioner)" },
         ],
       },
-      ...(dep
-        ? [
-            {
-              sectionTitle: "Dependent — Spouse",
-              rows: [
-                { label: "Full Name", value: fields.dependentName || "-" },
-                { label: "Nationality", value: fields.dependentNationality || "-" },
-                { label: "Occupation", value: fields.dependentOccupation || "-" },
-                { label: "Application Type", value: "Family Reunification" },
-              ],
-            },
-          ]
-        : []),
+      ...deps.map((d, i) => ({
+        sectionTitle: deps.length === 1 ? "Dependent — Spouse" : `Dependent ${i + 1} — Family Member`,
+        rows: [
+          { label: "Full Name", value: d.name || "-" },
+          { label: "Nationality", value: d.nationality || "-" },
+          { label: "Occupation", value: d.occupation || "-" },
+          { label: "Application Type", value: "Family Reunification" },
+        ],
+      })),
     ],
     scopeIntro:
       "Full legal representation and management of the Residency Permit procedure, including:",
@@ -126,17 +132,15 @@ function buildPensioner(
           "Collection of the biometric residence card",
         ],
       },
-      ...(dep
-        ? [
-            {
-              stepTitle: "Residency Permit — Dependent (Family Reunification)",
-              bullets: [
-                "Same procedure as above for the dependent",
-                "Submitted after the main applicant's Residency Permit is granted",
-              ],
-            },
-          ]
-        : []),
+      ...deps.map((d, i) => ({
+        stepTitle: deps.length === 1
+          ? "Residency Permit — Dependent (Family Reunification)"
+          : `Residency Permit — Dependent ${i + 1}: ${d.name} (Family Reunification)`,
+        bullets: [
+          "Same procedure as above for the dependent",
+          "Submitted after the main applicant's Residency Permit is granted",
+        ],
+      })),
     ],
     docSections: [
       {
@@ -153,23 +157,21 @@ function buildPensioner(
           "Proof of accommodation in Albania (residential rental contract)",
         ],
       },
-      ...(dep
-        ? [
-            {
-              heading: "Dependent — Spouse (submitted after main permit is granted)",
-              items: [
-                "Valid travel document — photocopy (same requirements as main applicant) — provided by applicant",
-                "Marriage certificate (issued within last 6 months, legalized, translated and notarized if not issued in Albania) — we handle",
-                "Proof of insurance in Albania — we arrange at our associate insurance company",
-                "Copy of the main applicant's residence permit in Albania",
-                "Proof of Residency Permit Government Fee Payment — we pay and provide the mandate",
-                "Passport-size photograph (47mm x 36mm, taken within last 6 months) — two printed copies + digital copy",
-                "Proof of accommodation in Albania (residential rental contract)",
-                "Evidence of sufficient financial resources during the stay — we handle legal translation and notary",
-              ],
-            },
-          ]
-        : []),
+      ...deps.map((d, i) => ({
+        heading: deps.length === 1
+          ? "Dependent — Spouse (submitted after main permit is granted)"
+          : `Dependent ${i + 1} — ${d.name} (submitted after main permit is granted)`,
+        items: [
+          "Valid travel document — photocopy (same requirements as main applicant) — provided by applicant",
+          "Marriage certificate or proof of family relationship (issued within last 6 months, legalized, translated and notarized if not issued in Albania) — we handle",
+          "Proof of insurance in Albania — we arrange at our associate insurance company",
+          "Copy of the main applicant's residence permit in Albania",
+          "Proof of Residency Permit Government Fee Payment — we pay and provide the mandate",
+          "Passport-size photograph (47mm x 36mm, taken within last 6 months) — two printed copies + digital copy",
+          "Proof of accommodation in Albania (residential rental contract)",
+          "Evidence of sufficient financial resources during the stay — we handle legal translation and notary",
+        ],
+      })),
     ],
     timeline: [
       "Documents preparation and application submission: 3–5 business days",
@@ -179,8 +181,8 @@ function buildPensioner(
     ],
     paymentTerms: [
       "50% of the service fee is payable upon contract signing and file opening.",
-      dep
-        ? "50% is payable before submission of the residency permit application for the dependent."
+      hasDeps
+        ? "50% is payable before submission of the residency permit application for the dependent(s)."
         : "50% is payable before submission of the residency permit application.",
       "Government fees are paid upfront before application submission.",
       "All payments are non-refundable once the application has been submitted.",
@@ -435,6 +437,7 @@ function buildRealEstate(
   c: Conditions
 ): TemplateData {
   const offPlan = c.is_off_plan;
+  const moveInReady = c.is_move_in_ready;
   const desc = fields.propertyDescription || "the property";
   const txValue = fields.transactionValueEUR
     ? `approximately EUR ${fields.transactionValueEUR.toLocaleString()}`
@@ -481,6 +484,9 @@ function buildRealEstate(
       "Post-completion registration follow-up",
       offPlan
         ? "Long-term monitoring of the developer's construction obligations until handover"
+        : "",
+      moveInReady
+        ? "Post-acquisition property monitoring retainer (optional, EUR 50/month)"
         : "",
     ].filter(Boolean),
     processSteps: [
@@ -551,6 +557,9 @@ function buildRealEstate(
       offPlan
         ? "Monthly retainer of EUR 50 applies from handover date, for ongoing construction monitoring."
         : "",
+      moveInReady
+        ? "Post-acquisition monitoring retainer of EUR 50/month is available from the date of title transfer (covers ongoing legal watch on title, encumbrances, and regulatory changes)."
+        : "",
       "Government fees, notary fees, and transfer taxes are payable when due (not included in the service fee).",
       "All service fees are non-refundable once due diligence has commenced.",
     ].filter(Boolean),
@@ -560,6 +569,9 @@ function buildRealEstate(
       "Transfer taxes and notary fees are set by law and are in addition to our legal fee.",
       offPlan
         ? "Developer obligations are enforceable under the signed contract; our office monitors and advises but cannot compel timely completion."
+        : "",
+      moveInReady
+        ? "Post-acquisition monitoring retainer is optional; it covers legal surveillance of your title and any regulatory changes affecting the property."
         : "",
       "Our advice is based on Albanian law as currently in force; regulatory changes may affect the transaction.",
     ].filter(Boolean),
