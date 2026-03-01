@@ -14,8 +14,9 @@ import nodemailer from "nodemailer"; // kept for potential future SMTP use
 dotenv.config();
 
 // ── Email notification helper ─────────────────────────────────────────────────
-// Primary:  Set RESEND_API_KEY + SMTP_FROM + ADMIN_EMAIL  (uses Resend HTTP API — works on Render free tier)
-// Fallback: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, ADMIN_EMAIL (nodemailer SMTP)
+// Primary:  Set BREVO_SMTP_LOGIN + BREVO_SMTP_PASS + SMTP_FROM  (Brevo SMTP relay — your own email as sender)
+// Fallback: Set BREVO_API_KEY  (Brevo HTTPS API)
+// Fallback: Set RESEND_API_KEY  (Resend HTTPS API)
 const STATE_EMAIL_LABELS = {
   NEW: 'New', IN_PROGRESS: 'In Progress',
   WAITING_CUSTOMER: 'Awaiting Your Input',
@@ -36,19 +37,33 @@ const STATE_EMAIL_LABELS = {
   ARCHIVED: 'Archived',
 };
 function logEmailConfig() {
-  const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
-  if (BREVO_API_KEY) {
+  const { BREVO_SMTP_LOGIN, BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
+  if (BREVO_SMTP_LOGIN) {
+    console.log(`[email] Brevo SMTP configured | FROM=${SMTP_FROM || 'mucikejdi522@gmail.com'} | LOGIN=${BREVO_SMTP_LOGIN}`);
+  } else if (BREVO_API_KEY) {
     console.log(`[email] Brevo API configured | FROM=${SMTP_FROM || 'mucikejdi522@gmail.com'}`);
   } else if (RESEND_API_KEY) {
-    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'} (NOTE: requires verified domain to send to others)`);
+    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'}`);
   } else {
-    console.warn('[email] NOT configured — set BREVO_API_KEY on Render to enable emails.');
+    console.warn('[email] NOT configured — set BREVO_SMTP_LOGIN + BREVO_SMTP_PASS on Render to enable emails.');
   }
 }
 logEmailConfig();
 
-// Reusable SMTP transport instance (kept for potential future use)
+// Reusable Brevo SMTP transport instance (created lazily)
 let _smtpTransport = null;
+function getSmtpTransport() {
+  if (_smtpTransport) return _smtpTransport;
+  const { BREVO_SMTP_LOGIN, BREVO_SMTP_PASS } = process.env;
+  if (!BREVO_SMTP_LOGIN || !BREVO_SMTP_PASS) return null;
+  _smtpTransport = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: { user: BREVO_SMTP_LOGIN, pass: BREVO_SMTP_PASS },
+  });
+  return _smtpTransport;
+}
 
 // ── Professional HTML email wrapper ─────────────────────────────────────────
 function buildHtmlEmail(bodyHtml) {
@@ -90,10 +105,21 @@ async function sendEmail({ to, subject, text, html }) {
   const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
   const fromAddr = SMTP_FROM || 'DAFKU Law Firm <mucikejdi522@gmail.com>';
 
-  // ── Option 1: Brevo HTTPS API (works on Render free tier — no domain needed) ──
+  // ── Option 1: Brevo SMTP relay (your own email shows as sender) ──
+  const smtpTransport = getSmtpTransport();
+  if (smtpTransport) {
+    try {
+      await smtpTransport.sendMail({ from: fromAddr, to, subject, text, html });
+      console.log(`[email] ✓ Sent via Brevo SMTP "${subject}" → ${to}`);
+    } catch (e) {
+      console.error(`[email] ✗ Brevo SMTP failed "${subject}" → ${to}:`, e.message);
+    }
+    return;
+  }
+
+  // ── Option 2: Brevo HTTPS API ──
   if (BREVO_API_KEY) {
     try {
-      // Parse "Name <email>" or plain "email" from fromAddr
       const fromMatch = fromAddr.match(/^(.*?)\s*<([^>]+)>$/);
       const fromPayload = fromMatch
         ? { name: fromMatch[1].trim(), email: fromMatch[2].trim() }
@@ -107,17 +133,17 @@ async function sendEmail({ to, subject, text, html }) {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        console.log(`[email] ✓ Sent via Brevo "${subject}" → ${to}`);
+        console.log(`[email] ✓ Sent via Brevo API "${subject}" → ${to}`);
       } else {
-        console.error(`[email] ✗ Brevo error "${subject}" → ${to}:`, JSON.stringify(data));
+        console.error(`[email] ✗ Brevo API error "${subject}" → ${to}:`, JSON.stringify(data));
       }
     } catch (e) {
-      console.error(`[email] ✗ Brevo fetch failed "${subject}" → ${to}:`, e.message);
+      console.error(`[email] ✗ Brevo API fetch failed "${subject}" → ${to}:`, e.message);
     }
     return;
   }
 
-  // ── Option 2: Resend HTTPS API ──
+  // ── Option 3: Resend HTTPS API ──
   if (RESEND_API_KEY) {
     try {
       const payload = { from: fromAddr, to: [to], subject, text };
@@ -139,7 +165,7 @@ async function sendEmail({ to, subject, text, html }) {
     return;
   }
 
-  console.warn(`[email] NOT configured — set BREVO_API_KEY on Render to enable emails. Skipping "${subject}" → ${to}`);
+  console.warn(`[email] NOT configured — set BREVO_SMTP_LOGIN + BREVO_SMTP_PASS on Render to enable emails. Skipping "${subject}" → ${to}`);
 }
 
 const PORT = process.env.PORT || 4000;
@@ -3585,8 +3611,8 @@ app.get('/api/admin/test-email', verifyAuth, async (req, res) => {
   if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin only' });
   const to = String(req.query.to || '').trim();
   if (!to) return res.status(400).json({ error: 'Provide ?to=email address' });
-  const { BREVO_API_KEY, RESEND_API_KEY } = process.env;
-  const config = BREVO_API_KEY ? `Brevo API` : RESEND_API_KEY ? `Resend API` : 'NOT CONFIGURED';
+  const { BREVO_SMTP_LOGIN, BREVO_API_KEY, RESEND_API_KEY } = process.env;
+  const config = BREVO_SMTP_LOGIN ? `Brevo SMTP (${BREVO_SMTP_LOGIN})` : BREVO_API_KEY ? `Brevo API` : RESEND_API_KEY ? `Resend API` : 'NOT CONFIGURED';
   try {
     await sendEmail({
       to,
