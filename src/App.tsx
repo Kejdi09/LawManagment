@@ -126,7 +126,6 @@ const App = () => (
                 <Route path="/activity" element={<RequireAuth><AdminActivity /></RequireAuth>} />
                 <Route path="/archived" element={<RequireAuth><Archived /></RequireAuth>} />
                 <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
-                <Route path="/chat" element={<Navigate to="/" replace />} />
                 <Route path="/staff" element={<RequireAuth><StaffManagement /></RequireAuth>} />
                 <Route path="/portal/:token" element={<ClientPortal />} />
                 <Route path="/register" element={<RegisterPage />} />
