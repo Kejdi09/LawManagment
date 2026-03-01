@@ -182,6 +182,12 @@ function checkPipelinePreConditions(
         return 'A proposal must be sent to the client before advancing to this stage.';
       }
     }
+    // Requires proposal to be accepted by the client
+    if (['DISCUSSING_Q', 'SEND_CONTRACT', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT'].includes(newStatus)) {
+      if (!customer.proposalAcceptedAt) {
+        return 'The client must accept the proposal before advancing to this stage.';
+      }
+    }
     // Requires a sent contract
     if (['WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(newStatus)) {
       if (!customer.contractSentAt && !customer.contractSnapshot) {

@@ -1271,6 +1271,14 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
           });
         }
       }
+      // DISCUSSING_Q and beyond require the proposal to have been accepted by the client.
+      if (['DISCUSSING_Q', 'SEND_CONTRACT', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT'].includes(update.status)) {
+        if (!current.proposalAcceptedAt && !update.proposalAcceptedAt) {
+          return res.status(400).json({
+            error: 'Cannot advance: the proposal must be accepted by the client first.',
+          });
+        }
+      }
       // WAITING_ACCEPTANCE / AWAITING_PAYMENT require a contract to have been sent.
       // Also allow when contractSentAt is being set in this same request (auto-advance on send).
       if (['WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(update.status)) {
