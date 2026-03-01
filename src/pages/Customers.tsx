@@ -1715,6 +1715,7 @@ const Customers = () => {
                                   proposalSentAt: null,
                                   proposalSnapshot: null,
                                   proposalViewedAt: null,
+                                  intakeLastSubmittedAt: null,
                                   status: "INTAKE",
                                 });
                                 setSelectedCustomer(updated);

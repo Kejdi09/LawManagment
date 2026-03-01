@@ -251,7 +251,7 @@ export default function ClientPortalPage() {
     );
   }
 
-  const showIntakeTab = data.client.status === "SEND_PROPOSAL";
+  const showIntakeTab = data.client.status === "SEND_PROPOSAL" || data.client.status === "INTAKE";
   const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
   const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
   const showPaymentTab = data.client.status === 'AWAITING_PAYMENT';
@@ -404,6 +404,33 @@ export default function ClientPortalPage() {
                 <p className="text-xs text-muted-foreground">We're committed to providing you with the best legal support. Your lawyer will be in touch regarding next steps — feel free to send a message any time.</p>
               </div>
             )}
+
+            {data.client.status === 'NEW' && (
+              <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-800 px-4 py-4 space-y-3">
+                <p className="font-semibold text-violet-900 dark:text-violet-200">📋 What happens next?</p>
+                <div className="space-y-2.5 text-sm text-violet-800 dark:text-violet-300">
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">1.</span>
+                    <div><strong>We review your enquiry</strong> — Our team is reviewing the information you submitted and will be in touch shortly. No action is needed from you at this stage.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">2.</span>
+                    <div><strong>You will receive an intake form</strong> — Once reviewed, we will send you a short form through this portal. It takes about 2 minutes and helps us understand your specific situation in detail.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">3.</span>
+                    <div><strong>We prepare your personalised proposal</strong> — Based on your answers, we will build a tailored legal proposal covering exactly the services you need and the associated fees.</div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 font-bold">4.</span>
+                    <div><strong>Review, sign &amp; proceed</strong> — You will be able to review, accept, and sign your service agreement directly through this portal — no office visit needed.</div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground pt-2 border-t border-violet-200 dark:border-violet-800">
+                  No action needed right now — you will be notified by email when your intake form is ready. For urgent matters, reach us on WhatsApp: <strong>+355 69 69 52 989</strong>
+                </p>
+              </div>
+            )}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">{data.client.name}</CardTitle>
@@ -420,21 +447,16 @@ export default function ClientPortalPage() {
               </CardContent>
             </Card>
 
-            <div className="space-y-3">
-              <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                Your Cases ({data.cases.length})
-              </h2>
-              {data.cases.length === 0 && (
-                <Card>
-                  <CardContent className="py-6 text-sm text-muted-foreground text-center">
-                    No active cases at this time.
-                  </CardContent>
-                </Card>
-              )}
-              {data.cases.map((c) => (
-                <CaseCard key={c.caseId} c={c} history={data.history} />
-              ))}
-            </div>
+            {data.cases.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                  Your Cases ({data.cases.length})
+                </h2>
+                {data.cases.map((c) => (
+                  <CaseCard key={c.caseId} c={c} history={data.history} />
+                ))}
+              </div>
+            )}
 
             <p className="text-center text-xs text-muted-foreground pt-2 border-t">
               Have a question? Use the Messages tab or reach us on WhatsApp: <strong>+355 69 69 52 989</strong> — we're here to help.
@@ -457,7 +479,7 @@ export default function ClientPortalPage() {
                 services={data.client.services || []}
                 clientName={data.client.name}
                 savedFields={data.client.proposalFields}
-                alreadySubmitted={!!data.client.intakeLastSubmittedAt}
+                alreadySubmitted={!!data.client.intakeLastSubmittedAt && !data.intakeBotReset}
                 onComplete={async (fields) => {
                   if (!token) return;
                   try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
