@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { submitRegistration } from "@/lib/case-store";
+import { submitRegistration, sendVerifyCode } from "@/lib/case-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,31 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Email verification state
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [codeSentTo, setCodeSentTo] = useState("");
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim());
+  const emailChanged = form.email.trim().toLowerCase() !== codeSentTo.toLowerCase();
+
+  async function handleSendCode() {
+    setCodeError(null);
+    setSendingCode(true);
+    try {
+      await sendVerifyCode(form.email.trim());
+      setCodeSentTo(form.email.trim());
+      setCodeSent(true);
+      setCodeInput("");
+    } catch (err: unknown) {
+      setCodeError(err instanceof Error ? err.message : "Failed to send code.");
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
   function toggleService(value: string) {
     setForm(f => ({
       ...f,
@@ -53,6 +78,7 @@ export default function RegisterPage() {
     if (!form.nationality.trim()) { setError("Please enter your nationality."); return; }
     if (!form.country.trim()) { setError("Please enter your country of residence."); return; }
     if (form.services.length === 0) { setError("Please select at least one service you are interested in."); return; }
+    if (!codeInput.trim()) { setError("Please enter the verification code sent to your email."); return; }
     setLoading(true);
     try {
       await submitRegistration({
@@ -64,6 +90,7 @@ export default function RegisterPage() {
         clientType: form.clientType,
         services: form.services,
         message: form.message.trim() || undefined,
+        verifyCode: codeInput.trim(),
       });
       setSuccess(true);
     } catch (err: unknown) {
@@ -150,14 +177,50 @@ export default function RegisterPage() {
               <Label htmlFor="reg-email">
                 Email Address <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="reg-email"
-                type="email"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="you@example.com"
-                disabled={loading}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="reg-email"
+                  type="email"
+                  value={form.email}
+                  onChange={e => {
+                    setForm(f => ({ ...f, email: e.target.value }));
+                    setCodeError(null);
+                  }}
+                  placeholder="you@example.com"
+                  disabled={loading}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!emailValid || sendingCode || loading}
+                  onClick={handleSendCode}
+                  className="shrink-0 text-xs px-3"
+                >
+                  {sendingCode ? "Sending…" : codeSent && !emailChanged ? "Resend" : "Send Code"}
+                </Button>
+              </div>
+              {codeError && (
+                <p className="text-xs text-destructive">{codeError}</p>
+              )}
+              {codeSent && !emailChanged && (
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="reg-code" className="text-xs text-muted-foreground">
+                    Enter the 6-digit code sent to <span className="font-medium text-foreground">{codeSentTo}</span>
+                  </Label>
+                  <Input
+                    id="reg-code"
+                    value={codeInput}
+                    onChange={e => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    maxLength={6}
+                    inputMode="numeric"
+                    disabled={loading}
+                    className="font-mono tracking-widest text-center text-lg w-36"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -263,9 +326,14 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !codeSent || codeInput.length < 6}>
             {loading ? "Submitting…" : "Submit Enquiry"}
           </Button>
+          {!codeSent && (
+            <p className="text-xs text-muted-foreground text-center">
+              You must verify your email address before submitting.
+            </p>
+          )}
 
           <p className="text-xs text-muted-foreground text-center">
             Your information is kept strictly confidential and used only to process your enquiry.

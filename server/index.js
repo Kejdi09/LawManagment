@@ -167,7 +167,7 @@ if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) allowedOrigins.push(CLIE
 // Public routes that must be reachable from the React SPA on any origin
 // (e.g. Vercel frontend calling Render backend).
 // These endpoints have their own security (CSRF, rate-limit, portal tokens).
-const PUBLIC_CORS_PATHS = [/^\/api\/register$/, /^\/api\/portal/, /^\/join\//];
+const PUBLIC_CORS_PATHS = [/^\/api\/register$/, /^\/api\/send-verify-code$/, /^\/api\/portal/, /^\/join\//];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -3270,6 +3270,9 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
 // Per-IP submission rate limiter: ip → [timestamps]
 const _intakeRateMap = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const _emailVerifyCodes = new Map(); // email -> { code, expires, attempts }
+const VERIFY_CODE_TTL = 10 * 60 * 1000; // 10 minutes
+const _verifyCodeRateMap = new Map(); // ip -> [timestamps]
 const RATE_MAX = 3;
 
 app.get('/join/:token', (req, res) => {
@@ -3483,8 +3486,51 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
 </html>`);
 });
 
+// ── Send email verification code ────────────────────────────────────────────
+app.post('/api/send-verify-code', async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+  if (email.length > 254) return res.status(400).json({ error: 'Email address is too long.' });
+
+  // Rate limit by IP: max 5 requests per hour
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const ipHits = (_verifyCodeRateMap.get(ip) || []).filter(t => t > now - RATE_WINDOW_MS);
+  if (ipHits.length >= 5) {
+    return res.status(429).json({ error: 'Too many code requests. Please wait before trying again.' });
+  }
+  // Cooldown: don't resend within 60 seconds
+  const existing = _emailVerifyCodes.get(email);
+  if (existing && existing.expires > now + VERIFY_CODE_TTL - 60000) {
+    return res.status(429).json({ error: 'A code was already sent. Please wait 1 minute before requesting a new one.' });
+  }
+  ipHits.push(now);
+  _verifyCodeRateMap.set(ip, ipHits);
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  _emailVerifyCodes.set(email, { code, expires: now + VERIFY_CODE_TTL, attempts: 0 });
+
+  sendEmail({
+    to: email,
+    subject: 'Your DAFKU Law Firm verification code',
+    text: `Your email verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, please ignore this email.`,
+    html: buildHtmlEmail(`
+      <p>You requested a verification code for your DAFKU Law Firm enquiry registration.</p>
+      <p>Your verification code is:</p>
+      <div style="font-size:36px;font-weight:bold;letter-spacing:10px;text-align:center;padding:24px 20px;background:#f7f4ee;border-left:3px solid #c5a55a;border-radius:4px;margin:24px 0;font-family:monospace;color:#1a2e4a;">${code}</div>
+      <p>This code expires in <strong>10 minutes</strong>.</p>
+      <p>If you did not request this code, please ignore this email.</p>
+    `),
+  }).catch(e => console.error('[send-verify-code] email error:', e.message));
+
+  console.log(`[verify-code] Code sent to ${email}`);
+  res.json({ ok: true, message: 'Verification code sent. Check your email.' });
+});
+
 app.post('/api/register', async (req, res) => {
-  const { name, email, phone, nationality, country, clientType, services, message } = req.body || {};
+  const { name, email, phone, nationality, country, clientType, services, message, verifyCode } = req.body || {};
 
   // ── Per-IP rate limit ─────────────────────────────────────────────────────
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
@@ -3506,6 +3552,20 @@ app.post('/api/register', async (req, res) => {
   // Field length caps
   if (normalEmail.length > 254) return res.status(400).json({ error: 'Email address is too long.' });
   if (String(name).trim().length > 120) return res.status(400).json({ error: 'Name is too long.' });
+  // Email verification code check
+  if (!verifyCode) return res.status(400).json({ error: 'Please verify your email address first.' });
+  const storedVerify = _emailVerifyCodes.get(normalEmail);
+  if (!storedVerify) return res.status(400).json({ error: 'No verification code found. Please request a new code.' });
+  if (storedVerify.expires < Date.now()) {
+    _emailVerifyCodes.delete(normalEmail);
+    return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+  }
+  storedVerify.attempts = (storedVerify.attempts || 0) + 1;
+  if (storedVerify.attempts > 5) return res.status(429).json({ error: 'Too many failed attempts. Please request a new code.' });
+  if (storedVerify.code !== String(verifyCode).trim()) {
+    return res.status(400).json({ error: 'Incorrect verification code. Please check the code and try again.' });
+  }
+  _emailVerifyCodes.delete(normalEmail); // one-use only
   try {
   // Duplicate check
   const [dupCust, dupClient] = await Promise.all([

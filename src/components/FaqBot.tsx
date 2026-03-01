@@ -76,7 +76,43 @@ const FAQS: FaqEntry[] = [
     keywords: ["proposal", "when", "ready", "sent", "receive", "prepare"],
     question: "When will my proposal be ready?",
     answer:
-      "Once you complete the Intake Form (the 'Intake Form' tab), our team prepares your personalised proposal typically within 1–2 business days. You will receive a notification in this portal when it is ready to review.\n\nIf you have already completed the intake form, please check the Proposal tab — it may already be available. If you have questions or need the proposal urgently, please use the Messages tab to contact your lawyer directly.",
+      "Once you complete the Intake Form, our team prepares your personalised proposal typically within 1–2 business days. You will receive a notification in this portal when it is ready to review.\n\nIf you have already completed the intake form, please check the Proposal tab — it may already be available. If you have questions or need the proposal urgently, please use the Messages tab to contact your lawyer directly.",
+  },
+  {
+    keywords: ["portal", "access", "login", "link", "dashboard", "account"],
+    question: "How do I use the client portal?",
+    answer:
+      "Your client portal is a secure private space where you can:\n\n• Track the real-time status of your case\n• View and accept your personalised proposal\n• Review and sign your service contract\n• View and pay invoices\n• Send and receive messages with your lawyer\n• Complete your intake form\n\nYou access your portal via the unique link sent to your email. There is no username or password — the link itself is your secure access key. Keep it private.",
+  },
+  {
+    keywords: ["contract", "sign", "agreement", "service agreement", "accept"],
+    question: "How does the contract work?",
+    answer:
+      "Once you accept your proposal, our team prepares a formal Service Agreement. You can review it in the Contract tab of your portal.\n\nThe contract outlines the exact scope of work, fees, payment terms, and timelines. You can accept it directly from the portal. Once both parties sign, your case moves forward and work begins officially.\n\nIf you have questions about any clause, use the Messages tab to speak with your lawyer before signing.",
+  },
+  {
+    keywords: ["invoice", "payment", "pay", "billing", "bank", "transfer", "due"],
+    question: "How do I pay an invoice?",
+    answer:
+      "When an invoice is issued, you will see it under the Invoices tab in your portal. Each invoice shows:\n\n• The amount due\n• The due date\n• Bank transfer details\n\nPayment is made via bank transfer to DAFKU Law Firm's account. Once payment is confirmed by our team, the invoice will be marked as paid and your case will progress to the next stage.\n\nFor any billing queries, contact us via the Messages tab.",
+  },
+  {
+    keywords: ["status", "case", "progress", "update", "stage", "what's happening", "where"],
+    question: "What do the case statuses mean?",
+    answer:
+      "Your case moves through these stages:\n\n• Under Initial Review — we have received your enquiry and are reviewing it\n• Proposal Sent — your personalised proposal is ready to view\n• Awaiting Your Approval — please review and accept the proposal\n• Service Agreement Sent — your contract is ready to review and sign\n• Awaiting Your Acceptance — please sign the contract\n• Payment Required — an invoice has been issued\n• In Progress — your case is actively being processed\n• Awaiting Your Input — we need information or documents from you\n• Awaiting Authorities — submitted to government — waiting on official response\n• Completed — your case is successfully concluded\n\nCheck your portal dashboard for your current status.",
+  },
+  {
+    keywords: ["intake", "form", "information", "fill", "questionnaire", "details"],
+    question: "What is the Intake Form?",
+    answer:
+      "The Intake Form collects the detailed personal and case information our lawyers need to prepare your proposal and begin your case.\n\nDepending on your service, this may include:\n• Personal details (full name, date of birth, passport number)\n• Family members included in the application\n• Employment or income details\n• Business details (for company formation)\n• Property details (for real estate)\n\nYou can complete the Intake Form from the Intake Form tab in your portal. Your progress is saved automatically. Our team will review it once submitted.",
+  },
+  {
+    keywords: ["message", "lawyer", "contact", "speak", "communicate", "chat", "team"],
+    question: "How do I message my lawyer?",
+    answer:
+      "Use the Messages tab in your portal to communicate directly with your assigned lawyer. You can:\n\n• Ask questions about your case\n• Send documents or photos\n• Request updates\n• Clarify anything in your proposal or contract\n\nOur team typically responds within 1 business day. For urgent matters, please also contact us on WhatsApp: +355 69 69 52 989",
   },
 ];
 

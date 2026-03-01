@@ -616,6 +616,25 @@ export async function getWorkload(): Promise<WorkloadEntry[]> {
 }
 
 // ── Public Self-Registration ──────────────────────────────────────────────────
+export async function sendVerifyCode(email: string): Promise<{ ok: boolean; message: string }> {
+  const BASE = (import.meta.env.VITE_API_URL as string | undefined) || '';
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/send-verify-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    throw new Error('Cannot reach the server. Check your internet connection.');
+  }
+  const body = await res.text();
+  let json: { ok?: boolean; message?: string; error?: string } | null = null;
+  try { json = JSON.parse(body); } catch { /* not JSON */ }
+  if (!res.ok) throw new Error(json?.error || `Server error ${res.status}.`);
+  return json as { ok: boolean; message: string };
+}
+
 export async function submitRegistration(data: {
   name: string;
   email: string;
@@ -625,6 +644,7 @@ export async function submitRegistration(data: {
   clientType?: string;
   services?: string[];
   message?: string;
+  verifyCode: string;
 }): Promise<{ ok: boolean; message: string }> {
   const BASE = (import.meta.env.VITE_API_URL as string | undefined) || '';
   let res: Response;
