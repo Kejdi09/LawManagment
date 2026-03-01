@@ -323,8 +323,8 @@ export default function IntakeBotPanel({
   useEffect(() => {
     const greeting =
       mode === "portal"
-        ? `Good day, ${clientName}. Welcome to the DAFKU Law Firm client intake process.\n\nTo prepare a tailored proposal for your ${serviceLabelList} service(s), we will guide you through a brief set of questions. This should only take a few minutes.\n\nPlease answer each question as accurately as possible. You may type "skip" to pass any optional question, or type "help" to reach our team directly on WhatsApp.`
-        : `Staff intake — ${clientName}\nServices: ${serviceLabelList}\n\nPlease answer each question to complete the proposal fields. Type "skip" to omit optional fields.`;
+        ? `Hello, ${clientName}! Welcome to your DAFKU Law Firm client portal.\n\nTo prepare your personalised proposal for: ${serviceLabelList} — I need to ask you a few quick questions. This usually takes under 5 minutes.\n\nOnce you complete this form, our legal team will review your answers and prepare your tailored proposal, typically within 1\u20132 business days. You will see it appear in the Proposal tab of your portal.\n\nPlease answer each question as accurately as possible. Type \"skip\" to pass any optional question, or type \"help\" if you need assistance on WhatsApp.`
+        : `Staff intake \u2014 ${clientName}\nServices: ${serviceLabelList}\n\nPlease answer each question to complete the proposal fields. Type \"skip\" to omit optional fields.`;
     setMessages([botMsg(greeting)]);
     // Ask the first question after a short delay
     setTimeout(() => {
@@ -432,7 +432,7 @@ export default function IntakeBotPanel({
       const summary = buildSummaryText(rawAnswers);
       setMessages((prev) => [
         ...prev,
-        botMsg(`Thank you, ${clientName}. Your information has been submitted to the DAFKU Law Firm team.\n\nWe will review your answers and prepare a personalised proposal for you. You can expect to hear from us shortly.\n\nIf you have any immediate questions, please use the Messages tab or contact us directly on WhatsApp.`),
+        botMsg(`Thank you, ${clientName}! Your intake form has been submitted successfully.\n\nOur legal team will review your answers and prepare your personalised proposal \u2014 it will appear in your Proposal tab within 1\u20132 business days.\n\nWhat happens next:\n1. Proposal \u2014 review and accept your tailored proposal\n2. Contract \u2014 sign the service agreement electronically\n3. Payment \u2014 pay your invoice to begin your case\n\nFor any immediate questions, contact us on WhatsApp: +355 69 69 52 989 or email info@dafkulawfirm.al`),
       ]);
       onSendSummaryMessage?.(summary);
       onComplete?.(fields);

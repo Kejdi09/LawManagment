@@ -1714,60 +1714,65 @@ const Customers = () => {
                               {selectedCustomer.paymentNote && (
                                 <p className="text-muted-foreground">Note: {selectedCustomer.paymentNote}</p>
                               )}
-                              {/* Initial payment amount editor */}
+                              {/* Initial payment amount — locked once contract has been sent */}
                               <div className="pt-1 space-y-1">
                                 <p className="font-medium">Initial payment required:</p>
-                                {selectedCustomer.paymentSelectedMethod ? (
-                                  <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
-                                    <span className="text-xs text-amber-800 dark:text-amber-300">🔒 Locked — customer has already confirmed their payment intent. Cannot be changed.</span>
+                                {selectedCustomer.contractSentAt ? (
+                                  <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 dark:bg-zinc-900/40 px-3 py-2">
+                                    <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                                      🔒{' '}
+                                      {selectedCustomer.initialPaymentAmount
+                                        ? `${selectedCustomer.initialPaymentAmount.toLocaleString()} ${selectedCustomer.initialPaymentCurrency ?? 'EUR'} — set when the contract was issued. Cannot be changed after sending.`
+                                        : 'Set when the contract was sent. Cannot be changed after the contract has been issued.'}
+                                    </span>
                                   </div>
                                 ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <Input
-                                    type="number"
-                                    className="h-6 text-xs w-28 bg-white dark:bg-zinc-900"
-                                    placeholder="Amount"
-                                    value={initialPayAmt}
-                                    onChange={(e) => setInitialPayAmt(e.target.value)}
-                                    disabled={savingInitialPay}
-                                  />
-                                  <select
-                                    className="h-6 text-xs rounded border px-1 bg-white dark:bg-zinc-900"
-                                    value={initialPayCurrency}
-                                    onChange={(e) => setInitialPayCurrency(e.target.value)}
-                                    disabled={savingInitialPay}
-                                  >
-                                    <option value="EUR">EUR</option>
-                                    <option value="ALL">ALL</option>
-                                    <option value="USD">USD</option>
-                                  </select>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-6 text-xs px-2"
-                                    disabled={savingInitialPay || !initialPayAmt}
-                                    onClick={async () => {
-                                      const amt = parseFloat(initialPayAmt);
-                                      if (!amt || amt <= 0) return;
-                                      setSavingInitialPay(true);
-                                      try {
-                                        await setInitialPaymentAmount(selectedCustomer.customerId, amt, initialPayCurrency);
-                                        const updated = { ...selectedCustomer, initialPaymentAmount: amt, initialPaymentCurrency: initialPayCurrency };
-                                        setSelectedCustomer(updated);
-                                        setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
-                                        toast({ title: 'Initial payment amount saved' });
-                                      } catch (e) {
-                                        toast({ title: 'Failed', description: String((e as Error)?.message), variant: 'destructive' });
-                                      } finally {
-                                        setSavingInitialPay(false);
-                                      }
-                                    }}
-                                  >
-                                    {savingInitialPay ? '…' : 'Save'}
-                                  </Button>
-                                </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      type="number"
+                                      className="h-6 text-xs w-28 bg-white dark:bg-zinc-900"
+                                      placeholder="Amount"
+                                      value={initialPayAmt}
+                                      onChange={(e) => setInitialPayAmt(e.target.value)}
+                                      disabled={savingInitialPay}
+                                    />
+                                    <select
+                                      className="h-6 text-xs rounded border px-1 bg-white dark:bg-zinc-900"
+                                      value={initialPayCurrency}
+                                      onChange={(e) => setInitialPayCurrency(e.target.value)}
+                                      disabled={savingInitialPay}
+                                    >
+                                      <option value="EUR">EUR</option>
+                                      <option value="ALL">ALL</option>
+                                      <option value="USD">USD</option>
+                                    </select>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2"
+                                      disabled={savingInitialPay || !initialPayAmt}
+                                      onClick={async () => {
+                                        const amt = parseFloat(initialPayAmt);
+                                        if (!amt || amt <= 0) return;
+                                        setSavingInitialPay(true);
+                                        try {
+                                          await setInitialPaymentAmount(selectedCustomer.customerId, amt, initialPayCurrency);
+                                          const updated = { ...selectedCustomer, initialPaymentAmount: amt, initialPaymentCurrency: initialPayCurrency };
+                                          setSelectedCustomer(updated);
+                                          setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
+                                          toast({ title: 'Initial payment amount saved' });
+                                        } catch (e) {
+                                          toast({ title: 'Failed', description: String((e as Error)?.message), variant: 'destructive' });
+                                        } finally {
+                                          setSavingInitialPay(false);
+                                        }
+                                      }}
+                                    >
+                                      {savingInitialPay ? '…' : 'Save'}
+                                    </Button>
+                                  </div>
                                 )}
-                                <p className="text-[10px] text-muted-foreground">This amount will be shown to the customer and deducted from their invoice when confirmed.</p>
+                                <p className="text-[10px] text-muted-foreground">This amount is set in the contract and deducted from the client's invoice when payment is confirmed.</p>
                               </div>
                             </div>
                             {selectedCustomer.paymentSelectedMethod ? (
@@ -1780,11 +1785,21 @@ const Customers = () => {
                                   if (!confirm('Confirm that payment has been received? This will activate the client account.')) return;
                                   setMarkingPayment(true);
                                   try {
-                                    await markPaymentDone(selectedCustomer.customerId);
+                                    // Pass initial payment so the server auto-records it as a payment on the invoice
+                                    await markPaymentDone(selectedCustomer.customerId, {
+                                      initialPaymentAmount: selectedCustomer.initialPaymentAmount ?? undefined,
+                                      currency: selectedCustomer.initialPaymentCurrency ?? undefined,
+                                    });
                                     const updated = { ...selectedCustomer, status: 'CLIENT' as const, paymentDoneAt: new Date().toISOString() };
                                     setSelectedCustomer(updated);
                                     setCustomers(prev => prev.map(c => c.customerId === selectedCustomer.customerId ? updated : c));
-                                    toast({ title: 'Payment confirmed', description: 'Client account has been activated.' });
+                                    const initPay = selectedCustomer.initialPaymentAmount;
+                                    toast({
+                                      title: 'Payment confirmed — client activated',
+                                      description: initPay
+                                        ? `Initial payment of ${initPay.toLocaleString()} ${selectedCustomer.initialPaymentCurrency ?? 'EUR'} has been recorded on the invoice.`
+                                        : 'Client account has been activated.',
+                                    });
                                   } catch (e) {
                                     toast({ title: 'Failed', description: String((e as Error)?.message ?? 'Could not mark payment done.'), variant: 'destructive' });
                                   } finally {

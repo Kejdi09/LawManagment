@@ -76,25 +76,25 @@ const FAQS: FaqEntry[] = [
     keywords: ["proposal", "when", "ready", "sent", "receive", "prepare"],
     question: "When will my proposal be ready?",
     answer:
-      "Once you complete the Intake Form, our team prepares your personalised proposal typically within 1–2 business days. You will receive a notification in this portal when it is ready to review.\n\nIf you have already completed the intake form, please check the Proposal tab — it may already be available. If you have questions or need the proposal urgently, please use the Messages tab to contact your lawyer directly.",
+      "Once you complete the Intake Form, our team prepares your personalised proposal typically within 1–2 business days. You will receive a notification in this portal when it is ready to review.\n\nIf you have already completed the intake form, please check the Proposal tab — it may already be available. If you need the proposal urgently, please contact us on WhatsApp: +355 69 69 52 989 or email info@dafkulawfirm.al",
   },
   {
     keywords: ["portal", "access", "login", "link", "dashboard", "account"],
     question: "How do I use the client portal?",
     answer:
-      "Your client portal is a secure private space where you can:\n\n• Track the real-time status of your case\n• View and accept your personalised proposal\n• Review and sign your service contract\n• View and pay invoices\n• Send and receive messages with your lawyer\n• Complete your intake form\n\nYou access your portal via the unique link sent to your email. There is no username or password — the link itself is your secure access key. Keep it private.",
+      "Your client portal guides you through each stage of your case step by step:\n\n1. Complete your Intake Form — fill in the details our lawyers need to prepare your proposal\n2. Review your Proposal — read the personalised proposal and accept it if you agree\n3. Sign the Contract — review and electronically sign the service agreement\n4. Make Payment — pay your invoice using your chosen payment method\n5. Active Client — your case is in progress; track updates from your dashboard\n\nYou access your portal via the unique link sent to your email. There is no username or password — the link itself is your secure access key. Keep it private.",
   },
   {
     keywords: ["contract", "sign", "agreement", "service agreement", "accept"],
     question: "How does the contract work?",
     answer:
-      "Once you accept your proposal, our team prepares a formal Service Agreement. You can review it in the Contract tab of your portal.\n\nThe contract outlines the exact scope of work, fees, payment terms, and timelines. You can accept it directly from the portal. Once both parties sign, your case moves forward and work begins officially.\n\nIf you have questions about any clause, use the Messages tab to speak with your lawyer before signing.",
+      "Once you accept your proposal, our team prepares a formal Service Agreement. You can review it in the Contract tab of your portal.\n\nThe contract outlines the exact scope of work, fees, payment terms, and timelines. To sign it electronically:\n\n1. Open the Contract tab\n2. Read through the agreement carefully\n3. Click the Accept & Sign button\n4. Confirm your acceptance\n\nYour digital acceptance is legally binding and timestamps your signature. Once signed, an invoice is issued and your case moves forward officially.\n\nIf you have questions about any clause, contact us on WhatsApp: +355 69 69 52 989 before signing.",
   },
   {
     keywords: ["invoice", "payment", "pay", "billing", "bank", "transfer", "due"],
     question: "How do I pay an invoice?",
     answer:
-      "When an invoice is issued, you will see it under the Invoices tab in your portal. Each invoice shows:\n\n• The amount due\n• The due date\n• Bank transfer details\n\nPayment is made via bank transfer to DAFKU Law Firm's account. Once payment is confirmed by our team, the invoice will be marked as paid and your case will progress to the next stage.\n\nFor any billing queries, contact us via the Messages tab.",
+      "When an invoice is issued, you will see it under the Invoices tab in your portal. Each invoice shows the amount due, the due date, and payment instructions.\n\nWe accept the following payment methods:\n\n🏦 Bank Transfer — transfer to DAFKU Law Firm's bank account (details shown in the portal)\n💎 Crypto (USDT) — Tether USDT on the TRC-20 network\n💵 Cash — in person at our Tirana or Durrës office\n\nIn the portal, go to the Payment tab, select your preferred method, and confirm. Once our team verifies receipt, the invoice is marked paid and your case progresses.\n\nFor any billing queries, contact us on WhatsApp: +355 69 69 52 989 or email info@dafkulawfirm.al",
   },
   {
     keywords: ["status", "case", "progress", "update", "stage", "what's happening", "where"],
@@ -109,15 +109,15 @@ const FAQS: FaqEntry[] = [
       "The Intake Form collects the detailed personal and case information our lawyers need to prepare your proposal and begin your case.\n\nDepending on your service, this may include:\n• Personal details (full name, date of birth, passport number)\n• Family members included in the application\n• Employment or income details\n• Business details (for company formation)\n• Property details (for real estate)\n\nYou can complete the Intake Form from the Intake Form tab in your portal. Your progress is saved automatically. Our team will review it once submitted.",
   },
   {
-    keywords: ["message", "lawyer", "contact", "speak", "communicate", "chat", "team"],
-    question: "How do I message my lawyer?",
+    keywords: ["message", "lawyer", "contact", "speak", "communicate", "chat", "team", "reach", "whatsapp", "email"],
+    question: "How do I contact my lawyer?",
     answer:
-      "Use the Messages tab in your portal to communicate directly with your assigned lawyer. You can:\n\n• Ask questions about your case\n• Send documents or photos\n• Request updates\n• Clarify anything in your proposal or contract\n\nOur team typically responds within 1 business day. For urgent matters, please also contact us on WhatsApp: +355 69 69 52 989",
+      "You can reach your assigned lawyer or our team through the following channels:\n\n📱 WhatsApp: +355 69 69 52 989 (fastest response)\n✉️ Email: info@dafkulawfirm.al / info@relocatetoalbania.com\n🏢 Tirana Office: Gjergj Fishta Blvd, F.G.P Bld., Ent. nr. 2, Office 5, Tirana\n🏢 Durrës Office: Rruga Aleksandër Goga, Lagja 11, Durrës\n\nOur team typically responds within 1 business day. For urgent matters, WhatsApp is the fastest way to reach us.",
   },
 ];
 
 const FALLBACK =
-  "Thank you for your message! I'm able to answer common questions — try asking about fees, timelines, required documents, the Type D Visa, company formation, or how to contact us.\n\nFor anything specific to your case, please use the Messages tab to speak directly with your lawyer.";
+  "Thank you for your message! I can answer common questions — try asking about fees, timelines, required documents, the portal steps, contract signing, payment methods, or how to contact us.\n\nFor anything specific to your case, please contact us directly on WhatsApp: +355 69 69 52 989 or email info@dafkulawfirm.al";
 
 function matchFaq(input: string): FaqEntry | null {
   const lower = input.toLowerCase();
@@ -280,7 +280,7 @@ export default function FaqBot() {
       </div>
 
       <div className="px-3 pb-2 text-[10px] text-muted-foreground text-center">
-        For case-specific questions, use the <strong>Messages</strong> tab to speak with your lawyer directly.
+        For case-specific questions, contact us on WhatsApp: <strong>+355 69 69 52 989</strong> or email info@dafkulawfirm.al
       </div>
     </div>
   );
