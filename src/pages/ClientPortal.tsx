@@ -868,6 +868,7 @@ export default function ClientPortalPage() {
                         try {
                           await selectPortalPaymentMethod(token, paymentMethod as 'bank' | 'crypto' | 'cash');
                           setPaymentMethodSaved(true);
+                          setData((prev) => prev ? { ...prev, paymentSelectedMethod: paymentMethod as 'bank' | 'crypto' | 'cash' } : prev);
                         } catch (e) {
                           alert(String((e as Error)?.message ?? 'Failed to save selection.'));
                         } finally {

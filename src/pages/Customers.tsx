@@ -1564,15 +1564,30 @@ const Customers = () => {
                         {/* Contract button – shown when client accepted proposal and contract not yet sent */}
                         {(selectedCustomer.status === "SEND_CONTRACT" && !selectedCustomer.contractSentAt) && (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="h-7 text-xs gap-1 bg-violet-600 hover:bg-violet-700"
-                              onClick={() => setShowContractModal(true)}
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                              Generate Contract
-                            </Button>
+                            {!selectedCustomer.initialPaymentAmount && (
+                              <div className="w-full rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                                ⚠ Set the <strong>Initial Payment Required</strong> amount above before generating the contract.
+                              </div>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="h-7 text-xs gap-1 bg-violet-600 hover:bg-violet-700"
+                                    disabled={!selectedCustomer.initialPaymentAmount}
+                                    onClick={() => setShowContractModal(true)}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Generate Contract
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {!selectedCustomer.initialPaymentAmount && (
+                                <TooltipContent>Initial payment amount must be set first</TooltipContent>
+                              )}
+                            </Tooltip>
                           </div>
                         )}
                         {/* Mark Payment Done – activate client once payment is confirmed */}

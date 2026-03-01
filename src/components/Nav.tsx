@@ -76,6 +76,7 @@ export const Nav = ({ onSelect, showAccount = true }: { onSelect?: () => void; s
             <SectionLabel>Clients</SectionLabel>
             <NavBtn path="/" icon={<Users className="w-4 h-4" />} label="Client Cases" isActive={onClientCases} />
             <NavBtn path="/clients" icon={<UserCheck className="w-4 h-4" />} label="Client Records" isActive={onClients} />
+            <NavBtn path="/invoices" icon={<Receipt className="w-4 h-4" />} label="Invoices" isActive={onInvoices} />
           </>
         )}
 
