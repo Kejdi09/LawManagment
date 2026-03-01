@@ -358,36 +358,58 @@ export default function InvoicesPage() {
                             {totalALL.toLocaleString()} ALL{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}
                           </span>
                         </div>
+                        {/* Initial payment row inside the breakdown */}
+                        {initAmt !== undefined && initAmt !== null && (
+                          <div className="space-y-0.5 pt-1 border-t border-dashed border-amber-300 dark:border-amber-700">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-amber-700 dark:text-amber-400 font-medium">⚡ Initial Payment Required</span>
+                              <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                                {initAmt.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}
+                                {initPct !== null ? <span className="text-muted-foreground font-normal"> ({initPct.toFixed(0)}%)</span> : ''}
+                              </span>
+                            </div>
+                            {initPct !== null && (
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${initPct}%` }} />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Fallback if no breakdown available */}
                     {feeItems.length === 0 && (c.paymentAmountALL || c.paymentAmountEUR) && (
-                      <div className="text-xs text-muted-foreground">
-                        Total: <strong>{c.paymentAmountALL ? `${c.paymentAmountALL.toLocaleString()} ALL` : ''}{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}</strong>
+                      <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-1.5">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span>Total</span>
+                          <span className="tabular-nums">
+                            {c.paymentAmountALL ? `${c.paymentAmountALL.toLocaleString()} ALL` : ''}{c.paymentAmountEUR ? ` ≈ ${c.paymentAmountEUR.toFixed(2)} EUR` : ''}
+                          </span>
+                        </div>
+                        {initAmt !== undefined && initAmt !== null && (
+                          <div className="space-y-0.5 pt-1 border-t border-dashed border-amber-300 dark:border-amber-700">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-amber-700 dark:text-amber-400 font-medium">⚡ Initial Payment Required</span>
+                              <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                                {initAmt.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}
+                                {initPct !== null ? <span className="text-muted-foreground font-normal"> ({initPct.toFixed(0)}%)</span> : ''}
+                              </span>
+                            </div>
+                            {initPct !== null && (
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${initPct}%` }} />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Payment method + initial amount */}
+                    {/* Payment method */}
                     <div className="flex flex-wrap gap-3 text-xs">
                       <span className="text-muted-foreground">Method: <strong className="text-foreground">{methodLabel}</strong></span>
-                      {initAmt && (
-                        <span className="text-muted-foreground">Initial required: <strong className="text-amber-600 dark:text-amber-400">{initAmt.toLocaleString()} {c.initialPaymentCurrency ?? 'EUR'}</strong></span>
-                      )}
                     </div>
-
-                    {/* Initial payment % of total progress bar */}
-                    {initPct !== null && (
-                      <div>
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${initPct}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-                          <span>Initial payment = {initPct.toFixed(0)}% of total</span>
-                          <span className="tabular-nums">{initInALL!.toLocaleString()} / {totalALL.toLocaleString()} ALL</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
