@@ -1300,25 +1300,28 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
 
     // Pre-condition checks (skip for side-status transitions)
     if (!SIDE_STATUSES.includes(update.status)) {
-      // WAITING_APPROVAL / DISCUSSING_Q / SEND_CONTRACT / WAITING_ACCEPTANCE require a proposal
+      // WAITING_APPROVAL / DISCUSSING_Q / SEND_CONTRACT / WAITING_ACCEPTANCE require a proposal.
+      // Also allow when proposalSentAt is being set in this same request (auto-advance on send).
       if (['WAITING_APPROVAL', 'DISCUSSING_Q', 'SEND_CONTRACT', 'WAITING_ACCEPTANCE'].includes(update.status)) {
-        if (!current.proposalSentAt && !current.proposalSnapshot) {
+        if (!current.proposalSentAt && !current.proposalSnapshot && !update.proposalSentAt) {
           return res.status(400).json({
             error: 'Cannot advance: a proposal must be sent to the client first.',
           });
         }
       }
-      // WAITING_ACCEPTANCE / AWAITING_PAYMENT require a contract to have been sent
+      // WAITING_ACCEPTANCE / AWAITING_PAYMENT require a contract to have been sent.
+      // Also allow when contractSentAt is being set in this same request (auto-advance on send).
       if (['WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(update.status)) {
-        if (!current.contractSentAt && !current.contractSnapshot) {
+        if (!current.contractSentAt && !current.contractSnapshot && !update.contractSentAt) {
           return res.status(400).json({
             error: 'Cannot advance: a contract must be sent to the client first.',
           });
         }
       }
-      // AWAITING_PAYMENT / SEND_RESPONSE / CLIENT require the contract to be signed/accepted
+      // AWAITING_PAYMENT / SEND_RESPONSE / CLIENT require the contract to be signed/accepted.
+      // Also allow when contractSignedAt/contractAcceptedAt is being set simultaneously.
       if (['AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT'].includes(update.status)) {
-        if (!current.contractSignedAt && !current.contractAcceptedAt) {
+        if (!current.contractSignedAt && !current.contractAcceptedAt && !update.contractSignedAt && !update.contractAcceptedAt) {
           return res.status(400).json({
             error: 'Cannot advance: the contract must be signed/accepted by the client first.',
           });
@@ -3496,7 +3499,11 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
 <script>
 let clientType='Individual';
 let codeSentTo=sessionStorage.getItem('dafku_verify_email')||'';
-if(codeSentTo){document.getElementById('codeRow').style.display='block';document.getElementById('f-email').value=codeSentTo;}
+// If already submitted (e.g. page was refreshed), show success immediately
+if(sessionStorage.getItem('dafku_join_done')){
+  document.getElementById('form-section').style.display='none';
+  document.getElementById('successSection').style.display='flex';
+} else if(codeSentTo){document.getElementById('codeRow').style.display='block';document.getElementById('f-email').value=codeSentTo;}
 const SVC_LABELS={residency_pensioner:'Residency Permit \u2013 Pensioner',visa_d:'Type D Visa & Residence Permit',company_formation:'Company Formation',real_estate:'Real Estate Investment'};
 const selected=new Set();
 function checkSendCodeEnabled(){
@@ -3580,6 +3587,8 @@ document.getElementById('regForm').addEventListener('submit',async e=>{
     const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,nationality,country,clientType,services:[...selected],message:message||undefined,verifyCode})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){errBox.textContent=d.error||'Submission failed ('+r.status+'). Please try again.';errBox.style.display='block';btn.disabled=false;btn.textContent='Submit Enquiry';return;}
+    sessionStorage.removeItem('dafku_verify_email');
+    sessionStorage.setItem('dafku_join_done','1');
     document.getElementById('form-section').style.display='none';
     const s=document.getElementById('successSection');s.style.display='flex';
   }catch(err){

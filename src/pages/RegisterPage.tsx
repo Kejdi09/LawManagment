@@ -21,6 +21,7 @@ const CLIENT_TYPES = [
 ] as const;
 
 const SS_KEY = 'dafku_verify_email';
+const SS_DONE_KEY = 'dafku_submitted';
 
 export default function RegisterPage() {
   const persistedEmail = sessionStorage.getItem(SS_KEY) || '';
@@ -36,7 +37,7 @@ export default function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(() => !!sessionStorage.getItem(SS_DONE_KEY));
 
   // Email verification state — restored from sessionStorage so a page refresh keeps the code input visible
   const [codeSent, setCodeSent] = useState(!!persistedEmail);
@@ -105,6 +106,7 @@ export default function RegisterPage() {
         verifyCode: codeInput.trim(),
       });
       sessionStorage.removeItem(SS_KEY);
+      sessionStorage.setItem(SS_DONE_KEY, '1');
       setSuccess(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
