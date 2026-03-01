@@ -248,13 +248,14 @@ export default function ClientPortalPage() {
     );
   }
 
-  const showIntakeTab = data.client.status === "SEND_PROPOSAL";
-  const showProposalTab = !!data.proposalSentAt && !!data.proposalSnapshot;
-  const showContractTab = !!data.contractSentAt && !!data.contractSnapshot;
-  const showPaymentTab = data.client.status === 'AWAITING_PAYMENT';
+  const isConfirmedClient = data.client.status === 'CLIENT';
+  const showIntakeTab = !isConfirmedClient && data.client.status === "SEND_PROPOSAL";
+  const showProposalTab = !isConfirmedClient && !!data.proposalSentAt && !!data.proposalSnapshot;
+  const showContractTab = !isConfirmedClient && !!data.contractSentAt && !!data.contractSnapshot;
+  const showPaymentTab = !isConfirmedClient && data.client.status === 'AWAITING_PAYMENT';
   const showInvoicesTab = !!(data.invoices && data.invoices.length > 0);
-  const tabCount = 2 + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showPaymentTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
-  const defaultTab = showPaymentTab ? "payment" : (data.client.status === 'CLIENT' ? "status" : showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status");
+  const tabCount = (isConfirmedClient ? 1 : 2) + (showIntakeTab ? 1 : 0) + (showProposalTab ? 1 : 0) + (showContractTab ? 1 : 0) + (showPaymentTab ? 1 : 0) + (showInvoicesTab ? 1 : 0);
+  const defaultTab = isConfirmedClient ? (showInvoicesTab ? 'invoices' : 'status') : showPaymentTab ? "payment" : showContractTab ? "contract" : showProposalTab ? "proposal" : showIntakeTab ? "intake" : "status";
   const snap = data.proposalSnapshot;
 
   return (
@@ -297,42 +298,90 @@ export default function ClientPortalPage() {
             }
           }}>
           <TabsList className="w-full mb-4 grid" style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
-            <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
-              <FileText className="h-3.5 w-3.5" /> Status
-            </TabsTrigger>
-            {showIntakeTab && (
-              <TabsTrigger value="intake" className="flex items-center gap-1.5 text-xs">
-                <ClipboardList className="h-3.5 w-3.5" /> Intake Form
-              </TabsTrigger>
-            )}
-            {showProposalTab && (
-              <TabsTrigger value="proposal" className="flex items-center gap-1.5 text-xs">
-                <FileText className="h-3.5 w-3.5" /> Proposal
-              </TabsTrigger>
-            )}
-            {showContractTab && (
-              <TabsTrigger value="contract" className="flex items-center gap-1.5 text-xs">
-                <PenLine className="h-3.5 w-3.5" /> Contract
-              </TabsTrigger>
-            )}
-            {showPaymentTab && (
-              <TabsTrigger value="payment" className="flex items-center gap-1.5 text-xs">
-                <CreditCard className="h-3.5 w-3.5" /> Payment
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
-              <Bot className="h-3.5 w-3.5" /> FAQ
-            </TabsTrigger>
-            {showInvoicesTab && (
-              <TabsTrigger value="invoices" className="flex items-center gap-1.5 text-xs">
-                <Receipt className="h-3.5 w-3.5" /> Invoices
-              </TabsTrigger>
+            {isConfirmedClient ? (
+              <>
+                {showInvoicesTab && (
+                  <TabsTrigger value="invoices" className="flex items-center gap-1.5 text-xs">
+                    <Receipt className="h-3.5 w-3.5" /> Invoices
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
+                  <FileText className="h-3.5 w-3.5" /> Cases
+                </TabsTrigger>
+                <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
+                  <Bot className="h-3.5 w-3.5" /> Messages
+                </TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="status" className="flex items-center gap-1.5 text-xs">
+                  <FileText className="h-3.5 w-3.5" /> Status
+                </TabsTrigger>
+                {showIntakeTab && (
+                  <TabsTrigger value="intake" className="flex items-center gap-1.5 text-xs">
+                    <ClipboardList className="h-3.5 w-3.5" /> Intake Form
+                  </TabsTrigger>
+                )}
+                {showProposalTab && (
+                  <TabsTrigger value="proposal" className="flex items-center gap-1.5 text-xs">
+                    <FileText className="h-3.5 w-3.5" /> Proposal
+                  </TabsTrigger>
+                )}
+                {showContractTab && (
+                  <TabsTrigger value="contract" className="flex items-center gap-1.5 text-xs">
+                    <PenLine className="h-3.5 w-3.5" /> Contract
+                  </TabsTrigger>
+                )}
+                {showPaymentTab && (
+                  <TabsTrigger value="payment" className="flex items-center gap-1.5 text-xs">
+                    <CreditCard className="h-3.5 w-3.5" /> Payment
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="faq" className="flex items-center gap-1.5 text-xs">
+                  <Bot className="h-3.5 w-3.5" /> FAQ
+                </TabsTrigger>
+                {showInvoicesTab && (
+                  <TabsTrigger value="invoices" className="flex items-center gap-1.5 text-xs">
+                    <Receipt className="h-3.5 w-3.5" /> Invoices
+                  </TabsTrigger>
+                )}
+              </>
             )}
           </TabsList>
 
           {/* ── STATUS TAB ── */}
           <TabsContent value="status" className="space-y-4 mt-0">
-            {/* Welcome card */}
+            {/* Welcome card — CLIENT version */}
+            {isConfirmedClient ? (
+              <div className="rounded-xl border border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 via-emerald-50/60 to-teal-50/30 dark:from-green-950/40 dark:via-emerald-950/20 dark:to-teal-950/10 px-5 py-5">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="h-12 w-12 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-lg shrink-0 select-none shadow-md">
+                    {data.client.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-base text-green-900 dark:text-green-200">{data.client.name}</p>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-300 text-[10px] font-semibold px-2 py-0.5 border border-green-200 dark:border-green-700">
+                        <CheckCircle2 className="h-3 w-3" /> Confirmed Client
+                      </span>
+                    </div>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Welcome to the DAFKU client family — we're delighted to have you on board.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                  <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-green-100 dark:border-green-800/60 px-3 py-2.5 space-y-0.5">
+                    <p className="text-muted-foreground uppercase tracking-wide text-[10px] font-medium">Your Lawyer</p>
+                    <p className="font-semibold text-foreground">DAFKU Legal Team</p>
+                    <p className="text-muted-foreground">+355 69 69 52 989</p>
+                  </div>
+                  <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-green-100 dark:border-green-800/60 px-3 py-2.5 space-y-0.5">
+                    <p className="text-muted-foreground uppercase tracking-wide text-[10px] font-medium">Email</p>
+                    <p className="font-semibold text-foreground break-all">info@dafkulawfirm.al</p>
+                    <p className="text-muted-foreground">Mon–Fri, 09:00–17:00</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="rounded-lg border border-violet-200/60 dark:border-violet-800/30 bg-gradient-to-br from-violet-50/60 to-indigo-50/20 dark:from-violet-950/20 dark:to-indigo-950/10 px-4 py-4">
               <div className="flex items-center gap-3 mb-2">
                 <div className="h-9 w-9 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold text-base shrink-0 select-none">
@@ -345,9 +394,10 @@ export default function ClientPortalPage() {
               </div>
               <p className="text-xs text-muted-foreground pl-12">This is your secure space to track your case, review proposals, and communicate directly with your lawyer.</p>
             </div>
+            )}
 
-            {/* Journey progress */}
-            {(() => {
+            {/* Journey progress — hide for confirmed clients */}
+            {!isConfirmedClient && (() => {
               const steps = [
                 { key: 'enquiry', label: 'Enquiry' },
                 { key: 'intake', label: 'Intake' },
@@ -395,7 +445,7 @@ export default function ClientPortalPage() {
               );
             })()}
 
-            {data.client.status === 'CLIENT' && (
+            {data.client.status === 'CLIENT' && false && (
               <div className="rounded-md border border-green-300 bg-green-50/60 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 text-sm text-center space-y-0.5">
                 <p className="font-semibold text-green-800 dark:text-green-300">✓ You are a confirmed DAFKU client</p>
                 <p className="text-xs text-muted-foreground">We're committed to providing you with the best legal support. Your lawyer will be in touch regarding next steps — feel free to send a message any time.</p>
@@ -455,6 +505,7 @@ export default function ClientPortalPage() {
                 </p>
               </div>
             )}
+            {!isConfirmedClient && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">{data.client.name}</CardTitle>
@@ -470,6 +521,7 @@ export default function ClientPortalPage() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {data.cases.length > 0 && (
               <div className="space-y-3">
@@ -482,9 +534,18 @@ export default function ClientPortalPage() {
               </div>
             )}
 
+            {isConfirmedClient && (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground text-sm">Need help or have a question?</p>
+                <p>Reach your legal team directly via the <strong>Messages</strong> tab, by email at <strong>info@dafkulawfirm.al</strong>, or on WhatsApp: <strong>+355 69 69 52 989</strong>.</p>
+                <p>Our office hours are Monday to Friday, 09:00–17:00.</p>
+              </div>
+            )}
+            {!isConfirmedClient && (
             <p className="text-center text-xs text-muted-foreground pt-2 border-t">
               Have a question? Use the Messages tab or reach us on WhatsApp: <strong>+355 69 69 52 989</strong> — we're here to help.
             </p>
+            )}
           </TabsContent>
 
           {/* ── INTAKE TAB ── */}
@@ -979,17 +1040,29 @@ export default function ClientPortalPage() {
             </TabsContent>
           )}
 
-          {/* ── FAQ TAB ── */}
+          {/* ── FAQ / MESSAGES TAB ── */}
           <TabsContent value="faq" className="mt-0 space-y-3">
             <div className="rounded-md border bg-primary/5 px-4 py-3 text-sm space-y-0.5">
-              <p className="font-semibold">Frequently Asked Questions</p>
-              <p className="text-xs text-muted-foreground">Ask anything about our services, timelines, fees, or process — our assistant will find the answer instantly.</p>
+              <p className="font-semibold">{isConfirmedClient ? 'Messages & Support' : 'Frequently Asked Questions'}</p>
+              <p className="text-xs text-muted-foreground">
+                {isConfirmedClient
+                  ? 'Send a message to your legal team or ask a question — we typically respond within one business day.'
+                  : 'Ask anything about our services, timelines, fees, or process — our assistant will find the answer instantly.'}
+              </p>
             </div>
             <FaqBot />
+            {!isConfirmedClient && (
             <p className="text-xs text-muted-foreground text-center">
               Didn&apos;t find your answer?{" "}
               <span className="font-medium">Switch to the Messages tab</span> to chat with your lawyer directly.
             </p>
+            )}
+            {isConfirmedClient && (
+              <div className="rounded-md border bg-muted/30 px-4 py-3 text-xs text-muted-foreground space-y-1 text-center">
+                <p>You can also reach us directly via email: <strong>info@dafkulawfirm.al</strong></p>
+                <p>Or WhatsApp: <strong>+355 69 69 52 989</strong> — Mon–Fri, 09:00–17:00</p>
+              </div>
+            )}
           </TabsContent>
 
         </Tabs>

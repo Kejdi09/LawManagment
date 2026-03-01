@@ -1120,7 +1120,7 @@ const Customers = () => {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end items-center gap-2 flex-nowrap opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end items-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="outline" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(c.customerId); }} aria-label="Edit">
@@ -1178,7 +1178,7 @@ const Customers = () => {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         if (window.confirm('Unarchive this customer? They will return to Active lists.')) {
-                                          handleSetStatus(c.customerId, 'INTAKE');
+                                          handleSetStatus(c.customerId, (c.preArchiveStatus as LeadStatus) || 'INTAKE');
                                         }
                                       }}
                                       aria-label="Unarchive"

@@ -144,6 +144,8 @@ export interface Customer {
   country?: string;
   /** When true, the portal intake bot is forced to restart (staff-triggered reset) */
   intakeBotReset?: boolean;
+  /** Status saved before archiving, used to restore on unarchive */
+  preArchiveStatus?: string;
   /** ISO timestamp of when the client accepted the proposal */
   proposalAcceptedAt?: string;
   /** ISO timestamp of when the contract was formally sent to the client */

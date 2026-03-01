@@ -1248,6 +1248,14 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
     'SEND_CONTRACT', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT', 'SEND_RESPONSE', 'CLIENT',
   ];
   const SIDE_STATUSES = ['ARCHIVED', 'ON_HOLD', 'CONSULTATION_SCHEDULED', 'CONSULTATION_DONE'];
+  // When archiving, remember the current status so it can be restored on unarchive
+  if (update.status === 'ARCHIVED' && current.status !== 'ARCHIVED') {
+    update.preArchiveStatus = current.status;
+  }
+  // When unarchiving (leaving ARCHIVED without an explicit pipeline target), restore preArchiveStatus
+  if (current.status === 'ARCHIVED' && update.status && update.status !== 'ARCHIVED') {
+    update.preArchiveStatus = null;
+  }
   if (update.status !== undefined && update.status !== current.status) {
     const currentIdx = PIPELINE_ORDER.indexOf(current.status);
     const newIdx = PIPELINE_ORDER.indexOf(update.status);
@@ -1348,10 +1356,11 @@ app.put("/api/customers/:id", verifyAuth, async (req, res) => {
       confirmedAt: new Date().toISOString(),
     };
     await confirmedClientsCol.updateOne({ customerId: id }, { $set: confirmedPayload }, { upsert: true });
-    // Auto-draft invoice from proposal fee fields if any fee data is present
+    // Auto-draft invoice from proposal fee fields if no invoice already exists for this customer
     const pf = confirmedPayload.proposalFields || {};
     const totalAmt = (Number(pf.serviceFeeALL) || 0) + (Number(pf.poaFeeALL) || 0) + (Number(pf.translationFeeALL) || 0) + (Number(pf.otherFeesALL) || 0);
-    if (totalAmt > 0) {
+    const existingInvForClient = totalAmt > 0 ? await invoicesCol.findOne({ customerId: id, status: { $ne: 'cancelled' } }) : null;
+    if (totalAmt > 0 && !existingInvForClient) {
       const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
       const svcNames = (confirmedPayload.services || []).map(s => SVC_LABELS[s] || s).join(', ');
       await invoicesCol.insertOne({
@@ -2834,27 +2843,6 @@ app.post('/api/portal/:token/respond-proposal', portalActionLimiter, async (req,
       changedByConsultant: null,
       changedByLawyer: null,
     });
-    // Auto-draft invoice from proposal fee snapshot
-    const snap = customer.proposalSnapshot || customer.proposalFields || {};
-    const invAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
-    if (invAmt > 0) {
-      const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
-      const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
-      await invoicesCol.insertOne({
-        invoiceId: genShortId('INV'),
-        customerId: customer.customerId,
-        caseId: null,
-        description: `Legal Services${svcNames ? ` — ${svcNames}` : ''} — ${customer.name}`,
-        amount: invAmt,
-        currency: 'ALL',
-        status: 'pending',
-        dueDate: null,
-        createdAt: now,
-        createdBy: 'portal-client',
-        assignedTo: customer.assignedTo || null,
-        autoDrafted: true,
-      });
-    }
     return res.json({ ok: true, status: 'SEND_CONTRACT' });
   }
 
@@ -2963,25 +2951,33 @@ app.post('/api/portal/:token/respond-contract', portalActionLimiter, async (req,
     changedByLawyer: assignedTo,
   });
 
-  // Auto-create initial payment invoice if admin set an initialPaymentAmount
-  if (customer.initialPaymentAmount && customer.initialPaymentAmount > 0) {
-    const SVC_LABELS = { residency_pensioner: 'Residency Permit – Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
-    const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
-    await invoicesCol.insertOne({
-      invoiceId: genShortId('INV'),
-      customerId: customer.customerId,
-      caseId: null,
-      description: `Initial Payment — ${svcNames ? svcNames + ' — ' : ''}${customer.name || customer.customerId}`,
-      amount: customer.initialPaymentAmount,
-      currency: customer.initialPaymentCurrency || 'EUR',
-      status: 'pending',
-      dueDate: null,
-      createdAt: now,
-      createdBy: 'system',
-      assignedTo: assignedTo || null,
-      autoCreated: true,
-      source: 'contract_acceptance',
-    });
+  // Auto-create invoice for total proposal amount when contract is signed
+  {
+    const SVC_LABELS = { residency_pensioner: 'Residency Permit \u2013 Pensioner', visa_d: 'Type D Visa & Residence Permit', company_formation: 'Company Formation', real_estate: 'Real Estate Investment' };
+    const snap = customer.contractSnapshot || customer.proposalSnapshot || customer.proposalFields || {};
+    const totalAmt = (Number(snap.serviceFeeALL) || 0) + (Number(snap.poaFeeALL) || 0) + (Number(snap.translationFeeALL) || 0) + (Number(snap.otherFeesALL) || 0);
+    if (totalAmt > 0) {
+      // Only create if no invoice already exists for this customer (idempotent)
+      const existingInv = await invoicesCol.findOne({ customerId: customer.customerId, status: { $ne: 'cancelled' } });
+      if (!existingInv) {
+        const svcNames = (customer.services || []).map(s => SVC_LABELS[s] || s).join(', ');
+        await invoicesCol.insertOne({
+          invoiceId: genShortId('INV'),
+          customerId: customer.customerId,
+          caseId: null,
+          description: `Legal Services${svcNames ? ` \u2014 ${svcNames}` : ''} \u2014 ${customer.name}`,
+          amount: totalAmt,
+          currency: 'ALL',
+          status: 'pending',
+          dueDate: null,
+          createdAt: now,
+          createdBy: 'portal-client',
+          assignedTo: assignedTo || null,
+          autoDrafted: true,
+          source: 'contract_acceptance',
+        });
+      }
+    }
   }
 
   // Welcome email telling client to complete payment

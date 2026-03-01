@@ -69,7 +69,7 @@ export default function InvoicesPage() {
   const [confirmCustomer, setConfirmCustomer] = useState<Customer | null>(null);
   const [confirmInitialAmt, setConfirmInitialAmt] = useState("");
   const [confirmCurrency, setConfirmCurrency] = useState("EUR");
-  const [confirmInvoiceId, setConfirmInvoiceId] = useState("");
+  const [confirmInvoiceId, setConfirmInvoiceId] = useState("__none__");
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   // Payment modal state
@@ -197,7 +197,7 @@ export default function InvoicesPage() {
       await markPaymentDone(confirmCustomer.customerId, {
         initialPaymentAmount: amt,
         currency: confirmCurrency,
-        invoiceId: confirmInvoiceId || undefined,
+        invoiceId: (confirmInvoiceId && confirmInvoiceId !== '__none__') ? confirmInvoiceId : undefined,
       });
       toast({ title: "Payment confirmed", description: `${confirmCustomer.name} is now an active client.` });
       setConfirmCustomer(null);
@@ -328,7 +328,7 @@ export default function InvoicesPage() {
                           setConfirmCustomer(c);
                           setConfirmInitialAmt(c.initialPaymentAmount ? String(c.initialPaymentAmount) : c.paymentAmountEUR ? String(c.paymentAmountEUR) : "");
                           setConfirmCurrency(c.initialPaymentCurrency ?? (c.paymentAmountEUR ? "EUR" : "ALL"));
-                          setConfirmInvoiceId(customerInvoices[0]?.invoiceId ?? "");
+                          setConfirmInvoiceId(customerInvoices[0]?.invoiceId ?? "__none__");
                         }}
                       >
                         <Check className="h-3 w-3 mr-1" />Confirm Payment
@@ -723,7 +723,7 @@ export default function InvoicesPage() {
                   <Select value={confirmInvoiceId} onValueChange={setConfirmInvoiceId}>
                     <SelectTrigger className="text-sm"><SelectValue placeholder="Select invoice" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">— None —</SelectItem>
+                      <SelectItem value="__none__">— None —</SelectItem>
                       {invoices.filter((i) => i.customerId === confirmCustomer.customerId && i.status !== 'cancelled').map((i) => (
                         <SelectItem key={i.invoiceId} value={i.invoiceId}>
                           {i.invoiceId} · {i.currency} {i.amount.toLocaleString()} ({i.status})
