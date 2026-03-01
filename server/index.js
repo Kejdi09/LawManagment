@@ -265,6 +265,7 @@ let auditLogsCol;
 let portalNotesCol;
 let portalMessagesCol;
 let deletedRecordsCol;
+let emailVerifyCodesCol;
 
 let JWT_SECRET = process.env.JWT_SECRET || null;
 
@@ -312,6 +313,7 @@ async function connectDb() {
   portalNotesCol = db.collection("portalNotes");
   portalMessagesCol = db.collection("portalMessages");
   deletedRecordsCol = db.collection("deletedRecords");
+  emailVerifyCodesCol = db.collection("emailVerifyCodes");
 }
 
 async function seedIfEmpty() {
@@ -720,6 +722,9 @@ async function runDataMigrations() {
     // Portal token indexes for fast token lookups and customer revocation
     portalTokensCol.createIndex({ token: 1 }),
     portalTokensCol.createIndex({ customerId: 1 }),
+    // Email verify codes: TTL index auto-deletes expired docs; unique on email
+    emailVerifyCodesCol.createIndex({ email: 1 }, { unique: true }),
+    emailVerifyCodesCol.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 
   const [customers, confirmedClients, caseRows] = await Promise.all([
@@ -3319,8 +3324,7 @@ app.delete('/api/invoices/:invoiceId/payments/:paymentId', verifyAuth, async (re
 // Per-IP submission rate limiter: ip → [timestamps]
 const _intakeRateMap = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const _emailVerifyCodes = new Map(); // email -> { code, expires, attempts }
-const VERIFY_CODE_TTL = 10 * 60 * 1000; // 10 minutes
+const VERIFY_CODE_TTL_SECS = 10 * 60; // 10 minutes in seconds
 const _verifyCodeRateMap = new Map(); // ip -> [timestamps]
 const RATE_MAX = 3;
 
@@ -3491,7 +3495,8 @@ textarea{resize:vertical;min-height:90px;font-family:inherit}
 </main>
 <script>
 let clientType='Individual';
-let codeSentTo='';
+let codeSentTo=sessionStorage.getItem('dafku_verify_email')||'';
+if(codeSentTo){document.getElementById('codeRow').style.display='block';document.getElementById('f-email').value=codeSentTo;}
 document.querySelectorAll('#typeGrid .type-card').forEach(card=>{
   card.addEventListener('click',()=>{
     clientType=card.dataset.val;
@@ -3524,6 +3529,7 @@ async function handleSendCode(){
     const d=await r.json().catch(()=>({}));
     if(!r.ok){codeMsg.style.color='#fca5a5';codeMsg.textContent=d.error||'Failed to send code.';btn.disabled=false;btn.textContent='Send Code';return;}
     codeSentTo=email;
+    sessionStorage.setItem('dafku_verify_email',email);
     document.getElementById('codeRow').style.display='block';
     document.getElementById('f-code').focus();
     codeMsg.style.color='#4ade80';codeMsg.textContent='Code sent! Check your email (also check spam).';
@@ -3584,15 +3590,20 @@ app.post('/api/send-verify-code', async (req, res) => {
     return res.status(429).json({ error: 'Too many code requests. Please wait before trying again.' });
   }
   // Cooldown: don't resend within 60 seconds
-  const existing = _emailVerifyCodes.get(email);
-  if (existing && existing.expires > now + VERIFY_CODE_TTL - 60000) {
+  const existing = await emailVerifyCodesCol.findOne({ email });
+  if (existing && existing.expiresAt > new Date(now + (VERIFY_CODE_TTL_SECS - 60) * 1000)) {
     return res.status(429).json({ error: 'A code was already sent. Please wait 1 minute before requesting a new one.' });
   }
   ipHits.push(now);
   _verifyCodeRateMap.set(ip, ipHits);
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  _emailVerifyCodes.set(email, { code, expires: now + VERIFY_CODE_TTL, attempts: 0 });
+  const expiresAt = new Date(now + VERIFY_CODE_TTL_SECS * 1000);
+  await emailVerifyCodesCol.updateOne(
+    { email },
+    { $set: { code, expiresAt, attempts: 0 } },
+    { upsert: true },
+  );
 
   sendEmail({
     to: email,
@@ -3636,18 +3647,22 @@ app.post('/api/register', async (req, res) => {
   if (String(name).trim().length > 120) return res.status(400).json({ error: 'Name is too long.' });
   // Email verification code check
   if (!verifyCode) return res.status(400).json({ error: 'Please verify your email address first.' });
-  const storedVerify = _emailVerifyCodes.get(normalEmail);
+  const storedVerify = await emailVerifyCodesCol.findOne({ email: normalEmail });
   if (!storedVerify) return res.status(400).json({ error: 'No verification code found. Please request a new code.' });
-  if (storedVerify.expires < Date.now()) {
-    _emailVerifyCodes.delete(normalEmail);
+  if (storedVerify.expiresAt < new Date()) {
+    await emailVerifyCodesCol.deleteOne({ email: normalEmail });
     return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
   }
-  storedVerify.attempts = (storedVerify.attempts || 0) + 1;
-  if (storedVerify.attempts > 5) return res.status(429).json({ error: 'Too many failed attempts. Please request a new code.' });
+  const newAttempts = (storedVerify.attempts || 0) + 1;
+  if (newAttempts > 5) {
+    await emailVerifyCodesCol.deleteOne({ email: normalEmail });
+    return res.status(429).json({ error: 'Too many failed attempts. Please request a new code.' });
+  }
+  await emailVerifyCodesCol.updateOne({ email: normalEmail }, { $set: { attempts: newAttempts } });
   if (storedVerify.code !== String(verifyCode).trim()) {
     return res.status(400).json({ error: 'Incorrect verification code. Please check the code and try again.' });
   }
-  _emailVerifyCodes.delete(normalEmail); // one-use only
+  await emailVerifyCodesCol.deleteOne({ email: normalEmail }); // one-use only
   try {
   // Duplicate check
   const [dupCust, dupClient] = await Promise.all([

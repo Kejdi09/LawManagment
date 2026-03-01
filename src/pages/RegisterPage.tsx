@@ -20,10 +20,13 @@ const CLIENT_TYPES = [
   { value: "Company", label: "Company" },
 ] as const;
 
+const SS_KEY = 'dafku_verify_email';
+
 export default function RegisterPage() {
+  const persistedEmail = sessionStorage.getItem(SS_KEY) || '';
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: persistedEmail,
     phone: "",
     nationality: "",
     country: "",
@@ -35,12 +38,12 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Email verification state
-  const [codeSent, setCodeSent] = useState(false);
+  // Email verification state — restored from sessionStorage so a page refresh keeps the code input visible
+  const [codeSent, setCodeSent] = useState(!!persistedEmail);
   const [sendingCode, setSendingCode] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [codeSentTo, setCodeSentTo] = useState("");
+  const [codeSentTo, setCodeSentTo] = useState(persistedEmail);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim());
   const emailChanged = form.email.trim().toLowerCase() !== codeSentTo.toLowerCase();
@@ -50,9 +53,11 @@ export default function RegisterPage() {
     setSendingCode(true);
     try {
       await sendVerifyCode(form.email.trim());
-      setCodeSentTo(form.email.trim());
+      const sentTo = form.email.trim();
+      setCodeSentTo(sentTo);
       setCodeSent(true);
       setCodeInput("");
+      sessionStorage.setItem(SS_KEY, sentTo);
     } catch (err: unknown) {
       setCodeError(err instanceof Error ? err.message : "Failed to send code.");
     } finally {
@@ -92,6 +97,7 @@ export default function RegisterPage() {
         message: form.message.trim() || undefined,
         verifyCode: codeInput.trim(),
       });
+      sessionStorage.removeItem(SS_KEY);
       setSuccess(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
