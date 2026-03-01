@@ -191,6 +191,10 @@ export interface Customer {
   initialPaymentCurrency?: string | null;
   /** ISO timestamp of when the payment reminder was sent */
   paymentReminderSentAt?: string | null;
+  /** First portal inactivity reminder (days after status change). Default: 3 */
+  portalReminderFirstDays?: number | null;
+  /** Second portal inactivity reminder (days after status change). Default: 7 */
+  portalReminderSecondDays?: number | null;
 }
 
 export interface HistoryRecord {

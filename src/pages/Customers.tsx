@@ -47,7 +47,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, ShieldCheck, Copy } from "lucide-react";
+import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, ShieldCheck, Copy, Download, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -245,6 +245,9 @@ const Customers = () => {
   const [initialPayAmt, setInitialPayAmt] = useState("");
   const [initialPayCurrency, setInitialPayCurrency] = useState("EUR");
   const [savingInitialPay, setSavingInitialPay] = useState(false);
+  const [reminderFirstDays, setReminderFirstDays] = useState("");
+  const [reminderSecondDays, setReminderSecondDays] = useState("");
+  const [savingReminders, setSavingReminders] = useState(false);
   const [showIntakeSheet, setShowIntakeSheet] = useState(false);
   const [resetBotLoading, setResetBotLoading] = useState(false);
   const [customerPortalToken, setCustomerPortalToken] = useState<{ token: string; expiresAt: string } | null>(null);
@@ -332,6 +335,12 @@ const Customers = () => {
       setInitialPayAmt(selectedCustomer.initialPaymentAmount ? String(selectedCustomer.initialPaymentAmount) : '');
       setInitialPayCurrency(selectedCustomer.initialPaymentCurrency ?? 'EUR');
     }
+  }, [selectedCustomer?.customerId]);
+
+  // Sync reminder timing inputs when a customer is selected
+  useEffect(() => {
+    setReminderFirstDays(selectedCustomer?.portalReminderFirstDays != null ? String(selectedCustomer.portalReminderFirstDays) : '');
+    setReminderSecondDays(selectedCustomer?.portalReminderSecondDays != null ? String(selectedCustomer.portalReminderSecondDays) : '');
   }, [selectedCustomer?.customerId]);
 
   const filteredCustomers = useMemo(() => {
@@ -818,8 +827,63 @@ const Customers = () => {
     }
   };
 
-  const handleDownloadCustomerDocument = async (docId: string, originalName?: string) => {
+  const handleExportCSV = () => {
+    const rows = statusFilteredCustomers;
+    if (rows.length === 0) { toast({ title: "Nothing to export", description: "No customers match the current filters." }); return; }
+    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const headers = ['ID','Name','Email','Phone','Status','Assigned To','Registered At','Services','Contact Channel','Proposal Viewed','Contract Viewed'];
+    const lines = [
+      headers.join(','),
+      ...rows.map((c) => [
+        escape(c.customerId),
+        escape(c.name),
+        escape(c.email),
+        escape(c.phone),
+        escape(c.status),
+        escape(c.assignedTo ?? ''),
+        escape(c.registeredAt ? new Date(c.registeredAt).toLocaleDateString('en-GB') : ''),
+        escape((c.services ?? []).map((s: string) => SERVICE_LABELS[s] ?? s).join('; ')),
+        escape(CONTACT_CHANNEL_LABELS[c.contactChannel] ?? c.contactChannel),
+        escape(c.proposalViewedAt ? new Date(c.proposalViewedAt).toLocaleDateString('en-GB') : ''),
+        escape(c.contractViewedAt ? new Date(c.contractViewedAt).toLocaleDateString('en-GB') : ''),
+      ].join(',')),
+    ];
+    const csv = lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `customers-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: `${rows.length} customers exported as CSV.` });
+  };
+
+  const handleSaveReminderTiming = async () => {
+    if (!selectedCustomer) return;
+    const first = reminderFirstDays === '' ? null : Math.max(1, parseInt(reminderFirstDays, 10) || 3);
+    const second = reminderSecondDays === '' ? null : Math.max(1, parseInt(reminderSecondDays, 10) || 7);
+    setSavingReminders(true);
     try {
+      await updateCustomer(selectedCustomer.customerId, {
+        portalReminderFirstDays: first,
+        portalReminderSecondDays: second,
+        expectedVersion: selectedCustomer.version ?? 1,
+      } as Partial<Customer>);
+      const updated = { ...selectedCustomer, portalReminderFirstDays: first, portalReminderSecondDays: second };
+      setSelectedCustomer(updated);
+      setCustomers((prev) => prev.map((c) => c.customerId === selectedCustomer.customerId ? updated : c));
+      toast({ title: 'Reminder timing saved', description: `First: ${first ?? 3}d • Second: ${second ?? 7}d after status change.` });
+    } catch (err: unknown) {
+      toast({ title: 'Save failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+    } finally {
+      setSavingReminders(false);
+    }
+  };
+
+  const handleDownloadCustomerDocument = async (docId: string, originalName?: string) => {    try {
       const { blob, fileName } = await fetchDocumentBlob(docId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -834,7 +898,14 @@ const Customers = () => {
     }
   };
   return (
-    <MainLayout title="Customers" right={<CaseAlerts filterType="customer" />}>
+    <MainLayout title="Customers" right={
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={handleExportCSV}>
+          <Download className="h-3.5 w-3.5" /> Export CSV
+        </Button>
+        <CaseAlerts filterType="customer" />
+      </div>
+    }>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           <Card>
@@ -1581,6 +1652,52 @@ const Customers = () => {
                             </Button>
                           </div>
                         )}
+                        {/* Reminder timing – visible when client must act (portal reminder statuses) */}
+                        {['WAITING_APPROVAL', 'WAITING_ACCEPTANCE', 'AWAITING_PAYMENT'].includes(selectedCustomer.status) && (
+                          <div className="rounded-md border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2 space-y-1.5 mt-1">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                              <BellRing className="h-3.5 w-3.5" /> Follow-up email schedule
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">Days after status change before auto-reminder is sent. Leave blank to use defaults (3d / 7d).</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">1st reminder</span>
+                                <Input
+                                  type="number"
+                                  className="h-6 text-xs w-16 bg-white dark:bg-zinc-900"
+                                  placeholder="3"
+                                  min={1}
+                                  value={reminderFirstDays}
+                                  onChange={(e) => setReminderFirstDays(e.target.value)}
+                                  disabled={savingReminders}
+                                />
+                                <span className="text-xs text-muted-foreground">days</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">2nd reminder</span>
+                                <Input
+                                  type="number"
+                                  className="h-6 text-xs w-16 bg-white dark:bg-zinc-900"
+                                  placeholder="7"
+                                  min={1}
+                                  value={reminderSecondDays}
+                                  onChange={(e) => setReminderSecondDays(e.target.value)}
+                                  disabled={savingReminders}
+                                />
+                                <span className="text-xs text-muted-foreground">days</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs px-2"
+                                disabled={savingReminders}
+                                onClick={handleSaveReminderTiming}
+                              >
+                                {savingReminders ? 'Saving…' : 'Save'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                         {/* Mark Payment Done – activate client once payment is confirmed */}
                         {selectedCustomer.status === 'AWAITING_PAYMENT' && !selectedCustomer.paymentDoneAt && (
                           <div className="flex flex-wrap gap-2 pt-1">
@@ -1806,6 +1923,31 @@ const Customers = () => {
                           </div>
                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={() => setShowProposalModal(true)}>
                             <FileText className="h-3.5 w-3.5" /> View / Edit Proposal
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Contract Sent summary card */}
+                    {selectedCustomer.contractSentAt && selectedCustomer.contractSnapshot && (
+                      <Card className="border-violet-200 bg-violet-50/40 dark:bg-violet-950/20 dark:border-violet-900">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center gap-2 text-violet-800 dark:text-violet-300">
+                            <FileText className="h-4 w-4" />
+                            Contract Sent — {safeFormatDate(selectedCustomer.contractSentAt)}
+                            {selectedCustomer.contractViewedAt && (
+                              <span className="text-xs font-normal text-violet-600 dark:text-violet-400 ml-1">
+                                · Viewed {safeFormatDate(selectedCustomer.contractViewedAt)}
+                              </span>
+                            )}
+                            {!selectedCustomer.contractViewedAt && (
+                              <span className="text-xs font-normal text-amber-600 dark:text-amber-400 ml-1">· Not yet viewed</span>
+                            )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={() => setShowContractModal(true)}>
+                            <FileText className="h-3.5 w-3.5" /> View / Edit Contract
                           </Button>
                         </CardContent>
                       </Card>

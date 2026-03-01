@@ -447,6 +447,16 @@ export async function markProposalViewed(token: string): Promise<void> {
   }
 }
 
+export async function markContractViewed(token: string): Promise<void> {
+  try {
+    await fetch(`${API_URL}/api/portal/${encodeURIComponent(token)}/contract-viewed`, {
+      method: "POST",
+    });
+  } catch {
+    // non-blocking — ignore errors
+  }
+}
+
 export async function getPortalNotes(customerId: string): Promise<PortalNote[]> {
   return api<PortalNote[]>(`/api/portal-notes/${customerId}`);
 }

@@ -551,6 +551,8 @@ async function syncCustomerNotifications() {
           lastFollowupAt: null,
           lastRespondAt: null,
           onHoldFollowupNotifiedFor: null,
+          portalReminder3dSentAt: null,
+          portalReminder7dSentAt: null,
         }
         : {
           status,
@@ -559,6 +561,8 @@ async function syncCustomerNotifications() {
           lastFollowupAt: prevTracker.lastFollowupAt || null,
           lastRespondAt: prevTracker.lastRespondAt || null,
           onHoldFollowupNotifiedFor: prevTracker.onHoldFollowupNotifiedFor || null,
+          portalReminder3dSentAt: prevTracker.portalReminder3dSentAt || null,
+          portalReminder7dSentAt: prevTracker.portalReminder7dSentAt || null,
         };
 
       const hoursSinceLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : 0;
@@ -615,14 +619,8 @@ async function syncCustomerNotifications() {
       if (FOLLOW_UP_24H_STATUSES.includes(status) || FOLLOW_UP_72H_STATUSES.includes(status)) {
         const followupInterval = FOLLOW_UP_24H_STATUSES.includes(status) ? 24 : 72;
         const elapsedFromLastFollowup = tracker.lastFollowupAt ? hoursBetween(tracker.lastFollowupAt, nowMs) : elapsedFromStatusChange;
-
         if (elapsedFromStatusChange >= followupInterval && elapsedFromLastFollowup >= followupInterval && tracker.followupCount < 3) {
-          await insertCustomerNotification({
-            customerId: customer.customerId,
-            message: `Follow up ${customer.name}`,
-            kind: "follow",
-            severity: followupInterval === 72 ? "critical" : "warn",
-          });
+          // Notification suppressed — tracker still advances so the auto-cleanup counter works
           tracker.followupCount += 1;
           tracker.lastFollowupAt = new Date(nowMs).toISOString();
         }
@@ -632,12 +630,7 @@ async function syncCustomerNotifications() {
         const respondInterval = 24;
         const elapsedFromLastRespond = tracker.lastRespondAt ? hoursBetween(tracker.lastRespondAt, nowMs) : elapsedFromStatusChange;
         if (elapsedFromStatusChange >= respondInterval && elapsedFromLastRespond >= respondInterval) {
-          await insertCustomerNotification({
-            customerId: customer.customerId,
-            message: `Respond to ${customer.name}`,
-            kind: "respond",
-            severity: "warn",
-          });
+          // Notification suppressed
           tracker.lastRespondAt = new Date(nowMs).toISOString();
         }
       }
@@ -645,15 +638,110 @@ async function syncCustomerNotifications() {
       if (status === "ON_HOLD" && customer.followUpDate) {
         const followUpTime = new Date(customer.followUpDate).getTime();
         if (Number.isFinite(followUpTime) && followUpTime <= nowMs && tracker.onHoldFollowupNotifiedFor !== customer.followUpDate) {
+          const followDateLabel = customer.followUpDate.slice(0, 10);
           await insertCustomerNotification({
             customerId: customer.customerId,
-            message: `Follow up ${customer.name} ${customer.customerId}`,
+            message: `Follow up ${customer.name} — due ${followDateLabel}`,
             kind: "follow",
             severity: "warn",
           });
           tracker.onHoldFollowupNotifiedFor = customer.followUpDate;
         }
       }
+
+      // ── Portal inactivity email reminders ────────────────────────────────────
+      // When a client-facing action is pending (review proposal, sign contract,
+      // confirm payment) and 3 or 7 days pass with no action, send a reminder email.
+      // SEND_PROPOSAL / SEND_CONTRACT = admin still needs to send the document.
+      // The client has nothing to act on yet — no reminder to the client for those.
+      // WAITING_APPROVAL = proposal sent, client must approve it.
+      // WAITING_ACCEPTANCE = contract sent, client must sign it.
+      // AWAITING_PAYMENT = contract signed, client must confirm payment method.
+      const PORTAL_REMINDER_STATUSES = {
+        WAITING_APPROVAL: {
+          subject: 'Action Required — Your Legal Proposal Awaits Your Review',
+          action: 'review and approve your proposal',
+          bodyHtml: (name, portalUrl) => `
+            <p>Dear ${name},</p>
+            <p>We have prepared a <strong>legal services proposal</strong> for you, and it is ready for your review in your secure client portal.</p>
+            <div class="box">
+              <p><strong>What you need to do:</strong></p>
+              <p>Log in to your portal and navigate to the <strong>Proposal</strong> tab to review and approve the terms before we proceed with your case.</p>
+            </div>
+            <p style="text-align:center"><a href="${portalUrl}" class="btn">Review My Proposal</a></p>
+            <p>If you have any questions or require clarification before approving, please do not hesitate to contact us on WhatsApp at <strong>+355 69 69 52 989</strong> or by email at <strong>info@dafkulawfirm.al</strong>.</p>
+            <div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`,
+        },
+        WAITING_ACCEPTANCE: {
+          subject: 'Action Required — Your Contract Is Ready for Signing',
+          action: 'review and sign your contract',
+          bodyHtml: (name, portalUrl) => `
+            <p>Dear ${name},</p>
+            <p>Your <strong>legal services contract</strong> has been sent to you and is awaiting your signature in your secure client portal.</p>
+            <div class="box">
+              <p><strong>What you need to do:</strong></p>
+              <p>Log in to your portal and navigate to the <strong>Contract</strong> tab to read and accept the agreement so we can begin working on your case.</p>
+            </div>
+            <p style="text-align:center"><a href="${portalUrl}" class="btn">Sign My Contract</a></p>
+            <p>Please review all terms carefully. If you have questions, contact us on WhatsApp at <strong>+355 69 69 52 989</strong> or at <strong>info@dafkulawfirm.al</strong>.</p>
+            <div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`,
+        },
+        AWAITING_PAYMENT: {
+          subject: 'Action Required — Please Confirm Your Payment Arrangement',
+          action: 'confirm your payment method',
+          bodyHtml: (name, portalUrl) => `
+            <p>Dear ${name},</p>
+            <p>Your contract has been signed and your case is ready to begin. The final step before we start is to <strong>confirm your payment arrangement</strong>.</p>
+            <div class="box">
+              <p><strong>What you need to do:</strong></p>
+              <p>Log in to your portal and select your preferred payment method so we can proceed with your case without further delay.</p>
+            </div>
+            <p style="text-align:center"><a href="${portalUrl}" class="btn">Confirm Payment</a></p>
+            <p>If you have questions about fees or payment options, contact us on WhatsApp at <strong>+355 69 69 52 989</strong>.</p>
+            <div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`,
+        },
+      };
+
+      const reminderConfig = PORTAL_REMINDER_STATUSES[status];
+      if (reminderConfig && customer.email) {
+        const tokenDoc = await portalTokensCol.findOne({ customerId: customer.customerId });
+        const portalUrl = tokenDoc?.token
+          ? `${process.env.APP_URL || 'https://lawmanagment.onrender.com'}/#/portal/${tokenDoc.token}`
+          : null;
+
+        if (portalUrl) {
+          const firstName = (customer.name || 'Valued Client').split(' ')[0];
+          const firstReminderHours = ((customer.portalReminderFirstDays ?? null) > 0 ? customer.portalReminderFirstDays : 3) * 24;
+          const secondReminderHours = ((customer.portalReminderSecondDays ?? null) > 0 ? customer.portalReminderSecondDays : 7) * 24;
+          const send3d = elapsedFromStatusChange >= firstReminderHours && !tracker.portalReminder3dSentAt;
+          const send7d = elapsedFromStatusChange >= secondReminderHours && !tracker.portalReminder7dSentAt;
+
+          if (send3d || send7d) {
+            const isSecond = send7d;
+            const urgency = isSecond
+              ? `<p style="color:#c0392b;font-weight:bold">⚠ This is a second reminder. If no action is taken within the coming days, please contact us directly so we can assist you.</p>`
+              : '';
+            const bodyHtml = reminderConfig.bodyHtml(firstName, portalUrl) + urgency;
+            const subjectLine = isSecond
+              ? `Second Reminder — ${reminderConfig.subject.replace('Action Required — ', '')}`
+              : reminderConfig.subject;
+
+            await sendEmail({
+              to: customer.email,
+              subject: subjectLine,
+              text: `Dear ${firstName},\n\nThis is a reminder to ${reminderConfig.action} via your secure client portal: ${portalUrl}\n\nIf you need help, contact us via WhatsApp: +355 69 69 52 989\n\nDAFKU Law Firm`,
+              html: buildHtmlEmail(bodyHtml),
+            });
+
+            if (send7d && !tracker.portalReminder7dSentAt) {
+              tracker.portalReminder7dSentAt = new Date(nowMs).toISOString();
+            } else if (send3d && !tracker.portalReminder3dSentAt) {
+              tracker.portalReminder3dSentAt = new Date(nowMs).toISOString();
+            }
+          }
+        }
+      }
+      // ── end portal inactivity reminders ──────────────────────────────────────
 
       await set.col.updateOne(
         { customerId: customer.customerId },
@@ -662,6 +750,111 @@ async function syncCustomerNotifications() {
     }
   }
 }
+
+// ── Invoice overdue email reminders ──────────────────────────────────────────
+// Triggered alongside syncCustomerNotifications on every GET /api/customers/notifications.
+// Sends emails to the confirmed client:
+//   • 1 day before due date  (before1d)
+//   • on the due date        (dueDay)
+//   • 3 days after due date  (after3d)
+// Tracks sent flags inside each invoice document under "overdueReminderTracker".
+async function syncInvoiceReminders() {
+  try {
+    const nowMs = Date.now();
+    const invoices = await invoicesCol.find({
+      status: { $nin: ['paid', 'cancelled'] },
+      dueDate: { $exists: true, $ne: null },
+    }).toArray();
+
+    for (const inv of invoices) {
+      if (!inv.dueDate) continue;
+      const dueMs = new Date(inv.dueDate).getTime();
+      if (isNaN(dueMs)) continue;
+
+      const hoursUntilDue = (dueMs - nowMs) / 3_600_000; // negative = overdue
+      const tracker = inv.overdueReminderTracker || {};
+
+      const sendBefore1d = hoursUntilDue <= 24 && hoursUntilDue > 0 && !tracker.before1dSentAt;
+      const sendDueDay   = hoursUntilDue <= 0 && hoursUntilDue > -24 && !tracker.dueDaySentAt;
+      const sendAfter3d  = hoursUntilDue <= -72 && !tracker.after3dSentAt;
+
+      if (!sendBefore1d && !sendDueDay && !sendAfter3d) continue;
+
+      // Look up the client email (confirmed client first, then customer)
+      let clientEmail = null;
+      let clientName = 'Valued Client';
+      const confirmedClient = await confirmedClientsCol.findOne({ customerId: inv.customerId });
+      if (confirmedClient) {
+        clientEmail = confirmedClient.email;
+        clientName = confirmedClient.name || clientName;
+      } else {
+        const customer = await customersCol.findOne({ customerId: inv.customerId });
+        if (customer) {
+          clientEmail = customer.email;
+          clientName = customer.name || clientName;
+        }
+      }
+
+      if (!clientEmail) continue;
+
+      const firstName = clientName.split(' ')[0];
+      const dueDateStr = new Date(inv.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const amountStr = inv.amount != null ? `${inv.amount.toLocaleString()} ${inv.currency || 'ALL'}` : 'the amount due';
+
+      let subject, bodyHtml;
+
+      if (sendBefore1d) {
+        subject = `Invoice Due Tomorrow — ${amountStr}`;
+        bodyHtml = `<p>Dear ${firstName},</p>
+<p>This is a friendly reminder that your invoice for <strong>${amountStr}</strong> is due <strong>tomorrow, ${dueDateStr}</strong>.</p>
+<div class="box"><p><strong>Invoice reference:</strong> ${inv.invoiceId}</p>
+<p><strong>Description:</strong> ${inv.description || 'Legal services'}</p>
+<p><strong>Due date:</strong> ${dueDateStr}</p></div>
+<p>Please ensure payment is made on time to avoid any delays. If you have any questions, contact us on WhatsApp at <strong>+355 69 69 52 989</strong>.</p>
+<div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`;
+        tracker.before1dSentAt = new Date(nowMs).toISOString();
+
+      } else if (sendDueDay) {
+        subject = `Invoice Due Today — ${amountStr}`;
+        bodyHtml = `<p>Dear ${firstName},</p>
+<p>Your invoice for <strong>${amountStr}</strong> is due <strong>today, ${dueDateStr}</strong>.</p>
+<div class="box"><p><strong>Invoice reference:</strong> ${inv.invoiceId}</p>
+<p><strong>Description:</strong> ${inv.description || 'Legal services'}</p>
+<p><strong>Due date:</strong> ${dueDateStr}</p></div>
+<p>If you have already arranged payment, please disregard this message. Otherwise, please process your payment today. Contact us on WhatsApp at <strong>+355 69 69 52 989</strong> if you need assistance.</p>
+<div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`;
+        tracker.dueDaySentAt = new Date(nowMs).toISOString();
+
+      } else if (sendAfter3d) {
+        subject = `Overdue Invoice — Action Required — ${amountStr}`;
+        bodyHtml = `<p>Dear ${firstName},</p>
+<p style="color:#c0392b;font-weight:bold">⚠ Your invoice of <strong>${amountStr}</strong> was due on ${dueDateStr} and remains unpaid.</p>
+<div class="box"><p><strong>Invoice reference:</strong> ${inv.invoiceId}</p>
+<p><strong>Description:</strong> ${inv.description || 'Legal services'}</p>
+<p><strong>Originally due:</strong> ${dueDateStr}</p></div>
+<p>Please settle this invoice as soon as possible or contact us immediately to discuss your situation. Reach us on WhatsApp at <strong>+355 69 69 52 989</strong> or by email.</p>
+<div class="sig">With kind regards,<br><strong>DAFKU Law Firm</strong><br>Legal Services Team</div>`;
+        tracker.after3dSentAt = new Date(nowMs).toISOString();
+      }
+
+      await sendEmail({
+        to: clientEmail,
+        subject,
+        text: `Dear ${firstName},\n\nThis is a reminder about invoice ${inv.invoiceId} for ${amountStr}, due ${dueDateStr}.\n\nDAFKU Law Firm — +355 69 69 52 989`,
+        html: buildHtmlEmail(bodyHtml),
+      });
+
+      await invoicesCol.updateOne(
+        { invoiceId: inv.invoiceId },
+        { $set: { overdueReminderTracker: tracker } }
+      );
+    }
+  } catch (err) {
+    console.error('[syncInvoiceReminders] error:', err);
+  }
+}
+// ── end invoice overdue reminders ────────────────────────────────────────────
+
 // Generate a globally-unique customer ID tagged with the creating user's initials.
 // Format: C-<USER>-<base36-timestamp><4-digit-random>
 // e.g. C-KEJ-lv2k9c3721  — no DB round-trip needed, no race conditions.
@@ -1033,6 +1226,7 @@ app.get("/api/customers", verifyAuth, async (req, res) => {
 app.get("/api/customers/notifications", verifyAuth, async (req, res) => {
   // Refresh notifications before returning.
   await syncCustomerNotifications();
+  await syncInvoiceReminders();
 
   // Load recent notifications then scope them by user access.
   const docs = await customerNotificationsCol.find({}).sort({ createdAt: -1 }).limit(200).toArray();
@@ -2808,6 +3002,26 @@ app.post('/api/portal/:token/proposal-viewed', async (req, res) => {
     await confirmedClientsCol.updateOne(
       { customerId: tokenDoc.customerId, proposalViewedAt: { $exists: false } },
       { $set: { proposalViewedAt: viewedAt } }
+    );
+  }
+  res.json({ ok: true });
+});
+
+// Mark contract as viewed by client (first-view tracking, token-based, no auth)
+app.post('/api/portal/:token/contract-viewed', async (req, res) => {
+  const tokenDoc = await portalTokensCol.findOne({ token: String(req.params.token) });
+  if (!tokenDoc) return res.status(404).json({ error: 'Invalid link' });
+  const viewedAt = new Date().toISOString();
+  // Only record the first view
+  const custResult = await customersCol.findOneAndUpdate(
+    { customerId: tokenDoc.customerId, contractViewedAt: { $exists: false } },
+    { $set: { contractViewedAt: viewedAt } },
+    { returnDocument: 'after' }
+  );
+  if (!custResult) {
+    await confirmedClientsCol.updateOne(
+      { customerId: tokenDoc.customerId, contractViewedAt: { $exists: false } },
+      { $set: { contractViewedAt: viewedAt } }
     );
   }
   res.json({ ok: true });

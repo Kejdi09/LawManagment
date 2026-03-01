@@ -6,6 +6,7 @@ import { CaseTable } from "@/components/CaseTable";
 import { CaseDetail } from "@/components/CaseDetail";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { AgendaWidget } from "@/components/AgendaWidget";
+import { PendingActionsWidget } from "@/components/PendingActionsWidget";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { CalendarClock, ChevronDown, KanbanSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -387,6 +388,8 @@ const Index = () => {
         </button>
 
         {dashboardOpen && <DashboardKPIs key={tick} />}
+
+        {dashboardOpen && <PendingActionsWidget />}
 
         {dashboardOpen && <AgendaWidget customerNames={customerNames} />}
 

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { deleteCustomerNotification, getAllCases, getAllCustomers, getConfirmedClients, getCustomerNotifications } from "@/lib/case-store";
+import { deleteCustomerNotification, getAllCases, getAllCustomers, getConfirmedClients, getCustomerNotifications, getMeetings } from "@/lib/case-store";
 import { mapCaseStateToStage, stripProfessionalTitle } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, X } from "lucide-react";
+import { Bell, CalendarDays, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { Customer, CustomerNotification } from "@/lib/types";
+import { Customer, CustomerNotification, Meeting } from "@/lib/types";
 
 export type AlertFilterType = "case" | "customer" | "all";
 export type CaseScopeType = "client" | "customer";
@@ -57,51 +57,17 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
   const nowMs = Date.now();
   return customers.flatMap((customer) => {
     if (customer.status === "CLIENT" || customer.status === "CONFIRMED") return [];
-    const lastStatusIso = getLastStatusChangeIso(customer);
-    const lastStatusMs = new Date(lastStatusIso).getTime();
-    const elapsedHours = Number.isFinite(lastStatusMs) ? (nowMs - lastStatusMs) / (1000 * 60 * 60) : 0;
     const notifications: CustomerNotification[] = [];
 
-    if (customer.status === "INTAKE" && elapsedHours >= 24) {
-      notifications.push({
-        notificationId: `local-follow-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
-        customerId: customer.customerId,
-        message: `Follow up ${customer.name}`,
-        kind: "follow",
-        severity: "warn",
-        createdAt: lastStatusIso,
-      });
-    }
-
-    if ((customer.status === "WAITING_APPROVAL" || customer.status === "WAITING_ACCEPTANCE") && elapsedHours >= 72) {
-      notifications.push({
-        notificationId: `local-follow72-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
-        customerId: customer.customerId,
-        message: `Follow up ${customer.name}`,
-        kind: "follow",
-        severity: "critical",
-        createdAt: lastStatusIso,
-      });
-    }
-
-    if ((customer.status === "SEND_PROPOSAL" || customer.status === "SEND_CONTRACT" || customer.status === "SEND_RESPONSE") && elapsedHours >= 24) {
-      notifications.push({
-        notificationId: `local-respond-${customer.customerId}-${getVersionTag(lastStatusIso)}`,
-        customerId: customer.customerId,
-        message: `Respond to ${customer.name}`,
-        kind: "respond",
-        severity: "warn",
-        createdAt: lastStatusIso,
-      });
-    }
-
+    // Only ON_HOLD follow-ups survive as fallback alerts
     if (customer.status === "ON_HOLD" && customer.followUpDate) {
       const followUpMs = new Date(customer.followUpDate).getTime();
       if (Number.isFinite(followUpMs) && followUpMs <= nowMs) {
+        const followDateLabel = customer.followUpDate.slice(0, 10);
         notifications.push({
           notificationId: `local-onhold-${customer.customerId}-${getVersionTag(customer.followUpDate)}`,
           customerId: customer.customerId,
-          message: `Follow up ${customer.name}`,
+          message: `Follow up ${customer.name} — due ${followDateLabel}`,
           kind: "follow",
           severity: "warn",
           createdAt: customer.followUpDate,
@@ -115,12 +81,13 @@ function buildFallbackNotifications(customers: Customer[]): CustomerNotification
 
 type AlertItem = {
   id: string;
-  type: "case" | "customer";
+  type: "case" | "customer" | "meeting";
   caseType?: "client" | "customer";
   customerId: string;
   caseId?: string;
+  meetingId?: string;
   message: string;
-  kind: "deadline" | "follow" | "respond";
+  kind: "deadline" | "follow" | "respond" | "meeting";
   severity: "warn" | "critical";
 };
 
@@ -173,6 +140,41 @@ export const CaseAlerts = ({ filterType = "all", caseScope }: { filterType?: Ale
     }, {});
     setCustomersMap(nameMap);
 
+    // ── Meeting alerts (today & past-unfinished) ──────────────────────────────
+    const meetingAlerts: AlertItem[] = [];
+    if (Boolean(user)) {
+      const meetings = await getMeetings();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      (meetings as Meeting[]).forEach((m) => {
+        if (m.status === 'done' || m.status === 'cancelled') return;
+        // Respect per-user scope for non-admins
+        if (!isAdmin && currentLawyer && stripProfessionalTitle(m.assignedTo) !== currentLawyer && m.assignedTo !== user?.username) return;
+        const meetingDate = m.startsAt.slice(0, 10);
+        const timeStr = m.startsAt.length >= 16 ? m.startsAt.slice(11, 16) : '';
+        if (meetingDate === todayStr) {
+          meetingAlerts.push({
+            id: `meeting-today-${m.meetingId}`,
+            type: 'meeting',
+            customerId: m.customerId || '',
+            meetingId: m.meetingId,
+            message: timeStr ? `Meeting: ${m.title} at ${timeStr}` : `Meeting: ${m.title}`,
+            kind: 'meeting',
+            severity: 'warn',
+          });
+        } else if (meetingDate < todayStr) {
+          meetingAlerts.push({
+            id: `meeting-past-${m.meetingId}`,
+            type: 'meeting',
+            customerId: m.customerId || '',
+            meetingId: m.meetingId,
+            message: `Missed meeting: ${m.title}`,
+            kind: 'meeting',
+            severity: 'critical',
+          });
+        }
+      });
+    }
+
     let caseAlerts: AlertItem[] = [];
     if (canSeeCaseAlerts) {
       // Only load cases matching caseScope (client/customer) — prevents cross-type ghost alerts
@@ -212,17 +214,17 @@ export const CaseAlerts = ({ filterType = "all", caseScope }: { filterType?: Ale
         }));
     }
 
-    const combined = [...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
+    const combined = [...meetingAlerts, ...caseAlerts, ...customerAlerts].filter((alert) => !dismissedAlertMap[alert.id]);
     setAlerts(combined);
-  }, [canSeeCaseAlerts, canSeeCustomerAlerts, caseScope, dismissedAlertMap, isAdmin, currentLawyer]);
+  }, [canSeeCaseAlerts, canSeeCustomerAlerts, caseScope, dismissedAlertMap, isAdmin, currentLawyer, user]);
 
   // Unified dismiss — works for both case and customer alerts
   const dismissAlert = useCallback(async (alertId: string, alertType: "case" | "customer") => {
     if (!alertId) return;
     markAlertDismissed(alertId);
     setAlerts((prev) => prev.filter((a) => a.id !== alertId));
-    // Case alerts and local-fallback customer alerts are local only — no server call needed
-    if (alertType === "case" || alertId.startsWith("local-")) return;
+    // Case, meeting, and local-fallback customer alerts are local only — no server call needed
+    if (alertType === "case" || alertType === "meeting" || alertId.startsWith("local-")) return;
     setDismissingIds((prev) => {
       const next = new Set(prev);
       next.add(alertId);
@@ -280,6 +282,11 @@ export const CaseAlerts = ({ filterType = "all", caseScope }: { filterType?: Ale
             <div className="flex w-full items-start justify-between gap-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {a.type === "meeting" && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                      <CalendarDays className="h-3 w-3" /> Meeting
+                    </span>
+                  )}
                   {a.type === "case" && a.caseType && (
                     <span className={`inline-flex rounded px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide ${
                       a.caseType === "client"
@@ -289,9 +296,13 @@ export const CaseAlerts = ({ filterType = "all", caseScope }: { filterType?: Ale
                       {a.caseType === "client" ? "Client Case" : "Customer Case"}
                     </span>
                   )}
-                  <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
+                  <span className="text-sm leading-snug break-words">{a.message ?? (a.kind === 'deadline' ? 'Deadline' : a.kind === 'meeting' ? 'Meeting' : a.kind === 'respond' ? 'Respond' : 'Follow up')}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{customersMap[a.customerId] ? `${customersMap[a.customerId]} (${a.customerId})` : a.customerId}</span>
+                <span className="text-xs text-muted-foreground">
+                  {a.type === "meeting"
+                    ? (customersMap[a.customerId] ? customersMap[a.customerId] : (a.customerId ? a.customerId : 'No client'))
+                    : (customersMap[a.customerId] ? `${customersMap[a.customerId]} (${a.customerId})` : a.customerId)}
+                </span>
               </div>
               {/* X button on every alert — all users can dismiss their own notifications */}
               <Button
