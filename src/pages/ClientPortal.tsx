@@ -201,6 +201,11 @@ export default function ClientPortalPage() {
     getPortalData(token)
       .then((d) => {
         setData(d);
+        // Sync payment method state from server so selection stays hidden on refresh
+        if (d.paymentSelectedMethod) {
+          setPaymentMethod(d.paymentSelectedMethod);
+          setPaymentMethodSaved(true);
+        }
       })
       .catch((e) => {
         const msg = String(e?.message || "");

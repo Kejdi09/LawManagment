@@ -3059,6 +3059,13 @@ app.put('/api/customers/:customerId/initial-payment-amount', verifyAuth, async (
   const currency = String(req.body?.currency || 'EUR').trim();
   if (!amount || amount <= 0) return res.status(400).json({ error: 'amount must be > 0' });
 
+  // Lock once customer has confirmed their payment intent
+  const existing = await customersCol.findOne({ customerId });
+  if (!existing) return res.status(404).json({ error: 'Customer not found' });
+  if (existing.paymentSelectedMethod) {
+    return res.status(409).json({ error: 'Cannot change initial payment amount after the customer has confirmed their payment intent.' });
+  }
+
   const r = await customersCol.findOneAndUpdate(
     { customerId },
     { $set: { initialPaymentAmount: amount, initialPaymentCurrency: currency } },

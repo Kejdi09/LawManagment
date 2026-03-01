@@ -1594,6 +1594,11 @@ const Customers = () => {
                               {/* Initial payment amount editor */}
                               <div className="pt-1 space-y-1">
                                 <p className="font-medium">Initial payment required:</p>
+                                {selectedCustomer.paymentSelectedMethod ? (
+                                  <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
+                                    <span className="text-xs text-amber-800 dark:text-amber-300">🔒 Locked — customer has already confirmed their payment intent. Cannot be changed.</span>
+                                  </div>
+                                ) : (
                                 <div className="flex items-center gap-1.5">
                                   <Input
                                     type="number"
@@ -1638,6 +1643,7 @@ const Customers = () => {
                                     {savingInitialPay ? '…' : 'Save'}
                                   </Button>
                                 </div>
+                                )}
                                 <p className="text-[10px] text-muted-foreground">This amount will be shown to the customer and deducted from their invoice when confirmed.</p>
                               </div>
                             </div>
