@@ -173,7 +173,7 @@ export default function ClientPortalPage() {
         html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      })
+      } as any)
       .from(content)
       .save();
   }
@@ -190,7 +190,7 @@ export default function ClientPortalPage() {
         html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      })
+      } as any)
       .from(content)
       .save();
   }
@@ -503,7 +503,7 @@ export default function ClientPortalPage() {
                 services={data.client.services || []}
                 clientName={data.client.name}
                 savedFields={data.client.proposalFields}
-                alreadySubmitted={!!data.client.intakeLastSubmittedAt && !data.intakeBotReset}
+                alreadySubmitted={!!data.intakeLastSubmittedAt && !data.intakeBotReset}
                 onComplete={async (fields) => {
                   if (!token) return;
                   try { await savePortalIntakeFields(token, fields); } catch { /* non-blocking */ }
