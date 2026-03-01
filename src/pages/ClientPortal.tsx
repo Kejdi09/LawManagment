@@ -737,7 +737,7 @@ export default function ClientPortalPage() {
               )}
 
               {/* Method selection */}
-              {!paymentMethodSaved && !data.paymentDoneAt && (
+              {!paymentMethodSaved && !data.paymentSelectedMethod && !data.paymentDoneAt && (
                 <div className="space-y-3">
                   <p className="text-sm font-medium">Select your preferred payment method:</p>
                   <div className="grid gap-2">

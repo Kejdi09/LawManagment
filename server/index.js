@@ -2724,7 +2724,7 @@ app.get('/api/portal/:token', async (req, res) => {
     invoicesCol.find({ customerId: tokenDoc.customerId }).sort({ createdAt: -1 }).toArray(),
   ]);
   res.json({
-    client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status, proposalFields: client.proposalFields || null },
+    client: { name: client.name, customerId: client.customerId, services: client.services || [], status: client.status, proposalFields: client.proposalFields || null, intakeLastSubmittedAt: client.intakeLastSubmittedAt || null },
     cases: cases.map(c => ({
       caseId: c.caseId,
       title: c.title,
