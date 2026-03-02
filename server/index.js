@@ -1,3 +1,4 @@
+import "./config/env.js"; // validate env vars before anything else
 import express from "express";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
@@ -9,14 +10,20 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { seedCustomers, seedCases, seedHistory, seedNotes, seedTasks } from "./seed-data.js";
-import nodemailer from "nodemailer"; // kept for potential future SMTP use
+import { helmetMiddleware } from "./middleware/helmetConfig.js";
+import { requestLogger } from "./middleware/logger.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { mongoSanitize } from "./middleware/mongoSanitize.js";
+import { sendEmail } from "./lib/mailer.js";
+import { createIndexes } from "./lib/dbIndexes.js";
+import { startKeepalive } from "./keepalive.js";
 
 dotenv.config();
 
 // ── Email notification helper ─────────────────────────────────────────────────
-// Primary:  Set BREVO_API_KEY + SMTP_FROM  (Brevo HTTPS API — works on Render, port 443)
-// Fallback: Set RESEND_API_KEY  (Resend HTTPS API)
-// NOTE: Brevo SMTP relay (port 587) is blocked by Render free tier — do NOT use SMTP
+// sendEmail is now imported from ./lib/mailer.js
+// Primary:  Hostinger SMTP (set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)
+// Fallback: Brevo HTTPS API (set BREVO_API_KEY) — works on Render free tier (port 443)
 const STATE_EMAIL_LABELS = {
   NEW: 'New', IN_PROGRESS: 'In Progress',
   WAITING_CUSTOMER: 'Awaiting Your Input',
@@ -36,20 +43,6 @@ const STATE_EMAIL_LABELS = {
   ON_HOLD: 'On Hold',
   ARCHIVED: 'Archived',
 };
-function logEmailConfig() {
-  const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
-  if (BREVO_API_KEY) {
-    console.log(`[email] Brevo HTTPS API configured | FROM=${SMTP_FROM || 'mucikejdi522@gmail.com'}`);
-  } else if (RESEND_API_KEY) {
-    console.log(`[email] Resend API configured | FROM=${SMTP_FROM || 'onboarding@resend.dev'}`);
-  } else {
-    console.warn('[email] NOT configured — set BREVO_API_KEY on Render to enable emails.');
-  }
-}
-logEmailConfig();
-
-// nodemailer kept as import but not used (Render blocks SMTP ports)
-let _smtpTransport = null; // unused — here to avoid removing nodemailer import
 
 // ── Professional HTML email wrapper ─────────────────────────────────────────
 function buildHtmlEmail(bodyHtml) {
@@ -85,62 +78,7 @@ function buildHtmlEmail(bodyHtml) {
 </div></body></html>`;
 }
 
-async function sendEmail({ to, subject, text, html }) {
-  if (!to) { console.warn(`[email] Skipping "${subject}" — no recipient address.`); return; }
-
-  const { BREVO_API_KEY, RESEND_API_KEY, SMTP_FROM } = process.env;
-  const fromAddr = SMTP_FROM || 'DAFKU Law Firm <mucikejdi522@gmail.com>';
-
-  // ── Option 1: Brevo HTTPS API (port 443 — works on Render free tier) ──
-  if (BREVO_API_KEY) {
-    try {
-      const fromMatch = fromAddr.match(/^(.*?)\s*<([^>]+)>$/);
-      const fromPayload = fromMatch
-        ? { name: fromMatch[1].trim(), email: fromMatch[2].trim() }
-        : { email: fromAddr.trim() };
-      const payload = { sender: fromPayload, to: [{ email: to }], subject, textContent: text };
-      if (html) payload.htmlContent = html;
-      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        console.log(`[email] ✓ Sent via Brevo API "${subject}" → ${to}`);
-      } else {
-        console.error(`[email] ✗ Brevo API error "${subject}" → ${to}:`, JSON.stringify(data));
-      }
-    } catch (e) {
-      console.error(`[email] ✗ Brevo API fetch failed "${subject}" → ${to}:`, e.message);
-    }
-    return;
-  }
-
-  // ── Option 2: Resend HTTPS API ──
-  if (RESEND_API_KEY) {
-    try {
-      const payload = { from: fromAddr, to: [to], subject, text };
-      if (html) payload.html = html;
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        console.log(`[email] ✓ Sent via Resend "${subject}" → ${to}`);
-      } else {
-        console.error(`[email] ✗ Resend error "${subject}" → ${to}:`, JSON.stringify(data));
-      }
-    } catch (e) {
-      console.error(`[email] ✗ Resend fetch failed "${subject}" → ${to}:`, e.message);
-    }
-    return;
-  }
-
-  console.warn(`[email] NOT configured — set BREVO_API_KEY on Render to enable emails. Skipping "${subject}" → ${to}`);
-}
+// sendEmail is imported from ./lib/mailer.js above
 
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -152,6 +90,12 @@ let commsLogCol;
 let portalTokensCol;
 const app = express();
 app.set("trust proxy", 1);
+
+// ── Security & observability middleware ──────────────────────────────────────
+app.use(helmetMiddleware);
+app.use(requestLogger);
+app.use(mongoSanitize);
+// ─────────────────────────────────────────────────────────────────────────────
 
 if (!MONGODB_URI) {
   console.error("Missing MONGODB_URI env var. Set it before running the server.");
@@ -2095,10 +2039,27 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
     const clientRecord = cust || cli;
     if (clientRecord?.email) {
       const newStateLabel = STATE_EMAIL_LABELS[stateIn] || stateIn;
+      const portalTokenDoc = await portalTokensCol.findOne({ customerId: theCase.customerId });
+      const portalUrl = (portalTokenDoc && process.env.APP_URL)
+        ? `${process.env.APP_URL}/#/portal/${portalTokenDoc.token}`
+        : null;
       sendEmail({
         to: clientRecord.email,
         subject: `Case Update — ${theCase.title || 'Your Matter'} | DAFKU Law Firm`,
-        text: `Dear ${clientRecord.name || 'Client'},\n\nWe are writing to inform you that your matter at DAFKU Law Firm has been updated.\n\nMatter: ${theCase.title || id}\nNew status: ${newStateLabel}\n\nPlease visit your client portal for the latest information and any documents or actions required.\n\nFor any questions, reach us on WhatsApp: +355 69 69 52 989\n\nYours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al`,
+        text: [
+          `Dear ${clientRecord.name || 'Client'},`,
+          '',
+          'We are writing to inform you that your matter at DAFKU Law Firm has been updated.',
+          '',
+          `Matter: ${theCase.title || id}`,
+          `New status: ${newStateLabel}`,
+          '',
+          portalUrl ? `Please visit your client portal for the latest information:\n${portalUrl}` : 'Please contact us for the latest information on your matter.',
+          '',
+          'For any questions, reach us on WhatsApp: +355 69 69 52 989',
+          '',
+          'Yours sincerely,\nDAFKU Law Firm\ninfo@dafkulawfirm.al',
+        ].join('\n'),
         html: buildHtmlEmail(`
           <p>Dear <strong>${clientRecord.name || 'Client'}</strong>,</p>
           <p>We are writing to inform you that your matter with <strong>DAFKU Law Firm</strong> has been updated.</p>
@@ -2107,6 +2068,7 @@ app.post("/api/cases/:id/history", verifyAuth, async (req, res) => {
             <p><strong>Status:</strong> ${newStateLabel}</p>
           </div>
           <p>Please log in to your client portal to view the latest information, any documents requiring your attention, or actions needed from your side.</p>
+          ${portalUrl ? `<p><a href="${portalUrl}" class="btn">Open Your Portal</a></p>` : ''}
           <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>
         `),
       });
@@ -2232,6 +2194,7 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
     JWT_SECRET = JWT_SECRET || "dev-fallback-secret";
   }
   await connectDb();
+  await createIndexes(db);
   // Ensure uploads directory exists
   try {
     const uploadsPath = path.resolve(process.cwd(), "server", "uploads");
@@ -2322,8 +2285,12 @@ app.get("/api/kpis", verifyAuth, async (req, res) => {
     console.log(`[static] Serving React frontend from ${distDir}`);
   }
 
+  // Global error handler — must be last middleware
+  app.use(errorHandler);
+
   app.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);
+    startKeepalive();
   });
 })();
 
@@ -3439,6 +3406,10 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
   // Notify client via email
   const clientRecord = await confirmedClientsCol.findOne({ customerId }) || await customersCol.findOne({ customerId });
   if (clientRecord?.email) {
+    const portalTokenDocPayment = await portalTokensCol.findOne({ customerId });
+    const portalUrlPayment = (portalTokenDocPayment && process.env.APP_URL)
+      ? `${process.env.APP_URL}/#/portal/${portalTokenDocPayment.token}`
+      : null;
     sendEmail({
       to: clientRecord.email,
       subject: 'Payment Confirmed — Welcome to DAFKU Law Firm',
@@ -3449,7 +3420,7 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
         '',
         'Your matter has been formally opened and our team will be in contact shortly to discuss the next steps and begin work on your behalf.',
         '',
-        'You may continue to use your client portal to track progress and communicate with your legal team at any time.',
+        portalUrlPayment ? `You may continue to access your client portal at any time:\n${portalUrlPayment}` : 'You may continue to use your client portal to track progress and communicate with your legal team at any time.',
         '',
         'We look forward to working with you.',
         '',
@@ -3462,6 +3433,7 @@ app.post('/api/customers/:customerId/mark-payment-done', verifyAuth, async (req,
         <p>We are delighted to confirm receipt of your payment. You are now a <strong>fully confirmed client</strong> of DAFKU Law Firm.</p>
         <p>Your matter has been formally opened and a member of our team will be in contact with you shortly to discuss the next steps and begin work on your behalf.</p>
         <p>You may continue to access your client portal at any time to track the progress of your matter and communicate directly with your legal team.</p>
+        ${portalUrlPayment ? `<p><a href="${portalUrlPayment}" class="btn">Open Your Client Portal</a></p>` : ''}
         <hr>
         <p>We look forward to working with you and remain at your disposal for any questions.</p>
         <div class="sig">Yours sincerely,<br><strong>DAFKU Law Firm</strong></div>

@@ -45,7 +45,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Search, Phone, Mail, MapPin, ChevronDown, StickyNote, Pencil, Trash2, Plus, Archive, Workflow, FileText, CheckCircle2, RotateCcw, MessageSquare, ShieldCheck, Copy, Download, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1201,23 +1201,33 @@ const Customers = () => {
                                 <TooltipContent>Edit</TooltipContent>
                               </Tooltip>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-8"
-                                    disabled={!getNextWorkflowStatus(c.status)}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAdvanceStatus(c).catch(() => {});
-                                    }}
-                                  >
-                                    Advance
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="secondary" size="sm" className="h-8 gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <Workflow className="h-3 w-3" /> Status
                                   </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Move to next workflow step</TooltipContent>
-                              </Tooltip>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-52">
+                                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Change Status</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {WORKFLOW_STEPS.map(({ status: ws, title }) => {
+                                    const isCurrent = c.status === ws;
+                                    const blocked = !isCurrent && checkPipelinePreConditions(c, ws) !== null;
+                                    return (
+                                      <DropdownMenuItem
+                                        key={ws}
+                                        disabled={isCurrent || blocked}
+                                        onSelect={() => { if (!isCurrent && !blocked) handleSetStatus(c.customerId, ws).catch(() => {}); }}
+                                        className={`text-xs gap-2 ${isCurrent ? "font-medium opacity-60" : ""}`}
+                                      >
+                                        <span className={`inline-flex w-2 h-2 rounded-full shrink-0 ${(statusAccent[ws] ?? "").split(" ")[0]}`} />
+                                        {title}
+                                        {isCurrent && <span className="ml-auto text-muted-foreground text-[10px]">current</span>}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
 
                               {c.status !== 'ARCHIVED' ? (
                                 <Tooltip>
@@ -1312,14 +1322,33 @@ const Customers = () => {
                         </div>
                         <div className="mt-2 flex items-center justify-between">
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              disabled={!getNextWorkflowStatus(c.status)}
-                              onClick={() => handleAdvanceStatus(c).catch(() => {})}
-                            >
-                              Advance
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="secondary" size="sm" className="gap-1">
+                                  <Workflow className="h-3 w-3" /> Status
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="w-52">
+                                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Change Status</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {WORKFLOW_STEPS.map(({ status: ws, title }) => {
+                                  const isCurrent = c.status === ws;
+                                  const blocked = !isCurrent && checkPipelinePreConditions(c, ws) !== null;
+                                  return (
+                                    <DropdownMenuItem
+                                      key={ws}
+                                      disabled={isCurrent || blocked}
+                                      onSelect={() => { if (!isCurrent && !blocked) handleSetStatus(c.customerId, ws).catch(() => {}); }}
+                                      className={`text-xs gap-2 ${isCurrent ? "font-medium opacity-60" : ""}`}
+                                    >
+                                      <span className={`inline-flex w-2 h-2 rounded-full shrink-0 ${(statusAccent[ws] ?? "").split(" ")[0]}`} />
+                                      {title}
+                                      {isCurrent && <span className="ml-auto text-muted-foreground text-[10px]">current</span>}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <Button variant="outline" size="sm" onClick={() => openEdit(c.customerId)}>Edit</Button>
                             <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(c.customerId)}>Delete</Button>
                           </div>

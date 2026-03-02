@@ -1,9 +1,20 @@
-import React from "react";
+import React, { useState } from "react";
 import Nav from "./Nav";
 import { useAuth } from "@/lib/auth-context";
+import { Copy, Check } from "lucide-react";
+
+const INTAKE_LINK = "https://lawmanagment.onrender.com/join/dafku-intake-2026-xK9mQr7p";
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  const copyIntakeLink = () => {
+    navigator.clipboard.writeText(INTAKE_LINK).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
   const displayName = user?.role === "admin"
     ? (user?.username || user?.consultantName || user?.lawyerName)
     : (user?.consultantName || user?.lawyerName || user?.username);
@@ -29,12 +40,23 @@ export const Sidebar = () => {
           <Nav showAccount={false} />
         </div>
 
-        <div className="p-4 border-t">
-          <div className="pt-2">
-            <button className="w-full text-left rounded-md border px-3 py-2 text-sm" onClick={() => { logout(); }}>
-              Sign Out
-            </button>
-          </div>
+        <div className="p-4 border-t space-y-2">
+          {user?.role === 'admin' && (
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">Client Intake Link</div>
+              <button
+                onClick={copyIntakeLink}
+                className="w-full flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted/50 transition-colors"
+                title={INTAKE_LINK}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500 shrink-0" /> : <Copy className="h-3.5 w-3.5 shrink-0" />}
+                <span className="truncate">{copied ? 'Copied!' : 'Copy Registration Link'}</span>
+              </button>
+            </div>
+          )}
+          <button className="w-full text-left rounded-md border px-3 py-2 text-sm" onClick={() => { logout(); }}>
+            Sign Out
+          </button>
         </div>
       </div>
     </aside>

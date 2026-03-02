@@ -4,13 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Phone, Mail, MapPin, StickyNote, Trash2, Loader2, ShieldCheck } from "lucide-react";
+import { Phone, Mail, MapPin, StickyNote, Trash2, Loader2, ShieldCheck, FileText } from "lucide-react";
+import ProposalModal from "@/components/ProposalModal";
+import ContractModal from "@/components/ContractModal";
 import {
   Customer,
   CustomerHistoryRecord,
@@ -23,13 +26,16 @@ import {
   ContactChannel,
   ServiceType,
   SERVICE_LABELS,
+  PROPOSAL_SERVICES,
   LAWYERS,
   CLIENT_LAWYERS,
+  Invoice,
 } from "@/lib/types";
 import {
   deleteConfirmedClient,
   getCasesByCustomer,
   getConfirmedClients,
+  getInvoices,
   updateConfirmedClient,
   getCustomerHistory,
   getDocuments,
@@ -53,6 +59,13 @@ const ALLOWED_CUSTOMER_STATUSES: LeadStatus[] = [
   "ARCHIVED",
   "CONSULTATION_SCHEDULED",
 ];
+
+const invoiceStatusColors: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  paid: "bg-green-100 text-green-800",
+  overdue: "bg-red-100 text-red-800",
+  cancelled: "bg-gray-100 text-gray-600",
+};
 
 const statusAccent: Record<string, string> = {
   INTAKE: "bg-slate-100 text-slate-800",
@@ -84,13 +97,17 @@ const ClientsPage = () => {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [showContractModal, setShowContractModal] = useState(false);
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([]);
+
   // Consultation scheduling state
   const [showConsultScheduler, setShowConsultScheduler] = useState(false);
   const [pendingSavePayload, setPendingSavePayload] = useState<{ id: string; update: Partial<Customer> } | null>(null);
   const [consultForm, setConsultForm] = useState({ title: 'Consultation', startsAt: '', endsAt: '', notes: '' });
 
   const isAdmin = user?.role === "admin";
-  const serviceEntries = Object.entries(SERVICE_LABELS);
+  const serviceEntries = PROPOSAL_SERVICES.map((key) => [key, SERVICE_LABELS[key]] as [string, string]);
   const channelEntries = Object.entries(CONTACT_CHANNEL_LABELS);
   const statusEntries = Object.entries(LEAD_STATUS_LABELS).filter(([key]) => ALLOWED_CUSTOMER_STATUSES.includes(key as LeadStatus));
 
@@ -110,14 +127,17 @@ const ClientsPage = () => {
   const openDetail = async (client: Customer) => {
     setSelectedClient(client);
     setSelectedCases([]);
-    const [cases, history, docs] = await Promise.all([
+    setClientInvoices([]);
+    const [cases, history, docs, allInvoices] = await Promise.all([
       getCasesByCustomer(client.customerId),
       getCustomerHistory(client.customerId).catch(() => []),
       getDocuments("customer", client.customerId).catch(() => []),
+      getInvoices().catch(() => []),
     ]);
     setSelectedCases(cases);
     setStatusHistoryRows(history);
     setClientDocuments(docs);
+    setClientInvoices((allInvoices as Invoice[]).filter((inv) => inv.customerId === client.customerId));
   };
 
   const openEdit = (client: Customer) => {
@@ -425,6 +445,63 @@ const ClientsPage = () => {
                     </CardContent>
                   </Card>
 
+                  {/* Proposal, Contract & Payment tabs */}
+                  <Card>
+                    <CardHeader className="pb-0 pt-3 px-4"><CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" />Proposal, Contract &amp; Payment</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                      <Tabs defaultValue="proposal">
+                        <TabsList className="w-full rounded-none border-b bg-transparent h-9 px-2">
+                          <TabsTrigger value="proposal" className="flex-1 text-xs">Proposal</TabsTrigger>
+                          <TabsTrigger value="contract" className="flex-1 text-xs">Contract</TabsTrigger>
+                          <TabsTrigger value="payment" className="flex-1 text-xs">Payment</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="proposal" className="p-4">
+                          {(selectedClient.proposalSnapshot || selectedClient.proposalSentAt) ? (
+                            <Button size="sm" variant="outline" className="gap-1" onClick={() => setShowProposalModal(true)}>
+                              <FileText className="h-3.5 w-3.5" />View Proposal
+                            </Button>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No proposal on file yet.</p>
+                          )}
+                        </TabsContent>
+                        <TabsContent value="contract" className="p-4">
+                          {(selectedClient.contractSnapshot || selectedClient.contractSentAt) ? (
+                            <Button size="sm" variant="outline" className="gap-1" onClick={() => setShowContractModal(true)}>
+                              <FileText className="h-3.5 w-3.5" />View Contract
+                            </Button>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No contract on file yet.</p>
+                          )}
+                        </TabsContent>
+                        <TabsContent value="payment" className="p-3">
+                          {clientInvoices.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No invoices found for this client.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {clientInvoices.map((inv) => (
+                                <div key={inv.invoiceId} className="rounded-md border p-2 text-xs flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-medium truncate">{inv.description || inv.invoiceId}</div>
+                                    {inv.dueDate && <div className="text-muted-foreground">Due: {formatDate(inv.dueDate)}</div>}
+                                    {(inv.payments ?? []).length > 0 && (
+                                      <div className="text-muted-foreground mt-0.5">{(inv.payments ?? []).length} payment(s) recorded</div>
+                                    )}
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <div className="font-semibold">{inv.amount} {inv.currency}</div>
+                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-0.5 ${invoiceStatusColors[inv.status] ?? "bg-muted text-foreground"}`}>
+                                      {inv.status}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+
                   {/* Contract Electronic Signature Proof */}
                   {(selectedClient.contractSignedByName || selectedClient.contractAcceptedAt) && (
                     <Card className="border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-900">
@@ -519,11 +596,9 @@ const ClientsPage = () => {
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${statusAccent[row.statusTo] || "bg-muted text-foreground"}`}>
                                 {LEAD_STATUS_LABELS[row.statusTo as LeadStatus] || row.statusTo}
                               </span>
-                              <span className="text-muted-foreground">from {LEAD_STATUS_LABELS[row.statusFrom as LeadStatus] || row.statusFrom}</span>
                             </div>
                             <div className="text-right text-muted-foreground">
                               <div>{formatDate(row.date, true)}</div>
-                              <div>{stripProfessionalTitle(row.changedByConsultant || row.changedByLawyer || row.changedBy || "") || row.changedBy || "System"}</div>
                             </div>
                           </div>
                         ))}
@@ -740,6 +815,42 @@ const ClientsPage = () => {
           if (selectedClient) openDetail(selectedClient);
         }}
       />
+
+      {/* Proposal view modal */}
+      {selectedClient && showProposalModal && (
+        <ProposalModal
+          customer={selectedClient}
+          open={showProposalModal}
+          onOpenChange={setShowProposalModal}
+          onSaved={(updated) => {
+            setSelectedClient(updated);
+            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+          }}
+          onSent={(updated) => {
+            setSelectedClient(updated);
+            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+            setShowProposalModal(false);
+          }}
+        />
+      )}
+
+      {/* Contract view modal */}
+      {selectedClient && showContractModal && (
+        <ContractModal
+          customer={selectedClient}
+          open={showContractModal}
+          onOpenChange={setShowContractModal}
+          onSaved={(updated) => {
+            setSelectedClient(updated);
+            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+          }}
+          onSent={(updated) => {
+            setSelectedClient(updated);
+            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
+            setShowContractModal(false);
+          }}
+        />
+      )}
     </MainLayout>
   );
 };

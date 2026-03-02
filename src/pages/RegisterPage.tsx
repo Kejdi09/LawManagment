@@ -153,19 +153,23 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm px-4 py-4">
-        <div className="max-w-xl mx-auto flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">D</div>
+    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+      {/* Left branding panel */}
+      <aside className="lg:w-64 xl:w-72 lg:min-h-screen bg-card border-b lg:border-b-0 lg:border-r flex flex-row lg:flex-col items-center lg:items-start justify-start lg:justify-start px-5 py-5 lg:py-16 gap-4 lg:gap-6 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-base shrink-0">D</div>
           <div>
             <div className="font-semibold text-sm leading-tight">DAFKU Law Firm</div>
             <div className="text-xs text-muted-foreground">Client Intake Form</div>
           </div>
         </div>
-      </header>
+        <div className="hidden lg:block space-y-3 text-sm text-muted-foreground">
+          <p>We help individuals, families and companies with residency permits, visa applications, and company formation in Albania.</p>
+          <p className="text-xs">Your information is kept strictly confidential.</p>
+        </div>
+      </aside>
 
-      <main className="max-w-xl mx-auto px-4 py-8">
+      <main className="flex-1 px-5 lg:px-10 py-8 max-w-2xl">
         <div className="space-y-2 mb-8">
           <h1 className="text-2xl font-bold text-foreground">Get in Touch</h1>
           <p className="text-muted-foreground text-sm">
