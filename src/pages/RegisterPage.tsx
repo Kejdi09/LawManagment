@@ -169,7 +169,7 @@ export default function RegisterPage() {
         </div>
       </aside>
 
-      <main className="flex-1 px-5 lg:px-10 py-8 max-w-2xl">
+      <main className="flex-1 px-5 lg:px-10 py-8">
         <div className="space-y-2 mb-8">
           <h1 className="text-2xl font-bold text-foreground">Get in Touch</h1>
           <p className="text-muted-foreground text-sm">

@@ -822,15 +822,7 @@ const ClientsPage = () => {
           customer={selectedClient}
           open={showProposalModal}
           onOpenChange={setShowProposalModal}
-          onSaved={(updated) => {
-            setSelectedClient(updated);
-            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-          }}
-          onSent={(updated) => {
-            setSelectedClient(updated);
-            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-            setShowProposalModal(false);
-          }}
+          readOnly
         />
       )}
 
@@ -840,15 +832,7 @@ const ClientsPage = () => {
           customer={selectedClient}
           open={showContractModal}
           onOpenChange={setShowContractModal}
-          onSaved={(updated) => {
-            setSelectedClient(updated);
-            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-          }}
-          onSent={(updated) => {
-            setSelectedClient(updated);
-            setClients((prev) => prev.map((c) => c.customerId === updated.customerId ? updated : c));
-            setShowContractModal(false);
-          }}
+          readOnly
         />
       )}
     </MainLayout>

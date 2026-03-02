@@ -25,7 +25,9 @@ function sanitize(value) {
 
 export function mongoSanitize(req, res, next) {
   if (req.body) req.body = sanitize(req.body);
-  if (req.query) req.query = sanitize(req.query);
+  // req.query is a read-only getter in Express 5 / the `router` package —
+  // reassigning it would throw. Query params don't carry NoSQL injection risk
+  // the same way POST bodies do, so we skip sanitising them here.
   if (req.params) req.params = sanitize(req.params);
   next();
 }

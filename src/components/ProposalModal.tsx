@@ -756,9 +756,10 @@ interface ProposalModalProps {
   onOpenChange: (open: boolean) => void;
   onSaved?: (updated: Customer) => void;
   onSent?: (updated: Customer) => void;
+  readOnly?: boolean;
 }
 
-export default function ProposalModal({ customer, open, onOpenChange, onSaved, onSent }: ProposalModalProps) {
+export default function ProposalModal({ customer, open, onOpenChange, onSaved, onSent, readOnly }: ProposalModalProps) {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -906,11 +907,12 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
         </DialogHeader>
 
         <Tabs defaultValue={
+            readOnly ? "preview" :
             (customer.proposalFields?.nationality || customer.proposalFields?.numberOfApplicants || customer.proposalFields?.businessActivity || customer.proposalFields?.dependentName || customer.proposalFields?.purposeOfStay)
               ? "preview" : "edit"
           } className="flex flex-col flex-1 overflow-hidden">
           <TabsList className="mx-6 mt-2 w-fit shrink-0">
-            <TabsTrigger value="edit">Edit Fields</TabsTrigger>
+            {!readOnly && <TabsTrigger value="edit">Edit Fields</TabsTrigger>}
             <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
 
@@ -1240,15 +1242,17 @@ export default function ProposalModal({ customer, open, onOpenChange, onSaved, o
                 ⚠️ The client has not yet submitted the intake form. You can save the proposal draft, but sending is disabled until the intake form is submitted.
               </div>
             )}
-            <div className="flex gap-2 mt-4">
-              <Button onClick={handleSave} disabled={saving} variant="secondary">
-                {saving ? "Saving..." : "Save Draft"}
-              </Button>
-              <Button onClick={handleSendProposal} disabled={saving || !customer.intakeLastSubmittedAt} title={!customer.intakeLastSubmittedAt ? "Intake form not yet submitted" : undefined}>
-                <Send className="h-4 w-4 mr-1.5" />
-                {saving ? "Sending..." : "Send Proposal"}
-              </Button>
-            </div>
+            {!readOnly && (
+              <div className="flex gap-2 mt-4">
+                <Button onClick={handleSave} disabled={saving} variant="secondary">
+                  {saving ? "Saving..." : "Save Draft"}
+                </Button>
+                <Button onClick={handleSendProposal} disabled={saving || !customer.intakeLastSubmittedAt} title={!customer.intakeLastSubmittedAt ? "Intake form not yet submitted" : undefined}>
+                  <Send className="h-4 w-4 mr-1.5" />
+                  {saving ? "Sending..." : "Send Proposal"}
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           {/* -- PREVIEW TAB -- */}

@@ -29,9 +29,10 @@ interface ContractModalProps {
   onOpenChange: (open: boolean) => void;
   onSaved?: (updated: Customer) => void;
   onSent?: (updated: Customer) => void;
+  readOnly?: boolean;
 }
 
-export default function ContractModal({ customer, open, onOpenChange, onSaved, onSent }: ContractModalProps) {
+export default function ContractModal({ customer, open, onOpenChange, onSaved, onSent, readOnly }: ContractModalProps) {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -212,9 +213,9 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="edit" className="flex flex-col flex-1 overflow-hidden">
+        <Tabs defaultValue={readOnly ? "preview" : "edit"} className="flex flex-col flex-1 overflow-hidden">
           <TabsList className="mx-6 mt-3 mb-2 shrink-0 w-fit">
-            <TabsTrigger value="edit">Edit</TabsTrigger>
+            {!readOnly && <TabsTrigger value="edit">Edit</TabsTrigger>}
             <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
 
@@ -465,15 +466,17 @@ export default function ContractModal({ customer, open, onOpenChange, onSaved, o
               </div>
             </div>
 
-            <div className="flex gap-2 mt-6">
-              <Button onClick={handleSave} disabled={saving} variant="secondary">
-                {saving ? "Saving..." : "Save"}
-              </Button>
-              <Button onClick={handleSendContract} disabled={saving}>
-                <Send className="h-4 w-4 mr-1.5" />
-                {saving ? "Sending..." : "Send Contract"}
-              </Button>
-            </div>
+            {!readOnly && (
+              <div className="flex gap-2 mt-6">
+                <Button onClick={handleSave} disabled={saving} variant="secondary">
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+                <Button onClick={handleSendContract} disabled={saving}>
+                  <Send className="h-4 w-4 mr-1.5" />
+                  {saving ? "Sending..." : "Send Contract"}
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           {/* PREVIEW TAB */}
